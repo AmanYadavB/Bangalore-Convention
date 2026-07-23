@@ -1,147 +1,135 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Register — Bangalore Convention 2027</title>
-  <link rel="stylesheet" href="/static/styles.css" />
-</head>
-<body>
-  <div class="container">
-    <header class="site-header">
-      <h1 class="logo"><a href="/">Bangalore Convention</a></h1>
-      <nav class="nav"><a href="/">Home</a> <a href="/public/dashboard.html">Dashboard</a></nav>
-    </header>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Register · Bangalore Convention</title>
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+  <body>
+    <div id="nav"></div>
 
-    <main>
-      <h2>Register for the Convention (9–11 July 2027)</h2>
+    <div class="container">
+      <h1 class="page-title">Register for the Convention</h1>
+      <p class="page-sub">
+        Fill in your details and choose a category. Your registration is
+        confirmed once payment is marked as received.
+      </p>
 
-      <div id="steps">
-        <section id="step-1" class="step">
-          <h3>Attendee details</h3>
-          <label>Full name<input id="name"></label>
-          <label>Email<input id="email" type="email"></label>
-          <label>Phone<input id="phone"></label>
-          <button id="to-step-2" class="btn">Next</button>
-        </section>
+      <div class="grid" style="grid-template-columns: 1.6fr 1fr; align-items: start">
+        <divclass="card">
+          <form id="reg-form">
+            <div class="form-grid">
+              <div class="field">
+                <label for="name">Full Name *</label>
+                <input id="name" name="name" required placeholder="Your name" />
+              </div>
+              <div class="field">
+                <label for="email">Email *</label>
+                <input id="email" name="email" type="email" required placeholder="you@email.com" />
+              </div>
+              <div class="field">
+                <label for="phone">Phone *</label>
+                <input id="phone" name="phone" required placeholder="10-digit number" />
+              </div>
+              <div class="field">
+                <label for="city">City</label>
+                <input id="city" name="city" placeholder="e.g. Bangalore" />
+              </div>
+              <div class="field">
+                <label for="gender">Gender</label>
+                <select id="gender" name="gender">
+                  <option value="">Prefer not to say</option>
+                  <option>Male</option>
+                  <option>Female</option>
+                  <option>Other</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="categoryId">Category *</label>
+                <select id="categoryId" name="categoryId" required></select>
+              </div>
+              <div class="field full">
+                <label for="notes">Notes (dietary, accessibility, etc.)</label>
+                <textarea id="notes" name="notes" placeholder="Anything we should know?"></textarea>
+              </div>
+            </div>
 
-        <section id="step-2" class="step" style="display:none">
-          <h3>Choose ticket & accommodation</h3>
-          <label>Ticket type
-            <select id="ticket_type">
-              <option value="without_stay">Without stay — ₹<span id="p1">5000</span></option>
-              <option value="stay_single">Stay single — ₹<span id="p2">8000</span></option>
-              <option value="stay_double">Stay double — ₹<span id="p3">7000</span></option>
-              <option value="stay_triple">Stay triple — ₹<span id="p4">6500</span></option>
-            </select>
-          </label>
-          <label>Additional guests<input id="guests" type="number" min="0" value="0"></label>
-          <div class="summary">Total: ₹<span id="total">0</span></div>
-          <button id="back-step-1" class="btn">Back</button>
-          <button id="to-step-3" class="btn">Next</button>
-        </section>
+            <div class="form-footer">
+              <div class="summary-amount">
+                Total payable: <b id="amount">₹0</b>
+              </div>
+              <button class="btn primary" type="submit">Confirm Registration</button>
+            </div>
+          </form>
+        </div>
 
-        <section id="step-3" class="step" style="display:none">
-          <h3>Confirm & submit</h3>
-          <div class="review">
-            <p><strong>Name:</strong> <span id="r-name"></span></p>
-            <p><strong>Email:</strong> <span id="r-email"></span></p>
-            <p><strong>Ticket:</strong> <span id="r-ticket"></span></p>
-            <p><strong>Guests:</strong> <span id="r-guests"></span></p>
-            <p><strong>Total:</strong> ₹<span id="r-total"></span></p>
-          </div>
-          <button id="back-step-2" class="btn">Back</button>
-          <button id="submit" class="btn">Submit registration</button>
-        </section>
-
-        <section id="done" class="step" style="display:none">
-          <h3>Registration received</h3>
-          <p id="done-msg">Thank you — your registration reference: <span id="ref"></span></p>
-          <p>We will email you confirmation.</p>
-        </section>
+        <div class="card">
+          <h3 style="margin-top: 0">Selected Category</h3>
+          <div id="selected-desc" class="muted">Choose a category to see details.</div>
+          <hr style="border: none; border-top: 1px solid var(--border); margin: 18px 0" />
+          <p class="muted" style="font-size: 13px">
+            Registrations help us plan meals and accommodation. Payment can be
+            marked received by the organising team from the Registrations page.
+          </p>
+        </div>
       </div>
+    </div>
 
-    </main>
+    <script src="js/common.js"></script>
+    <script>
+      mountNav("register");
+      let PRICING = [];
 
-    <footer class="site-footer"><p>&copy; 2027 Bangalore Convention</p></footer>
-  </div>
-
-  <script>
-    // Load config
-    async function loadConfig(){
-      try{ const r = await fetch('/public/config.json'); return await r.json() } catch(e){ return null }
-    }
-
-    (async ()=>{
-      const cfg = await loadConfig() || { FORM_ENDPOINT: '', TICKET_PRICES:{without_stay:5000,stay_single:8000,stay_double:7000,stay_triple:6500} }
-      const prices = cfg.TICKET_PRICES
-      document.getElementById('p1').innerText = prices.without_stay
-      document.getElementById('p2').innerText = prices.stay_single
-      document.getElementById('p3').innerText = prices.stay_double
-      document.getElementById('p4').innerText = prices.stay_triple
-
-      const step1 = document.getElementById('step-1')
-      const step2 = document.getElementById('step-2')
-      const step3 = document.getElementById('step-3')
-      const done = document.getElementById('done')
-
-      document.getElementById('to-step-2').addEventListener('click', ()=>{
-        const name = document.getElementById('name').value.trim()
-        const email = document.getElementById('email').value.trim()
-        if(!name || !email){ alert('Please enter name and email'); return }
-        step1.style.display='none'; step2.style.display='block'
-      })
-      document.getElementById('back-step-1').addEventListener('click', ()=>{ step2.style.display='none'; step1.style.display='block' })
-      document.getElementById('to-step-3').addEventListener('click', ()=>{
-        const ticket = document.getElementById('ticket_type').value
-        const guests = parseInt(document.getElementById('guests').value || '0')
-        const price = prices[ticket] || 0
-        const total = price // for simplicity guests not charged extra; adjust if needed
-        document.getElementById('r-name').innerText = document.getElementById('name').value
-        document.getElementById('r-email').innerText = document.getElementById('email').value
-        document.getElementById('r-ticket').innerText = ticket
-        document.getElementById('r-guests').innerText = guests
-        document.getElementById('r-total').innerText = total
-        step2.style.display='none'; step3.style.display='block'
-      })
-      document.getElementById('back-step-2').addEventListener('click', ()=>{ step3.style.display='none'; step2.style.display='block' })
-
-      function calcTotal(){
-        const ticket = document.getElementById('ticket_type').value
-        const price = prices[ticket] || 0
-        const guests = parseInt(document.getElementById('guests').value || '0')
-        const total = price // guests not charged here; change logic if you want per-guest price
-        document.getElementById('total').innerText = total
+      function selectedCategory() {
+        return PRICING.find((c) => c.id === document.getElementById("categoryId").value);
       }
-      document.getElementById('ticket_type').addEventListener('change', calcTotal)
-      document.getElementById('guests').addEventListener('input', calcTotal)
-      calcTotal()
 
-      document.getElementById('submit').addEventListener('click', async ()=>{
-        const endpoint = cfg.FORM_ENDPOINT || ''
-        if(!endpoint){ alert('Form endpoint not configured. Edit public/config.json and add your Formspree or Google Forms endpoint.'); return }
-        const payload = new URLSearchParams()
-        payload.append('name', document.getElementById('name').value)
-        payload.append('email', document.getElementById('email').value)
-        payload.append('phone', document.getElementById('phone').value)
-        payload.append('ticket_type', document.getElementById('ticket_type').value)
-        payload.append('guests', document.getElementById('guests').value)
-        payload.append('amount', document.getElementById('r-total').innerText)
+      function updateSummary() {
+        const c = selectedCategory();
+        document.getElementById("amount").textContent = money(c ? c.price : 0);
+        document.getElementById("selected-desc").innerHTML = c
+          ? `<b>${escapeHtml(c.name)}</b><br><span class="muted">${escapeHtml(
+              c.description
+            )}</span><div class="amount" style="font-size:28px;font-weight:800;margin-top:10px">${money(
+              c.price
+            )}</div>`
+          : "Choose a category to see details.";
+      }
 
-        try{
-          const res = await fetch(endpoint, { method:'POST', body: payload, headers: { 'Content-Type':'application/x-www-form-urlencoded' } })
-          if(res.ok){
-            const data = await res.json().catch(()=>({}))
-            const id = data.id || data._id || Math.random().toString(36).slice(2,9)
-            document.getElementById('ref').innerText = id
-            step3.style.display='none'; done.style.display='block'
-          } else {
-            const txt = await res.text(); alert('Submission error: '+txt)
-          }
-        } catch(e){ alert('Network error: '+e.message) }
-      })
+      (async () => {
+        PRICING = await api("/api/pricing");
+        const sel = document.getElementById("categoryId");
+        sel.innerHTML =
+          '<option value="" disabled selected>Select a category</option>' +
+          PRICING.map(
+            (c) => `<option value="${c.id}">${escapeHtml(c.name)} — ${money(c.price)}</option>`
+          ).join("");
 
-    })()
-  </script>
-</body>
+        // Preselect from ?category= in URL
+        const preset = new URLSearchParams(location.search).get("category");
+        if (preset && PRICING.some((c) => c.id === preset)) sel.value = preset;
+
+        sel.addEventListener("change", updateSummary);
+        updateSummary();
+      })();
+
+      document.getElementById("reg-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const form = e.target;
+        const payload = Object.fromEntries(new FormData(form).entries());
+        try {
+          await api("/api/registrations", {
+            method: "POST",
+            body: JSON.stringify(payload),
+          });
+          toast("Registration confirmed! 🎉", "success");
+          form.reset();
+          updateSummary();
+        } catch (err) {
+          toast(err.message, "error");
+        }
+      });
+    </script>
+  </body>
 </html>
