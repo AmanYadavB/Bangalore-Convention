@@ -4,54 +4,36 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Dashboard — Bangalore Convention</title>
-  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/static/styles.css" />
+  <style>iframe {width:100%;height:360px;border:0;margin:0 0 1rem 0}</style>
 </head>
 <body>
-  <div class="container">
-    <header class="site-header"><h1 class="logo">Bangalore Convention</h1><nav class="nav"><a href="/">Home</a><a href="/register.html">Register</a></nav></header>
-    <main>
-      <h2>Admin Dashboard</h2>
-      <p>Enter admin token to view stats:</p>
-      <input id="token" placeholder="Admin token" style="width:100%;max-width:400px">
-      <button id="login" class="btn">Load stats</button>
+  <header class="site-header container"><h1 class="logo"><a href="/">Bangalore Convention</a></h1><nav class="nav"><a href="/public/register.html">Register</a><a href="/public/schedule.html">Schedule</a></nav></header>
+  <main class="container">
+    <h2>Public Dashboard</h2>
+    <p>This dashboard shows totals and charts powered by a Google Sheet. To set it up: create a Google Form (or Formspree), connect responses to a Sheet, create charts and publish them (File → Publish to web). Paste the published chart URLs into public/config.json under DASHBOARD_EMBEDS.</p>
 
-      <div id="stats"></div>
+    <div id="embeds"></div>
 
-      <h3>Add expense</h3>
-      <label>Category<input id="exp-cat"></label>
-      <label>Description<input id="exp-desc"></label>
-      <label>Amount<input id="exp-amt" type="number"></label>
-      <button id="add-exp" class="btn">Add expense</button>
+    <h3>Simple totals (from sheet)</h3>
+    <p>If you publish a small totals chart or value, add its embed URL to config.json and it will appear above.</p>
 
-      <div id="exp-result"></div>
-    </main>
-    <footer class="site-footer"><p>&copy; 2027 Bangalore Convention</p></footer>
-  </div>
+    <h3>Admin</h3>
+    <p>To add expenses or edit registrations, open the underlying Google Sheet directly (or use a separate admin Form that writes into the same sheet).</p>
+  </main>
+  <footer class="site-footer container"><p>&copy; 2027 Bangalore Convention</p></footer>
 
   <script>
-    function show(obj){ document.getElementById('stats').innerText = JSON.stringify(obj, null, 2) }
-    document.getElementById('login').addEventListener('click', async () => {
-      const token = document.getElementById('token').value
-      if (!token) return alert('Enter token')
-      const API_BASE = window.location.origin.replace(window.location.hostname, '<YOUR_WORKER_SUBDOMAIN>')
-      const res = await fetch(API_BASE + '/api/stats', { headers: { 'x-admin-token': token } })
-      if (!res.ok) return alert('Unauthorized or error')
-      const json = await res.json()
-      show(json)
-    })
-
-    document.getElementById('add-exp').addEventListener('click', async () => {
-      const token = document.getElementById('token').value
-      if (!token) return alert('Enter token')
-      const category = document.getElementById('exp-cat').value
-      const description = document.getElementById('exp-desc').value
-      const amount = document.getElementById('exp-amt').value
-      const API_BASE = window.location.origin.replace(window.location.hostname, '<YOUR_WORKER_SUBDOMAIN>')
-      const res = await fetch(API_BASE + '/api/expense', { method: 'POST', headers: { 'x-admin-token': token, 'Content-Type': 'application/json' }, body: JSON.stringify({ category, description, amount }) })
-      if (!res.ok) return alert('Error adding expense')
-      const j = await res.json()
-      document.getElementById('exp-result').innerText = 'Expense added: ' + j.id
-    })
+    async function loadConfig(){ try{ const r = await fetch('/public/config.json'); return await r.json() } catch(e){ return null } }
+    (async ()=>{
+      const cfg = await loadConfig();
+      const embeds = (cfg && cfg.DASHBOARD_EMBEDS) || [];
+      const container = document.getElementById('embeds');
+      if(embeds.length===0){ container.innerHTML = '<p>No charts configured. Add published Google Sheet chart URLs to <code>public/config.json</code>.</p>'; return }
+      embeds.forEach(url=>{
+        const ifr = document.createElement('iframe'); ifr.src=url; container.appendChild(ifr)
+      })
+    })()
   </script>
 </body>
 </html>
