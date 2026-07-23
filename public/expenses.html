@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Expenses · Bangalore Convention</title>
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+  <body>
+    <div id="nav"></div>
+
+    <div class="container">
+      <h1 class="page-title">Expenses</h1>
+      <p class="page-sub">Record and track every rupee spent for the convention.</p>
+
+      <div class="grid cols-4" id="exp-stats">
+        <div class="empty">Loading…</div>
+      </div>
+
+      <div class="section-head">
+        <h2>Add Expense</h2>
+      </div>
+      <div class="card">
+        <form id="exp-form">
+          <div class="form-grid">
+            <div class="field">
+              <label for="title">Expense Title *</label>
+              <input id="title" name="title" required placeholder="e.g. Hall booking" />
+            </div>
+            <div class="field">
+              <label for="category">Category</label>
+              <select id="category" name="category">
+                <option>Venue</option>
+                <option>Food &amp; Catering</option>
+                <option>Accommodation</option>
+                <option>Printing &amp; Stationery</option>
+                <option>Sound &amp; Stage</option>
+                <option>Transport</option>
+                <option>Miscellaneous</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="amount">Amount (₹) *</label>
+              <input id="amount" name="amount" type="number" min="1" step="1" required placeholder="0" />
+            </div>
+            <div class="field">
+              <label for="date">Date</label>
+              <input id="date" name="date" type="date" />
+            </div>
+            <div class="field full">
+              <label for="notes">Notes</label>
+              <input id="notes" name="notes" placeholder="Optional details / vendor" />
+            </div>
+          </div>
+          <div class="form-footer">
+            <span class="muted">Expenses reduce the available balance.</span>
+            <button class="btn primary" type="submit">Add Expense</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="table-wrap" style="margin-top: 18px">
+        <table>
+          <thead>
+            <tr>
+              <th>Title</th>
+              <th>Category</th>
+              <th>Amount</th>
+              <th>Date</th>
+              <th>Notes</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="exp-rows">
+            <tr><td colspan="6" class="empty">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <script src="js/common.js"></script>
+    <script>
+      mountNav("expenses");
+
+      if (ensureAdmin()) {
+        async function loadExpenses() {
+          const list = (await api("/api/expenses")).sort(
+            (a, b) => new Date(b.date) - new Date(a.date)
+          );
+
+          const total = list.reduce((s, e) => s + (e.amount || 0), 0);
+          document.getElementById("exp-stats").innerHTML =
+            `<div class="card stat"><div class="label">Total Expenses</div><div class="value red">${money(total)}</div></div>` +
+            `<div class="card stat"><div class="label">Entries</div><div class="value">${list.length}</div></div>`;
+
+          const tbody = document.getElementById("exp-rows");
+          if (!list.length) {
+            tbody.innerHTML = '<tr><td colspan="6" class="empty">No expenses yet. Add your first one above.</td></tr>';
+            return;
+          }
+          tbody.innerHTML = list
+            .map(
+              (e) => `<tr>
+                <td><b>${escapeHtml(e.title)}</b></td>
+                <td>${escapeHtml(e.category)}</td>
+                <td>${money(e.amount)}</td>
+                <td class="muted">${formatDate(e.date)}</td>
+                <td class="muted">${escapeHtml(e.notes) || "—"}</td>
+                <td><button class="btn danger" data-del="${e.id}">Delete</button></td>
+              </tr>`
+            )
+            .join("");
+        }
+
+        document.getElementById("exp-form").addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const form = e.target;
+          const payload = Object.fromEntries(new FormData(form).entries());
+          try {
+            await api("/api/expenses", { method: "POST", body: JSON.stringify(payload) });
+            toast("Expense added");
+            form.reset();
+            loadExpenses();
+          } catch (err) {
+            toast(err.message, "error");
+          }
+        });
+
+        document.getElementById("exp-rows").addEventListener("click", async (e) => {
+          const del = e.target.closest("[data-del]");
+          if (!del) return;
+          if (!confirm("Delete this expense?")) return;
+          try {
+            await api(`/api/expenses/${del.getAttribute("data-del")}`, { method: "DELETE" });
+            toast("Expense deleted");
+            loadExpenses();
+          } catch (err) {
+            toast(err.message, "error");
+          }
+        });
+
+        loadExpenses().catch((e) => toast(e.message, "error"));
+      }
+    </script>
+  </body>
+</html>
