@@ -55,6 +55,7 @@
     <script src="js/common.js"></script>
     <script>
       mountNav("registrations");
+      if (!ensureAdmin()) throw new Error("admin required");
       let ALL = [];
 
       function applyFilters() {
