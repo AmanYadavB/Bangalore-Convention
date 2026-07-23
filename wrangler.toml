@@ -2,8 +2,7 @@
 # Replace the placeholders below before publishing.
 
 name = "bangalore-convention"
-compatibility_date = "2026-07-23" # e.g. 2025-01-01
-compatibility_flags = ["python_workers"]
+compatibility_date = "2026-07-23"
 
 [assets]
 directory = "public"
