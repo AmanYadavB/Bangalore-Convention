@@ -1,50 +1,100 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Bangalore Convention 2027</title>
-  <link rel="stylesheet" href="/static/styles.css" />
-</head>
-<body>
-  <header class="site-header">
-    <div class="container">
-      <h1 class="logo"><a href="/">Bangalore Convention</a></h1>
-      <nav class="nav">
-        <a href="/">Home</a>
-        <a href="/public/register.html">Register</a>
-        <a href="/public/schedule.html">Schedule</a>
-        <a href="/public/speakers.html">Speakers</a>
-        <a href="/public/dashboard.html">Dashboard</a>
-      </nav>
-    </div>
-  </header>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bangalore Convention</title>
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+  <body>
+    <div id="nav"></div>
 
-  <main>
-    <section class="hero container">
-      <h2>Join Bangalore's Premier Convention</h2>
-      <p>Dates: 9–11 July 2027 — three days of talks, workshops, and networking across tech, design and startups.</p>
-      <p><a href="/public/register.html" class="cta">Register Now</a></p>
-    </section>
-
-    <section class="container features">
-      <div class="grid">
-        <div class="card"><h3>Tracks</h3><p>Technology, Design, Startups, Community</p></div>
-        <div class="card"><h3>Workshops</h3><p>Hands-on sessions and mentorship</p></div>
-        <div class="card"><h3>Community</h3><p>Networking & local meetups</p></div>
+    <section class="hero">
+      <div class="eyebrow">Annual Recovery Gathering</div>
+      <h1>Bangalore Convention 2026</h1>
+      <p>
+        A weekend of unity, fellowship and service. Join friends from across the
+        region for shared meals, sessions and sober fun. Everyone in recovery is
+        welcome.
+      </p>
+      <div class="hero-meta">
+        <div>📅 <b>13 – 15 March 2026</b></div>
+        <div>📍 <b>Bangalore</b></div>
+        <div>🎟️ <b>Registrations open</b></div>
+      </div>
+      <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap">
+        <a class="btn primary" href="register.html">Register Now</a>
+        <a class="btn ghost" href="#pricing">View Pricing</a>
       </div>
     </section>
 
-    <section class="container about">
-      <h3>About</h3>
-      <p>The Bangalore Convention is a community-oriented event bringing together practitioners, students and enthusiasts for three days of learning and collaboration.</p>
-    </section>
-  </main>
-
-  <footer class="site-footer">
     <div class="container">
-      <p>&copy; 2027 Bangalore Convention</p>
+      <div id="pricing" class="section-head">
+        <h2>Registration Categories</h2>
+        <a class="btn small" href="register.html">Book a spot →</a>
+      </div>
+      <div id="pricing-grid" class="grid cols-4">
+        <div class="empty">Loading pricing…</div>
+      </div>
+
+      <div class="section-head">
+        <h2>What's Included</h2>
+      </div>
+      <div class="grid cols-3">
+        <div class="card">
+          <h3>🍽️ Meals & Refreshments</h3>
+          <p class="muted">
+            Breakfast, lunch, dinner and tea breaks are covered for all stay
+            categories through the convention.
+          </p>
+        </div>
+        <div class="card">
+          <h3>🎤 Sessions & Speakers</h3>
+          <p class="muted">
+            Open meetings, workshops and speaker sharings across all three days
+            for every registered guest.
+          </p>
+        </div>
+        <div class="card">
+          <h3>🤝 Fellowship</h3>
+          <p class="muted">
+            Marathon meetings, entertainment evenings and time to connect with
+            friends new and old.
+          </p>
+        </div>
+      </div>
     </div>
-  </footer>
-</body>
+
+    <div class="footer">
+      Bangalore Convention · A not-for-profit fellowship gathering · All funds go
+      toward hosting the event.
+    </div>
+
+    <script src="js/common.js"></script>
+    <script>
+      mountNav("home");
+      (async () => {
+        try {
+          const pricing = await api("/api/pricing");
+          const grid = document.getElementById("pricing-grid");
+          grid.innerHTML = pricing
+            .map(
+              (c, i) => `
+            <div class="card price-card ${i === 2 ? "featured" : ""}">
+              ${i === 2 ? '<span class="badge">Popular</span>' : ""}
+              <h3>${escapeHtml(c.name)}</h3>
+              <div class="desc">${escapeHtml(c.description)}</div>
+              <div class="amount">${money(c.price)} <span>/ person</span></div>
+              <a class="btn primary" style="margin-top:auto"
+                 href="register.html?category=${c.id}">Select</a>
+            </div>`
+            )
+            .join("");
+        } catch (e) {
+          document.getElementById("pricing-grid").innerHTML =
+            '<div class="empty">Could not load pricing.</div>';
+        }
+      })();
+    </script>
+  </body>
 </html>
