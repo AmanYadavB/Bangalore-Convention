@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Register — Bangalore Convention 2027</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="container">
+    <header class="site-header">
+      <h1 class="logo">Bangalore Convention</h1>
+      <nav class="nav"><a href="/">Home</a> <a href="/dashboard.html">Dashboard</a></nav>
+    </header>
+
+    <main>
+      <h2>Register for the Convention (9–11 July 2027)</h2>
+      <form id="regForm">
+        <label>Full name<input name="name" required></label>
+        <label>Email<input type="email" name="email" required></label>
+        <label>Phone<input name="phone"></label>
+        <label>Ticket type
+          <select name="ticket_type">
+            <option value="without_stay">Without stay — ₹5000</option>
+            <option value="stay_single">Stay single — ₹8000</option>
+            <option value="stay_double">Stay double — ₹7000</option>
+            <option value="stay_triple">Stay triple — ₹6500</option>
+          </select>
+        </label>
+        <label>Additional guests<input type="number" name="guests" min="0" value="0"></label>
+        <button type="submit" class="btn">Register</button>
+      </form>
+
+      <div id="result"></div>
+    </main>
+
+    <footer class="site-footer"><p>&copy; 2027 Bangalore Convention</p></footer>
+  </div>
+
+  <script>
+    const API_BASE = window.location.origin.replace(window.location.hostname, '<YOUR_WORKER_SUBDOMAIN>')
+    // replace <YOUR_WORKER_SUBDOMAIN> with the worker subdomain or Pages custom domain mapped to the worker route
+
+    document.getElementById('regForm').addEventListener('submit', async (e) => {
+      e.preventDefault()
+      const form = e.target
+      const data = new FormData(form)
+      const body = new URLSearchParams()
+      for (const [k,v] of data) body.append(k,v)
+      const res = await fetch(API_BASE + '/api/register', { method: 'POST', body, headers: { 'Content-Type': 'application/x-www-form-urlencoded' } })
+      const json = await res.json()
+      if (res.ok) {
+        document.getElementById('result').innerText = 'Registration successful — reference: ' + json.id
+        form.reset()
+      } else {
+        document.getElementById('result').innerText = 'Error: ' + (json.error || 'unknown')
+      }
+    })
+  </script>
+</body>
+</html>

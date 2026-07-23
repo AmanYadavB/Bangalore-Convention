@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Dashboard — Bangalore Convention</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="container">
+    <header class="site-header"><h1 class="logo">Bangalore Convention</h1><nav class="nav"><a href="/">Home</a><a href="/register.html">Register</a></nav></header>
+    <main>
+      <h2>Admin Dashboard</h2>
+      <p>Enter admin token to view stats:</p>
+      <input id="token" placeholder="Admin token" style="width:100%;max-width:400px">
+      <button id="login" class="btn">Load stats</button>
+
+      <div id="stats"></div>
+
+      <h3>Add expense</h3>
+      <label>Category<input id="exp-cat"></label>
+      <label>Description<input id="exp-desc"></label>
+      <label>Amount<input id="exp-amt" type="number"></label>
+      <button id="add-exp" class="btn">Add expense</button>
+
+      <div id="exp-result"></div>
+    </main>
+    <footer class="site-footer"><p>&copy; 2027 Bangalore Convention</p></footer>
+  </div>
+
+  <script>
+    function show(obj){ document.getElementById('stats').innerText = JSON.stringify(obj, null, 2) }
+    document.getElementById('login').addEventListener('click', async () => {
+      const token = document.getElementById('token').value
+      if (!token) return alert('Enter token')
+      const API_BASE = window.location.origin.replace(window.location.hostname, '<YOUR_WORKER_SUBDOMAIN>')
+      const res = await fetch(API_BASE + '/api/stats', { headers: { 'x-admin-token': token } })
+      if (!res.ok) return alert('Unauthorized or error')
+      const json = await res.json()
+      show(json)
+    })
+
+    document.getElementById('add-exp').addEventListener('click', async () => {
+      const token = document.getElementById('token').value
+      if (!token) return alert('Enter token')
+      const category = document.getElementById('exp-cat').value
+      const description = document.getElementById('exp-desc').value
+      const amount = document.getElementById('exp-amt').value
+      const API_BASE = window.location.origin.replace(window.location.hostname, '<YOUR_WORKER_SUBDOMAIN>')
+      const res = await fetch(API_BASE + '/api/expense', { method: 'POST', headers: { 'x-admin-token': token, 'Content-Type': 'application/json' }, body: JSON.stringify({ category, description, amount }) })
+      if (!res.ok) return alert('Error adding expense')
+      const j = await res.json()
+      document.getElementById('exp-result').innerText = 'Expense added: ' + j.id
+    })
+  </script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+name = "bangalore-convention-api"
+main = "./cloudflare/worker.js"
+
+[env]
+# set these in Cloudflare dashboard or wrangler publish --env production
+# ADMIN_TOKEN = "super-secret-token"
+# PRICES = '{"without_stay":5000,"stay_single":8000,"stay_double":7000,"stay_triple":6500}'
+
+[triggers]
+# define routes in dashboard or via wrangler
+
+[kv_namespaces]
+bindings = [
+  { binding = "REGISTRATIONS", id = "" },
+  { binding = "EXPENSES", id = "" }
+]
