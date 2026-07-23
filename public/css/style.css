@@ -14,6 +14,7 @@
   --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
   --radius: 14px;
   --bg-glow: radial-gradient(1200px 600px at 80% -10%, #26305a 0%, var(--bg) 55%);
+  --nav-bg: rgba(15, 23, 32, 0.85);
 }
 
 [data-theme="daylight"] {
@@ -31,6 +32,7 @@
   --red: #e0483f;
   --shadow: 0 12px 30px rgba(30, 41, 82, 0.1);
   --bg-glow: radial-gradient(1200px 600px at 80% -10%, #e5eaff 0%, var(--bg) 55%);
+  --nav-bg: rgba(255, 255, 255, 0.9);
 }
 
 * {
@@ -57,7 +59,7 @@ a {
   align-items: center;
   gap: 8px;
   padding: 14px 24px;
-  background: rgba(15, 23, 32, 0.85);
+  background: var(--nav-bg);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--border);
   position: sticky;
@@ -131,6 +133,54 @@ a {
 .theme-toggle:hover {
   background: var(--card-2);
   transform: translateY(-1px);
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  order: 2;
+}
+
+.theme-toggle {
+  order: 3;
+}
+
+.nav-toggle {
+  display: none;
+  order: 4;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  width: 42px;
+  height: 38px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+  cursor: pointer;
+}
+
+.nav-toggle span {
+  display: block;
+  width: 18px;
+  height: 2px;
+  background: var(--text);
+  border-radius: 2px;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.nav-toggle.open span:nth-child(1) {
+  transform: translateY(6px) rotate(45deg);
+}
+
+.nav-toggle.open span:nth-child(2) {
+  opacity: 0;
+}
+
+.nav-toggle.open span:nth-child(3) {
+  transform: translateY(-6px) rotate(-45deg);
 }
 
 /* ---------- Layout ---------- */
@@ -342,7 +392,7 @@ a {
 .form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16 px;
+  gap: 16px;
 }
 
 .field {
@@ -573,9 +623,25 @@ tbody tr:hover {
   .brand {
     font-size: 16px;
   }
+  .nav-toggle {
+    display: flex;
+  }
+  .nav-links {
+    order: 5;
+    width: 100%;
+    display: none;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    margin-top: 8px;
+  }
+  .nav-links.open {
+    display: flex;
+  }
   .nav a.link {
-    padding: 7px 10px;
-    font-size: 13px;
+    display: block;
+    padding: 10px 12px;
+    font-size: 14px;
   }
   .container {
     padding: 22px 16px 48px;
