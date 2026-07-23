@@ -11,4 +11,4 @@ binding = "ASSETS"
 # Replace PASTE_YOUR_KV_NAMESPACE_ID_HERE with the ID of the KV namespace you create.
 [[kv_namespaces]]
 binding = "CONVENTION_KV"
-id = "PASTE_YOUR_KV_NAMESPACE_ID_HERE"
+id = "523334e302664ae8a883e5a0c44119a0"
