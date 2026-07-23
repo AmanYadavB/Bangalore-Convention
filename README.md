@@ -1,59 +1,29 @@
-1 Bangalore Convention
+# Bangalore Convention — Website
 
-234567
+This repository contains a simple, responsive static website for the Bangalore Convention.
 
-A simple website for the annual convention registrations, pricing, and a funds/expenses dashboard. Built with only the Python standard library (no external packages) plus a static HTML/CSS/JS frontend.
+What I added
+- index.html — main site content (hero, about, schedule, speakers, venue, register, contact)
+- styles.css — minimal responsive styling
+- README.md — this file with deployment instructions
 
-Run
+Deploying to Cloudflare Pages
+1. Log in to your Cloudflare dashboard (https://dash.cloudflare.com/).
+2. Go to "Pages" and click "Create a project".
+3. Connect your GitHub account and select the repository: `AmanYadavB/Bangalore-Convention`.
+4. For the production branch choose `main` (or select the branch you prefer).
+5. Framework preset: "None (Static)". Build command: leave empty. Build output directory: `/`.
+6. Click "Save and deploy". Cloudflare Pages will deploy the site on every push to the chosen branch.
 
-powershell
+Custom domain
+- After successful deployment, you can add a custom domain in Pages → Custom domains and configure DNS.
 
-py server.py
+Make the site dynamic or add forms
+- For a contact/registration form, use Formspree, Google Forms, or integrate a backend API.
+- If you prefer a Python backend (Flask/FastAPI), Cloudflare Pages alone won't host Python; consider using Cloudflare Workers + a hosted API or deploy the backend to a service like Railway/Render/Vercel and call it from the static frontend.
 
-Then open http://localhost:3000 in your browser.
+Next steps you might want me to do
+- Add more pages (speakers details, schedule full breakdown)
+- Add a registration form with backend integration
+- Configure a Cloudflare Worker for serverless APIs or to serve assets via Workers Sites
 
-(If 'py isn't found, try "python server.py". To use a different port: "Senv: PORT=8888; py server.py.)
-
-15
-
-16 Pages
-
-17
-
-10 191
-
-Page What it does |
-
-20
-
-21
-
-Home ("index.html") |
-
-Event
-
-intro the four registration categories with prices |
-
-**Register ("register.html ") | Registration form with live price summary |
-
-22 | Registrations** ("registrations.html") | Table of all registrations search, filter, mark paid/pending.
-
-delete, export CSV
-
-23
-
-**Dashboard** ("dashboard.html") | Funds collected
-
-expenses, balance, breakdown charts, and expense I
-
-management
-
-24
-
-25
-
-## Registration categories
-
-26
-
-27 1. Without Stay 1,500
