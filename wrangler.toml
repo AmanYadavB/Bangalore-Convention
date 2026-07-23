@@ -4,6 +4,7 @@
 name = "bangalore-convention"
 main = "server.py"
 compatibility_date = "2026-07-23" # e.g. 2025-01-01
+compatibility_flags = "python_workers"
 
 [assets]
 directory = "public"
