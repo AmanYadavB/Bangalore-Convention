@@ -1,5 +1,24 @@
 // Shared helpers for all pages.
 
+// ---- Theme ----
+function currentTheme() {
+  return localStorage.getItem("theme") || "midnight";
+}
+
+function applyTheme(name) {
+  document.documentElement.setAttribute("data-theme", name);
+  localStorage.setItem("theme", name);
+  const btn = document.getElementById("themeToggle");
+  if (btn) btn.textContent = name === "daylight" ? "\uD83C\uDF19" : "\u2600\uFE0F";
+}
+
+function toggleTheme() {
+  applyTheme(currentTheme() === "midnight" ? "daylight" : "midnight");
+}
+
+// Apply the saved theme as early as possible.
+applyTheme(currentTheme());
+
 const money = (n) =>
   "₹" + Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
 
@@ -74,11 +93,14 @@ function renderNav(active) {
           `<a class="link ${l.key === active ? "active" : ""}" href="${l.href}">${l.label}</a>`
       )
       .join("")}
+    <button class="theme-toggle" id="themeToggle" type="button" title="Switch theme" aria-label="Switch theme">\u2600\uFE0F</button>
   </nav>`;
 }
 
 function mountNav(active) {
   const holder = document.getElementById("nav");
   if (holder) holder.innerHTML = renderNav(active);
+  const btn = document.getElementById("themeToggle");
+  if (btn) btn.addEventListener("click", toggleTheme);
+  applyTheme(currentTheme());
 }
-
