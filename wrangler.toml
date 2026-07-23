@@ -1,0 +1,11 @@
+# Wrangler config for deploying the static site as a Workers Site
+# Replace the placeholders below before publishing.
+
+name = "bangalore-convention"
+account_id = "YOUR_ACCOUNT_ID"
+workers_dev = true
+compatibility_date = "YYYY-MM-DD" # e.g. 2025-01-01
+
+[site]
+bucket = "./public"
+entry-point = "workers-site"
