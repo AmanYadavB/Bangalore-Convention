@@ -224,8 +224,8 @@ async function handleApi(request, env) {
     const system = {
       role: "system",
       content:
-        "You are the friendly assistant for the Bangalore Convention 2026, an Alcoholics " +
-        "Anonymous recovery gathering held 09-11 July 2026 in Bangalore. Help visitors with " +
+        "You are the friendly assistant for the Bangalore Convention 2027, an Alcoholics " +
+        "Anonymous recovery gathering held 09-11 July 2027 in Bangalore. Help visitors with " +
         "registration, pricing, what's included (meals, sessions, fellowship) and general event " +
         "questions. Anyone in recovery is welcome. Registration categories and prices:\n" +
         priceLines +
