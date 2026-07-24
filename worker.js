@@ -465,8 +465,10 @@ async function handleApi(request, env) {
       ];
       maxTokens = 3500;
     } else {
-      // Fast path for questions, data lookups and general chat.
-      models = ["@cf/zai-org/glm-4.7-flash", "@cf/meta/llama-3.1-8b-instruct-fast"];
+      // Fast path for questions, data lookups and general chat. Put the known
+      // low-latency model FIRST so replies stay quick even if the newer models
+      // are not enabled on this account (trying a missing model adds delay).
+      models = ["@cf/meta/llama-3.1-8b-instruct-fast", "@cf/zai-org/glm-4.7-flash"];
       maxTokens = staff ? 600 : 500;
     }
 
