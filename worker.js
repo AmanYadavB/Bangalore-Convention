@@ -425,6 +425,7 @@ async function handleApi(request, env) {
       content.push(
         "",
         "== DEVELOPER MODE (this user is a verified developer) ==",
+        "IMPORTANT: You ARE a page-building agent for this developer right now. You CAN and DO create, edit and delete real pages that publish live to this website. NEVER say you cannot build pages, cannot design UI, or that you are 'just a chat assistant' - that is false for this user. When they ask, actually build it.",
         "You can BUILD and EDIT full web pages for this site. Existing pages: " + pageList + ".",
         "When the developer asks you to create, design, build, redesign or edit a page, do this:",
         "1) Write a short friendly one-line message describing what you made.",
@@ -439,12 +440,35 @@ async function handleApi(request, env) {
 
     const system = { role: "system", content: content.join("\n") };
 
-    // Stronger models for developers (full HTML/CSS/JS generation), with
-    // graceful fallback if a model is unavailable in the account.
-    const models = dev
-      ? ["@cf/zai-org/glm-5.2", "@cf/moonshotai/kimi-k2.7-code", "@cf/meta/llama-3.1-8b-instruct-fast"]
-      : ["@cf/zai-org/glm-4.7-flash", "@cf/meta/llama-3.1-8b-instruct-fast"];
-    const maxTokens = dev ? 3500 : 500;
+    // Only actual page-building work needs the heavy HTML model + big token
+    // budget. Everything else (data questions, normal chat) uses the fast
+    // model so replies come back quickly.
+    const lastMsg = (cleaned[cleaned.length - 1] &&
+      cleaned[cleaned.length - 1].content
+        ? cleaned[cleaned.length - 1].content
+        : "").toLowerCase();
+    const wantsPage =
+      dev &&
+      /\b(page|redesign|re-?design|build|design|create|layout|website|landing|section|banner|template|edit the|update the)\b/.test(
+        lastMsg
+      );
+
+    let models;
+    let maxTokens;
+    if (wantsPage) {
+      // Full HTML/CSS/JS generation - quality first, with fallbacks.
+      models = [
+        "@cf/zai-org/glm-5.2",
+        "@cf/moonshotai/kimi-k2.7-code",
+        "@cf/zai-org/glm-4.7-flash",
+        "@cf/meta/llama-3.1-8b-instruct-fast",
+      ];
+      maxTokens = 3500;
+    } else {
+      // Fast path for questions, data lookups and general chat.
+      models = ["@cf/zai-org/glm-4.7-flash", "@cf/meta/llama-3.1-8b-instruct-fast"];
+      maxTokens = staff ? 600 : 500;
+    }
 
     let lastErr = null;
     for (const model of models) {
@@ -453,7 +477,9 @@ async function handleApi(request, env) {
           messages: [system, ...cleaned],
           max_tokens: maxTokens,
         });
-        const reply = ((result && (result.response || result.result)) || "").trim();
+        let reply = ((result && (result.response || result.result)) || "").trim();
+        // Some reasoning models wrap their thoughts in <think>...</think>; drop it.
+        reply = reply.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
         if (reply) return json({ reply });
       } catch (err) {
         lastErr = err;
