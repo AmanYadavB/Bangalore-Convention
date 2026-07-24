@@ -195,6 +195,61 @@ async function handleApi(request, env) {
     });
   }
 
+  // ---- AI Chat (Cloudflare Workers AI) ----
+  if (resource === "chat" && method === "POST") {
+    if (!env.AI) {
+      return json(
+        { error: "AI is not configured. Add the [ai] binding in wrangler.toml or Worker settings." },
+        503
+      );
+    }
+
+    const incoming = Array.isArray(body.messages) ? body.messages : [];
+    const cleaned = incoming
+      .filter(
+        (m) =>
+          m &&
+          typeof m.content === "string" &&
+          (m.role === "user" || m.role === "assistant")
+      )
+      .slice(-10)
+      .map((m) => ({ role: m.role, content: m.content.slice(0, 2000) }));
+
+    if (cleaned.length === 0) return json({ error: "messages required" }, 400);
+
+    const priceLines = PRICING.map(
+      (c) => `- ${c.name}: \u20b9${c.price} (${c.description})`
+    ).join("\n");
+
+    const system = {
+      role: "system",
+      content:
+        "You are the friendly assistant for the Bangalore Convention 2026, an Alcoholics " +
+        "Anonymous recovery gathering held 09-11 July 2026 in Bangalore. Help visitors with " +
+        "registration, pricing, what's included (meals, sessions, fellowship) and general event " +
+        "questions. Anyone in recovery is welcome. Registration categories and prices:\n" +
+        priceLines +
+        "\nMeals and every session are included for all stay categories; 'Without Stay' covers the " +
+        "full convention but not accommodation. To register, guests use the Register page and " +
+        "payment is confirmed by the organising team. Keep replies short, warm and clear. If you " +
+        "are unsure, suggest contacting the organising committee. Do not invent details.",
+    };
+
+    try {
+      const result = await env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
+        messages: [system, ...cleaned],
+        max_tokens: 400,
+      });
+      const reply = ((result && (result.response || result.result)) || "").trim();
+      return json({ reply: reply || "Sorry, I couldn't generate a reply. Please try again." });
+    } catch (err) {
+      return json(
+        { error: "AI request failed: " + (err && err.message ? err.message : "unknown") },
+        502
+      );
+    }
+  }
+
   return json({ error: "Not found." }, 404);
 }
 
