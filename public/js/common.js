@@ -73,7 +73,37 @@ function formatDate(iso) {
 
 // ---- Roles / auth (demo: admin logs in with no credentials) ----
 function isAdmin() {
-  return localStorage.getItem("role") === "admin";
+  const r = localStorage.getItem("role");
+  return r === "admin" || r === "developer";
+}
+
+// Developers are staff who additionally hold the DEV_KEY and can build pages.
+function isDeveloper() {
+  return localStorage.getItem("role") === "developer" && !!localStorage.getItem("devKey");
+}
+
+function getDevKey() {
+  return localStorage.getItem("devKey") || "";
+}
+
+// Verify a developer key against the server, then unlock developer mode.
+async function loginDeveloper(key) {
+  const clean = String(key || "").trim();
+  if (!clean) return false;
+  try {
+    const res = await api("/api/dev/verify", {
+      method: "POST",
+      body: JSON.stringify({ devKey: clean }),
+    });
+    if (res && res.ok) {
+      localStorage.setItem("role", "developer");
+      localStorage.setItem("devKey", clean);
+      return true;
+    }
+  } catch (err) {
+    console.warn("[dev] verify failed", err);
+  }
+  return false;
 }
 
 function login() {
@@ -83,6 +113,7 @@ function login() {
 
 function logout() {
   localStorage.removeItem("role");
+  localStorage.removeItem("devKey");
   location.href = "index.html";
 }
 
@@ -110,7 +141,8 @@ function renderNav(active) {
     { href: "registrations.html", label: "Registrations", key: "registrations", admin: true },
     { href: "dashboard.html", label: "Dashboard", key: "dashboard", admin: true },
     { href: "expenses.html", label: "Expenses", key: "expenses", admin: true },
-  ].filter((l) => !l.admin || admin);
+    { href: "pages.html", label: "Pages", key: "pages", dev: true },
+  ].filter((l) => (!l.admin || admin) && (!l.dev || isDeveloper()));
 
   const authBtn = admin
     ? `<button class="btn small auth-btn" id="authBtn" type="button">Logout</button>`
@@ -259,10 +291,12 @@ function mountChat() {
     fab.classList.add("open");
     if (!greeted) {
       greeted = true;
-      addMsg(
-        "assistant",
-        "Hi! I can help with registration, pricing, dates and what's included. What would you like to know?"
-      );
+      const greeting = isDeveloper()
+        ? "Hi developer! Ask me anything about registrations, money and expenses \u2014 or tell me to build, redesign or delete a page and I'll do it live."
+        : isAdmin()
+        ? "Hi! Ask me about registrations, payments collected, pending amounts or expenses \u2014 I have the live numbers."
+        : "Hi! I can help with registration, pricing, dates and what's included. What would you like to know?";
+      addMsg("assistant", greeting);
     }
     if (window.visualViewport) {
       window.visualViewport.addEventListener("resize", fitPanel);
@@ -313,29 +347,43 @@ function mountChat() {
     return match ? match.id : null;
   }
 
-  // Split the model reply into the visible message and an optional action.
+  // Split the model reply into the visible message, an optional action, and an
+  // optional full-HTML payload (used by the developer page-building actions).
   function parseReply(raw) {
     const marker = raw.indexOf("[[ACTION]]");
-    if (marker === -1) return { message: raw.trim(), action: null };
+    if (marker === -1) return { message: raw.trim(), action: null, html: null };
     const message = raw.slice(0, marker).trim();
+    const rest = raw.slice(marker + "[[ACTION]]".length);
+    const htmlIdx = rest.indexOf("[[HTML]]");
+    const jsonPart = (htmlIdx === -1 ? rest : rest.slice(0, htmlIdx)).trim();
+    let html = null;
+    if (htmlIdx !== -1) {
+      html = rest.slice(htmlIdx + "[[HTML]]".length);
+      // Strip a leading newline and any accidental markdown code fences.
+      html = html
+        .replace(/^\s*\n/, "")
+        .replace(/^```[a-z]*\s*/i, "")
+        .replace(/```\s*$/, "")
+        .trim();
+    }
     let action = null;
     try {
-      action = JSON.parse(raw.slice(marker + "[[ACTION]]".length).trim());
+      action = JSON.parse(jsonPart);
     } catch (err) {
-      console.warn("[chat] could not parse action JSON", err);
+      console.warn("[chat] could not parse action JSON", err, jsonPart);
     }
-    return { message, action };
+    return { message, action, html };
   }
 
   function handleAssistantReply(raw) {
-    const { message, action } = parseReply(raw);
+    const { message, action, html } = parseReply(raw);
     const shown = message || "Okay.";
     addMsg("assistant", shown);
     history.push({ role: "assistant", content: shown });
-    if (action) executeAction(action);
+    if (action) executeAction(action, html);
   }
 
-  function executeAction(action) {
+  function executeAction(action, html) {
     if (!action || !action.action) return;
     if (action.action === "navigate") {
       const target = PAGES[String(action.to || "").toLowerCase()];
@@ -346,7 +394,118 @@ function mountChat() {
       }, 700);
     } else if (action.action === "review_booking") {
       showBookingConfirm(action);
+    } else if (action.action === "create_page" || action.action === "update_page") {
+      showPageConfirm(action, html);
+    } else if (action.action === "delete_page") {
+      showPageDelete(action);
     }
+  }
+
+  // Developer: review & publish an AI-generated page (stored in D1).
+  function showPageConfirm(a, html) {
+    if (!isDeveloper()) {
+      addMsg(
+        "assistant",
+        "\u26a0\ufe0f Building pages needs developer access \u2014 unlock it on the Pages screen first."
+      );
+      return;
+    }
+    if (!html || !html.trim()) {
+      addMsg("assistant", "I couldn't produce the page HTML \u2014 please ask me again.");
+      return;
+    }
+    const slug = String(a.slug || "").trim();
+    const title = String(a.title || slug).trim();
+    const verb = a.action === "update_page" ? "Update" : "Publish";
+    const card = document.createElement("div");
+    card.className = "chat-msg assistant chat-confirm";
+    card.innerHTML =
+      "<strong>" +
+      escapeHtml(verb) +
+      " page</strong>" +
+      '<div class="chat-confirm-row"><span>Title</span><b>' +
+      escapeHtml(title) +
+      "</b></div>" +
+      '<div class="chat-confirm-row"><span>URL</span><b>/p/' +
+      escapeHtml(slug) +
+      "</b></div>" +
+      '<div class="chat-confirm-actions">' +
+      '<button type="button" class="btn ghost small" data-act="preview">Preview</button>' +
+      '<button type="button" class="btn ghost small" data-act="cancel">Cancel</button>' +
+      '<button type="button" class="btn primary small" data-act="ok">' +
+      escapeHtml(verb) +
+      "</button>" +
+      "</div>";
+    log.appendChild(card);
+    log.scrollTop = log.scrollHeight;
+
+    card.querySelector('[data-act="preview"]').addEventListener("click", () => {
+      const blob = new Blob([html], { type: "text/html" });
+      window.open(URL.createObjectURL(blob), "_blank");
+    });
+    card.querySelector('[data-act="cancel"]').addEventListener("click", () => {
+      card.remove();
+      addMsg("assistant", "Okay, I won't publish it \u2014 tell me what to change.");
+    });
+    card.querySelector('[data-act="ok"]').addEventListener("click", async (ev) => {
+      const btn = ev.currentTarget;
+      btn.disabled = true;
+      btn.textContent = "Publishing\u2026";
+      try {
+        const res = await api("/api/pages", {
+          method: "POST",
+          body: JSON.stringify({ slug, title, html, devKey: getDevKey() }),
+        });
+        const url = res.url || "/p/" + slug;
+        card.querySelector(".chat-confirm-actions").remove();
+        addMsg("assistant", "\u2705 Published! Opening " + url + " now.");
+        setTimeout(() => window.open(url, "_blank"), 500);
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = verb;
+        addMsg("assistant", "\u26a0\ufe0f Couldn't publish: " + (err && err.message ? err.message : err));
+      }
+    });
+  }
+
+  // Developer: confirm deletion of a page.
+  function showPageDelete(a) {
+    if (!isDeveloper()) {
+      addMsg("assistant", "\u26a0\ufe0f Deleting pages needs developer access.");
+      return;
+    }
+    const slug = String(a.slug || "").trim();
+    const card = document.createElement("div");
+    card.className = "chat-msg assistant chat-confirm";
+    card.innerHTML =
+      "<strong>Delete page</strong>" +
+      '<div class="chat-confirm-row"><span>URL</span><b>/p/' +
+      escapeHtml(slug) +
+      "</b></div>" +
+      '<div class="chat-confirm-actions">' +
+      '<button type="button" class="btn ghost small" data-act="cancel">Cancel</button>' +
+      '<button type="button" class="btn danger small" data-act="ok">Delete</button>' +
+      "</div>";
+    log.appendChild(card);
+    log.scrollTop = log.scrollHeight;
+    card.querySelector('[data-act="cancel"]').addEventListener("click", () => card.remove());
+    card.querySelector('[data-act="ok"]').addEventListener("click", async (ev) => {
+      const btn = ev.currentTarget;
+      btn.disabled = true;
+      btn.textContent = "Deleting\u2026";
+      try {
+        await api("/api/pages/" + encodeURIComponent(slug), {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json", "x-dev-key": getDevKey() },
+        });
+        card.querySelector(".chat-confirm-actions").remove();
+        addMsg("assistant", "\u{1F5D1}\uFE0F Deleted /p/" + slug + ".");
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = "Delete";
+        addMsg("assistant", "\u26a0\ufe0f Couldn't delete: " + (err && err.message ? err.message : err));
+      }
+    });
   }
 
   function showBookingConfirm(a) {
@@ -437,7 +596,11 @@ function mountChat() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: history }),
+        body: JSON.stringify({
+          messages: history,
+          role: localStorage.getItem("role") || "user",
+          devKey: getDevKey(),
+        }),
       });
       const raw = await res.text();
       let data = {};
