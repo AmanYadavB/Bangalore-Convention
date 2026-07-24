@@ -136,7 +136,7 @@ async function buildKnowledge(env, query) {
     ).all();
     if (!results || !results.length) return "";
 
-    const budget = 6000; // keep the prompt lean
+    const budget = 3500; // keep the prompt lean so big notes never overflow
     const qWords = tokenizeQuery(query);
 
     // Score every entry against the question (title counts double).
@@ -155,13 +155,11 @@ async function buildKnowledge(env, query) {
     let left = budget;
 
     // Prefer the relevant entries; pull their most on-topic passages first so a
-    // single huge note can't swallow the whole budget (cap ~2500 chars each).
+    // single huge note can't swallow the whole budget (cap ~1600 chars each).
     const chosen = relevant.length ? relevant : scored.slice(-8); // fallback: recent
     for (const e of chosen) {
       if (left <= 200) break;
-      const slice = relevant.length
-        ? relevantSlice(e.content, qWords, Math.min(2500, left))
-        : e.content;
+      const slice = relevantSlice(e.content, qWords, Math.min(1600, left));
       const chunk = (e.title ? e.title + ": " : "") + slice;
       if (chunk.length > left) {
         out.push(chunk.slice(0, left));
@@ -580,15 +578,13 @@ async function handleApi(request, env) {
       }
       return "";
     })();
-    const knowledge = await buildKnowledge(env, lastUserMsg);
-    if (knowledge) {
-      content.push(
-        "",
-        "== EXTRA KNOWLEDGE fed by the organisers (AUTHORITATIVE - this overrides the 'what you do not know' list above; whenever the user's question is answered here, answer directly and confidently from it, including venue, hotels, schedule, travel, contacts or any other detail) ==",
-        knowledge,
-        "STRICT RULE about the EXTRA KNOWLEDGE: only state facts that are actually written above. If the user asks about something (e.g. hotels) and the specific detail is NOT present in this section, say you don't have that detail yet - NEVER invent names, addresses, prices, numbers or specifics that are not written here."
+
+    // Decide early whether this is a page-building request (developers only).
+    const wantsPage =
+      dev &&
+      /\b(page|redesign|re-?design|build|design|create|layout|website|landing|section|banner|template|edit the|update the)\b/.test(
+        lastUserMsg.toLowerCase()
       );
-    }
 
     // Staff (admin/developer) get live figures so they can ask about numbers.
     if (staff) {
@@ -633,19 +629,28 @@ async function handleApi(request, env) {
 
     const system = { role: "system", content: content.join("\n") };
 
+    // A lean prompt WITHOUT the fed knowledge, kept so we can retry with it if a
+    // very large knowledge blob ever overflows the model's context window.
+    const leanContent = content.slice();
+
+    // Fed knowledge goes LAST (recency helps the model use it), and never on the
+    // page-building path where it isn't needed and would waste the token budget.
+    const knowledge = wantsPage ? "" : await buildKnowledge(env, lastUserMsg);
+    if (knowledge) {
+      content.push(
+        "",
+        "== EXTRA KNOWLEDGE fed by the organisers (AUTHORITATIVE - this overrides the 'what you do not know' list above; whenever the user's question is answered here, answer directly and confidently from it, including venue, hotels, schedule, travel, contacts or any other detail) ==",
+        knowledge,
+        "STRICT RULE about the EXTRA KNOWLEDGE: only state facts that are actually written above. If the user asks about something (e.g. hotels) and the specific detail is NOT present in this section, say you don't have that detail yet - NEVER invent names, addresses, prices, numbers or specifics that are not written here."
+      );
+    }
+
+    const fullSystem = { role: "system", content: content.join("\n") };
+    const leanSystem = { role: "system", content: leanContent.join("\n") };
+
     // Only actual page-building work needs the heavy HTML model + big token
     // budget. Everything else (data questions, normal chat) uses the fast
     // model so replies come back quickly.
-    const lastMsg = (cleaned[cleaned.length - 1] &&
-      cleaned[cleaned.length - 1].content
-        ? cleaned[cleaned.length - 1].content
-        : "").toLowerCase();
-    const wantsPage =
-      dev &&
-      /\b(page|redesign|re-?design|build|design|create|layout|website|landing|section|banner|template|edit the|update the)\b/.test(
-        lastMsg
-      );
-
     let models;
     let maxTokens;
     if (wantsPage) {
@@ -666,29 +671,42 @@ async function handleApi(request, env) {
       maxTokens = staff ? 340 : 280;
     }
 
+    const runModel = async (sys, model, tokens) => {
+      const result = await env.AI.run(model, {
+        messages: [sys, ...cleaned],
+        max_tokens: tokens,
+      });
+      let reply = ((result && (result.response || result.result)) || "").trim();
+      // Some reasoning models wrap their thoughts in <think>...</think>; drop it.
+      return reply.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+    };
+
     let lastErr = null;
+    // 1) Normal attempt with the full prompt (including any fed knowledge).
     for (const model of models) {
       try {
-        const result = await env.AI.run(model, {
-          messages: [system, ...cleaned],
-          max_tokens: maxTokens,
-        });
-        let reply = ((result && (result.response || result.result)) || "").trim();
-        // Some reasoning models wrap their thoughts in <think>...</think>; drop it.
-        reply = reply.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+        const reply = await runModel(fullSystem, model, maxTokens);
         if (reply) return json({ reply });
       } catch (err) {
         lastErr = err;
       }
     }
-    return json(
-      {
-        error:
-          "AI request failed: " +
-          (lastErr && lastErr.message ? lastErr.message : "no model produced a reply"),
-      },
-      502
-    );
+    // 2) Degraded retry: a large knowledge blob may have overflowed the context,
+    //    so try again on the fast model WITHOUT the fed knowledge. This keeps the
+    //    chatbot working no matter how much data was fed.
+    try {
+      const reply = await runModel(leanSystem, "@cf/meta/llama-3.1-8b-instruct-fast", 256);
+      if (reply) return json({ reply });
+    } catch (err) {
+      lastErr = err;
+    }
+    // 3) Everything failed -> a friendly "resting" reply (never a raw error) with
+    //    a helpful alternative, returned as a normal message (HTTP 200).
+    console.log("chat fallback:", lastErr && lastErr.message);
+    return json({
+      reply:
+        "I'm taking a short breather right now and couldn't work that out this second \uD83D\uDE4F. Please try again in a moment. Meanwhile you can register or check details on the Register page, or reach the organising committee for anything urgent.",
+    });
   }
 
   // ---- Neural text-to-speech (Workers AI MeloTTS; no extra key needed) ----
