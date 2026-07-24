@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Pages · Bangalore Convention</title>
+    <title>Feed AI · Bangalore Convention</title>
     <link rel="stylesheet" href="css/style.css" />
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
   </head>
@@ -11,16 +11,40 @@
     <div id="nav"></div>
 
     <div class="container">
-      <h1 class="page-title">Pages</h1>
+      <h1 class="page-title">Feed AI</h1>
       <p class="page-sub">
-        Developer workspace. Ask the chat assistant to <b>build, redesign or delete</b>
-        pages &mdash; they publish live to <code>/p/&lt;slug&gt;</code>.
+        Developer workspace. Add notes, facts or documents here and the chat
+        assistant will use them when answering everyone.
       </p>
 
       <div id="dev-gate"></div>
       <div id="dev-body" hidden>
+        <div class="card" style="margin-bottom: 18px">
+          <h2 style="margin-top: 0">Add knowledge</h2>
+          <p class="muted">
+            Type anything (schedule, venue details, FAQs&hellip;) or upload a text
+            file. It is fed straight to the assistant.
+          </p>
+          <div class="field">
+            <label for="feedTitle">Title <span class="muted">(optional)</span></label>
+            <input id="feedTitle" type="text" autocomplete="off" placeholder="e.g. Venue &amp; directions" />
+          </div>
+          <div class="field">
+            <label for="feedFile">Upload a text file <span class="muted">(optional)</span></label>
+            <input id="feedFile" type="file" accept=".txt,.md,.csv,.json,.log,text/*" />
+          </div>
+          <div class="field">
+            <label for="feedContent">Content</label>
+            <textarea id="feedContent" rows="8" placeholder="Paste or type what the AI should know&hellip;"></textarea>
+          </div>
+          <div class="section-head" style="justify-content: flex-end; gap: 10px">
+            <span class="muted" id="feedErr" style="color: var(--danger, #e5484d); display: none"></span>
+            <button class="btn primary" id="feedSave" type="button">Feed to AI</button>
+          </div>
+        </div>
+
         <div class="section-head">
-          <h2>Published pages</h2>
+          <h2>What the AI knows</h2>
           <button class="btn small" id="refreshBtn" type="button">Refresh</button>
         </div>
         <div class="table-wrap">
@@ -28,29 +52,15 @@
             <thead>
               <tr>
                 <th>Title</th>
-                <th>URL</th>
-                <th>Updated</th>
+                <th>Preview</th>
+                <th>Added</th>
                 <th></th>
               </tr>
             </thead>
-            <tbody id="page-rows">
+            <tbody id="feed-rows">
               <tr><td colspan="4" class="empty">Loading…</td></tr>
             </tbody>
           </table>
-        </div>
-        <div class="card" style="margin-top: 18px">
-          <h2 style="margin-top: 0">How to build a page</h2>
-          <p class="muted">
-            Open the chat (bottom-right) and try things like:
-          </p>
-          <ul class="muted">
-            <li>&ldquo;Build a schedule page with a colourful timeline for the three days.&rdquo;</li>
-            <li>&ldquo;Create a live stats page that shows registrations and expenses.&rdquo;</li>
-            <li>&ldquo;Redesign the schedule page with a dark theme.&rdquo;</li>
-          </ul>
-          <p class="muted">
-            The assistant shows a preview and a Publish button before anything goes live.
-          </p>
         </div>
       </div>
     </div>
@@ -67,7 +77,7 @@
         gate.innerHTML = `
           <div class="card" style="max-width:460px;margin:30px auto;text-align:center">
             <h2 style="margin-top:0">Developer access required</h2>
-            <p class="muted">Enter the developer key to build and manage pages.</p>
+            <p class="muted">Enter the developer key to feed knowledge to the assistant.</p>
             <div class="field" style="text-align:left">
               <label for="devKeyInput">Developer key</label>
               <input id="devKeyInput" type="password" autocomplete="off" placeholder="Developer key" />
@@ -94,54 +104,123 @@
         }
       }
 
-      async function loadPages() {
-        const rows = document.getElementById("page-rows");
+      async function loadFeed() {
+        const rows = document.getElementById("feed-rows");
         try {
-          const list = await api("/api/pages");
+          const list = await api("/api/knowledge");
           if (!list.length) {
             rows.innerHTML =
-              '<tr><td colspan="4" class="empty">No pages yet. Ask the chat assistant to build one.</td></tr>';
+              '<tr><td colspan="4" class="empty">Nothing fed yet. Add a note above.</td></tr>';
             return;
           }
           rows.innerHTML = list
             .map(
-              (p) => `<tr>
-                <td><b>${escapeHtml(p.title)}</b></td>
-                <td><a href="/p/${escapeHtml(p.slug)}" target="_blank">/p/${escapeHtml(p.slug)}</a></td>
-                <td class="muted">${formatDate(p.updated_at)}</td>
-                <td><button class="btn danger small" data-del="${escapeHtml(p.slug)}">Delete</button></td>
+              (k) => `<tr>
+                <td><b>${escapeHtml(k.title || "Untitled")}</b></td>
+                <td class="muted">${escapeHtml((k.preview || "").slice(0, 90))}${
+                (k.preview || "").length > 90 ? "\u2026" : ""
+              }</td>
+                <td class="muted">${formatDate(k.created_at)}</td>
+                <td><button class="btn danger small" data-del="${escapeHtml(k.id)}">Delete</button></td>
               </tr>`
             )
             .join("");
 
           rows.querySelectorAll("[data-del]").forEach((btn) =>
             btn.addEventListener("click", async () => {
-              const slug = btn.getAttribute("data-del");
-              if (!confirm("Delete /p/" + slug + "?")) return;
+              const id = btn.getAttribute("data-del");
+              if (!confirm("Remove this from the AI's knowledge?")) return;
               btn.disabled = true;
               try {
-                await api("/api/pages/" + encodeURIComponent(slug), {
+                await api("/api/knowledge/" + encodeURIComponent(id), {
                   method: "DELETE",
                   headers: { "Content-Type": "application/json", "x-dev-key": getDevKey() },
                 });
-                toast("Page deleted");
-                loadPages();
+                toast("Removed");
+                loadFeed();
               } catch (err) {
                 btn.disabled = false;
-                toast(err.message || "Could not delete", "error");
+                toast(err.message || "Could not remove", "error");
               }
             })
           );
         } catch (err) {
-          rows.innerHTML = `<tr><td colspan="4" class="empty">${escapeHtml(err.message || "Failed to load pages")}</td></tr>`;
+          rows.innerHTML = `<tr><td colspan="4" class="empty">${escapeHtml(
+            err.message || "Failed to load"
+          )}</td></tr>`;
         }
+      }
+
+      function wireForm() {
+        const titleEl = document.getElementById("feedTitle");
+        const fileEl = document.getElementById("feedFile");
+        const contentEl = document.getElementById("feedContent");
+        const errEl = document.getElementById("feedErr");
+        const saveBtn = document.getElementById("feedSave");
+
+        // Load a chosen text file straight into the content box.
+        fileEl.addEventListener("change", () => {
+          const file = fileEl.files && fileEl.files[0];
+          if (!file) return;
+          if (file.size > 500 * 1024) {
+            errEl.textContent = "File is too large (max 500 KB of text).";
+            errEl.style.display = "inline";
+            fileEl.value = "";
+            return;
+          }
+          const reader = new FileReader();
+          reader.onload = () => {
+            errEl.style.display = "none";
+            const existing = contentEl.value.trim();
+            contentEl.value = existing
+              ? existing + "\n\n" + String(reader.result || "")
+              : String(reader.result || "");
+            if (!titleEl.value.trim()) titleEl.value = file.name;
+          };
+          reader.onerror = () => {
+            errEl.textContent = "Couldn't read that file as text.";
+            errEl.style.display = "inline";
+          };
+          reader.readAsText(file);
+        });
+
+        saveBtn.addEventListener("click", async () => {
+          const title = titleEl.value.trim();
+          const content = contentEl.value.trim();
+          errEl.style.display = "none";
+          if (!content) {
+            errEl.textContent = "Add some text or upload a file first.";
+            errEl.style.display = "inline";
+            return;
+          }
+          saveBtn.disabled = true;
+          saveBtn.textContent = "Feeding\u2026";
+          try {
+            await api("/api/knowledge", {
+              method: "POST",
+              body: JSON.stringify({ title, content, devKey: getDevKey() }),
+            });
+            titleEl.value = "";
+            contentEl.value = "";
+            fileEl.value = "";
+            toast("Fed to the AI");
+            loadFeed();
+          } catch (err) {
+            errEl.textContent = err.message || "Could not save";
+            errEl.style.display = "inline";
+          } finally {
+            saveBtn.disabled = false;
+            saveBtn.textContent = "Feed to AI";
+          }
+        });
       }
 
       if (isDeveloper()) {
         gate.innerHTML = "";
         bodyEl.hidden = false;
-        document.getElementById("refreshBtn").addEventListener("click", loadPages);
-        loadPages();
+        document.getElementById("refreshBtn").addEventListener("click", loadFeed);
+        wireForm();
+        loadFeed();
       } else {
         showGate();
       }
