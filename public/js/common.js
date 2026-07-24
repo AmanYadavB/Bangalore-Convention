@@ -412,6 +412,37 @@ function mountChat() {
       .addEventListener("click", () => (window.location.href = target));
   }
 
+  // Render an embedded Google Maps route card (no API key needed) for travel to
+  // the convention. Only ever called for convention-related travel.
+  function showMapCard(from, to) {
+    const dest = String(to || "Bangalore, India").trim() || "Bangalore, India";
+    const origin = String(from || "").trim();
+    const card = document.createElement("div");
+    card.className = "chat-msg assistant chat-map";
+    const q = origin
+      ? "saddr=" + encodeURIComponent(origin) + "&daddr=" + encodeURIComponent(dest)
+      : "q=" + encodeURIComponent(dest);
+    const embed = "https://maps.google.com/maps?" + q + "&output=embed";
+    const link =
+      "https://www.google.com/maps/dir/?api=1" +
+      (origin ? "&origin=" + encodeURIComponent(origin) : "") +
+      "&destination=" +
+      encodeURIComponent(dest);
+    card.innerHTML =
+      "<strong>" +
+      (origin ? escapeHtml(origin) + " \u2192 " + escapeHtml(dest) : escapeHtml(dest)) +
+      "</strong>" +
+      '<div class="chat-map-frame"><iframe title="Route map" loading="lazy" ' +
+      'referrerpolicy="no-referrer-when-downgrade" src="' +
+      escapeHtml(embed) +
+      '"></iframe></div>' +
+      '<a class="chat-map-open" target="_blank" rel="noopener" href="' +
+      escapeHtml(link) +
+      '">Open in Google Maps \u2197</a>';
+    log.appendChild(card);
+    log.scrollTop = log.scrollHeight;
+  }
+
   function normalizeCategory(cat) {
     if (!cat) return null;
     const key = String(cat).trim().toLowerCase();
@@ -489,6 +520,8 @@ function mountChat() {
       showPageConfirm(action, html);
     } else if (action.action === "delete_page") {
       showPageDelete(action);
+    } else if (action.action === "show_map") {
+      showMapCard(action.from, action.to);
     }
   }
 
@@ -794,6 +827,42 @@ function mountChat() {
     }
   }
 
+  // Pick the most natural-sounding English voice the browser offers, instead of
+  // the default robotic one. Neural/Online voices (Edge) and Google voices sound
+  // far better. Cached once voices are loaded (they load asynchronously).
+  let preferredVoice = null;
+  let voicesReady = false;
+  function pickPreferredVoice() {
+    if (!canSpeak) return null;
+    const voices = window.speechSynthesis.getVoices();
+    if (!voices || !voices.length) return null;
+    voicesReady = true;
+    const en = voices.filter((v) => /^en(-|_|$)/i.test(v.lang || ""));
+    const pool = en.length ? en : voices;
+    const score = (v) => {
+      const n = (v.name || "").toLowerCase();
+      let s = 0;
+      if (/natural|neural|online/.test(n)) s += 100; // Edge neural voices
+      if (/google/.test(n)) s += 60; // Chrome/Android Google voices
+      if (/\baria|jenny|libby|sonia|emma|michelle|ava|neerja|prabhat\b/.test(n)) s += 40;
+      if (/female|woman/.test(n)) s += 8;
+      if (/en-in/i.test(v.lang || "")) s += 12; // prefer Indian English
+      else if (/en-gb/i.test(v.lang || "")) s += 6;
+      if (v.localService) s += 2;
+      return s;
+    };
+    pool.sort((a, b) => score(b) - score(a));
+    preferredVoice = pool[0] || null;
+    return preferredVoice;
+  }
+  if (canSpeak) {
+    pickPreferredVoice();
+    // Voices often aren't ready on first call; refresh when they load.
+    try {
+      window.speechSynthesis.onvoiceschanged = pickPreferredVoice;
+    } catch (e) {}
+  }
+
   // Speak the assistant's visible message. The mic is turned OFF while the bot
   // talks so it can't hear itself through the speakers and answer its own voice.
   function speak(msg) {
@@ -806,10 +875,17 @@ function mountChat() {
     try {
       window.speechSynthesis.cancel();
     } catch (e) {}
+    if (!preferredVoice && !voicesReady) pickPreferredVoice();
     const u = new SpeechSynthesisUtterance(msg);
-    u.lang = "en-IN";
-    u.rate = 1.02;
-    u.pitch = 1;
+    if (preferredVoice) {
+      u.voice = preferredVoice;
+      u.lang = preferredVoice.lang || "en-IN";
+    } else {
+      u.lang = "en-IN";
+    }
+    u.rate = 1; // natural pace
+    u.pitch = 1.05; // slightly warmer
+    u.volume = 1;
     setVoiceStatus("speaking");
     u.onend = afterSpeak;
     u.onerror = afterSpeak;
