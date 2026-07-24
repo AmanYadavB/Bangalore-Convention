@@ -249,21 +249,48 @@ function mountChat() {
     text.value = "";
     sendBtn.disabled = true;
     const typing = addMsg("assistant typing", "\u2026");
+    console.log("[chat] POST /api/chat", { messages: history });
     try {
-      const data = await api("/api/chat", {
+      const res = await fetch("/api/chat", {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: history }),
       });
+      const raw = await res.text();
+      let data = {};
+      try {
+        data = raw ? JSON.parse(raw) : {};
+      } catch (parseErr) {
+        console.error("[chat] response was not JSON:", raw);
+      }
+      console.log("[chat] status", res.status, res.statusText, data);
       typing.remove();
+
+      if (!res.ok) {
+        const detail =
+          data.error || data.message || raw || res.statusText || "Unknown error";
+        console.error("[chat] request failed", res.status, detail);
+        addMsg(
+          "assistant",
+          "\u26a0\ufe0f Chat failed (HTTP " + res.status + "): " + detail
+        );
+        return;
+      }
+
       const reply = data.reply || "Sorry, I couldn't answer that.";
       addMsg("assistant", reply);
       history.push({ role: "assistant", content: reply });
     } catch (err) {
+      console.error("[chat] network/exception error:", err);
       typing.remove();
-      addMsg("assistant", "Sorry, I'm having trouble right now. Please try again in a moment.");
+      addMsg(
+        "assistant",
+        "\u26a0\ufe0f Could not reach the chat server: " +
+          (err && err.message ? err.message : err)
+      );
     } finally {
       sendBtn.disabled = false;
-      text.focus();
+      if (window.innerWidth > 720) text.focus();
     }
   });
 }
