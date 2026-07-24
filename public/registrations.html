@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Registrations · Bangalore Convention</title>
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+  <body>
+    <div id="nav"></div>
+
+    <div class="container">
+      <div class="section-head">
+        <div>
+          <h1 class="page-title" style="margin-bottom: 2px">All Registrations</h1>
+          <p class="page-sub" style="margin: 0" id="count-line">Loading…</p>
+        </div>
+        <a class="btn primary" href="register.html">+ New Registration</a>
+      </div>
+
+      <div class="toolbar">
+        <input id="search" placeholder="Search name, email, phone, city…" />
+        <select id="filter-cat">
+          <option value="">All categories</option>
+        </select>
+        <select id="filter-paid">
+          <option value="">All payment status</option>
+          <option value="paid">Paid</option>
+          <option value="pending">Pending</option>
+        </select>
+        <button class="btn small" id="export">Export CSV</button>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Contact</th>
+              <th>City</th>
+              <th>Category</th>
+              <th>Amount</th>
+              <th>Status</th>
+              <th>Registered</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="rows">
+            <tr><td colspan="8" class="empty">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <script src="js/common.js"></script>
+    <script>
+      mountNav("registrations");
+      if (!ensureAdmin()) throw new Error("admin required");
+      let ALL = [];
+
+      function applyFilters() {
+        const q = document.getElementById("search").value.trim().toLowerCase();
+        const cat = document.getElementById("filter-cat").value;
+        const paid = document.getElementById("filter-paid").value;
+        return ALL.filter((r) => {
+          const matchesQ =
+            !q ||
+            [r.name, r.email, r.phone, r.city]
+              .join(" ")
+              .toLowerCase()
+              .includes(q);
+          const matchesCat = !cat || r.categoryId === cat;
+          const matchesPaid =
+            !paid || (paid === "paid" ? r.paid : !r.paid);
+          return matchesQ && matchesCat && matchesPaid;
+        });
+      }
+
+      function render() {
+        const rows = applyFilters().sort(
+          (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+        );
+        const tbody = document.getElementById("rows");
+        document.getElementById("count-line").textContent =
+          `${ALL.length} total · ${ALL.filter((r) => r.paid).length} paid · showing ${rows.length}`;
+
+        if (!rows.length) {
+          tbody.innerHTML = '<tr><td colspan="8" class="empty">No registrations found.</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = rows
+          .map(
+            (r) => `
+          <tr>
+            <td>
+              <b>${escapeHtml(r.name)}</b>
+              ${r.notes ? `<br><span class="muted" style="font-size:12px">${escapeHtml(r.notes)}</span>` : ""}
+            </td>
+            <td>${escapeHtml(r.email)}<br><span class="muted">${escapeHtml(r.phone)}</span></td>
+            <td>${escapeHtml(r.city) || "—"}</td>
+            <td>${escapeHtml(r.categoryName)}</td>
+            <td>${money(r.amount)}</td>
+            <td><span class="pill ${r.paid ? "paid" : "pending"}">${r.paid ? "Paid" : "Pending"}</span></td>
+            <td class="muted">${formatDate(r.createdAt)}</td>
+            <td style="white-space:nowrap">
+              <button class="btn small" data-toggle="${r.id}">${r.paid ? "Mark Unpaid" : "Mark Paid"}</button>
+              <button class="btn danger" data-del="${r.id}">Delete</button>
+            </td>
+          </tr>`
+          )
+          .join("");
+      }
+
+      async function load() {
+        ALL = await api("/api/registrations");
+        const pricing = await api("/api/pricing");
+        document.getElementById("filter-cat").innerHTML =
+          '<option value="">All categories</option>' +
+          pricing.map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join("");
+        render();
+      }
+
+      document.getElementById("search").addEventListener("input", render);
+      document.getElementById("filter-cat").addEventListener("change", render);
+      document.getElementById("filter-paid").addEventListener("change", render);
+
+      document.getElementById("rows").addEventListener("click", async (e) => {
+        const toggle = e.target.closest("[data-toggle]");
+        const del = e.target.closest("[data-del]");
+        try {
+          if (toggle) {
+            const id = toggle.getAttribute("data-toggle");
+            const cur = ALL.find((r) => r.id === id);
+            const updated = await api(`/api/registrations/${id}`, {
+              method: "PATCH",
+              body: JSON.stringify({ paid: !cur.paid }),
+            });
+            cur.paid = updated.paid;
+            render();
+            toast(updated.paid ? "Marked as paid" : "Marked as pending");
+          } else if (del) {
+            const id = del.getAttribute("data-del");
+            if (!confirm("Delete this registration?")) return;
+            await api(`/api/registrations/${id}`, { method: "DELETE" });
+            ALL = ALL.filter((r) => r.id !== id);
+            render();
+            toast("Registration deleted");
+          }
+        } catch (err) {
+          toast(err.message, "error");
+        }
+      });
+
+      document.getElementById("export").addEventListener("click", () => {
+        const rows = applyFilters();
+        if (!rows.length) return toast("Nothing to export", "error");
+        const header = ["Name", "Email", "Phone", "City", "Gender", "Category", "Amount", "Paid", "Registered", "Notes"];
+        const csv = [header.join(",")]
+          .concat(
+            rows.map((r) =>
+              [r.name, r.email, r.phone, r.city, r.gender, r.categoryName, r.amount, r.paid ? "Yes" : "No", r.createdAt, r.notes]
+                .map((v) => `"${String(v || "").replace(/"/g, '""')}"`)
+                .join(",")
+            )
+          )
+          .join("\n");
+        const blob = new Blob([csv], { type: "text/csv" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "registrations.csv";
+        a.click();
+        URL.revokeObjectURL(a.href);
+      });
+
+      load().catch((e) => toast(e.message, "error"));
+    </script>
+  </body>
+</html>
