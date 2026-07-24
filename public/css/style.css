@@ -710,6 +710,14 @@ a:hover {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-width: 0;
+}
+
+.field input,
+.field select,
+.field textarea {
+  width: 100%;
+  max-width: 100%;
 }
 
 .field.full {
