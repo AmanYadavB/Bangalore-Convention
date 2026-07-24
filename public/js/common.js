@@ -141,7 +141,7 @@ function renderNav(active) {
     { href: "registrations.html", label: "Registrations", key: "registrations", admin: true },
     { href: "dashboard.html", label: "Dashboard", key: "dashboard", admin: true },
     { href: "expenses.html", label: "Expenses", key: "expenses", admin: true },
-    { href: "pages.html", label: "Pages", key: "pages", dev: true },
+    { href: "pages.html", label: "Feed AI", key: "pages", dev: true },
   ].filter((l) => (!l.admin || admin) && (!l.dev || isDeveloper()));
 
   const authBtn = admin
@@ -253,8 +253,24 @@ function mountChat() {
     el.className = "chat-msg " + kind;
     el.innerHTML = escapeHtml(content).replace(/\n/g, "<br>");
     log.appendChild(el);
-    log.scrollTop = log.scrollHeight;
+    scrollToMsg(el, kind);
     return el;
+  }
+
+  // Scroll only the chat log (never the whole page). For a finished assistant
+  // reply, bring the START of the new message into view so long answers are
+  // read from the top instead of jumping to the bottom. For the user's own
+  // messages and the typing indicator, snap to the bottom.
+  function scrollToMsg(el, kind) {
+    const k = String(kind || "");
+    const isAssistantReply = k.indexOf("assistant") === 0 && k.indexOf("typing") === -1;
+    if (isAssistantReply) {
+      const delta = el.getBoundingClientRect().top - log.getBoundingClientRect().top;
+      const maxTop = log.scrollHeight - log.clientHeight;
+      log.scrollTop = Math.min(maxTop, log.scrollTop + delta - 10);
+    } else {
+      log.scrollTop = log.scrollHeight;
+    }
   }
 
   const isMobile = () => window.innerWidth <= 720;
@@ -292,7 +308,7 @@ function mountChat() {
     if (!greeted) {
       greeted = true;
       const greeting = isDeveloper()
-        ? "Hi developer! Ask me anything about registrations, money and expenses \u2014 or tell me to build, redesign or delete a page and I'll do it live."
+        ? "Hi developer! Ask me anything about registrations, money and expenses. Anything you add on the Feed AI page becomes part of what I know."
         : isAdmin()
         ? "Hi! Ask me about registrations, payments collected, pending amounts or expenses \u2014 I have the live numbers."
         : "Hi! I can help with registration, pricing, dates and what's included. What would you like to know?";
