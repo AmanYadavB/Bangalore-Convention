@@ -208,6 +208,14 @@ function mountChat() {
   const sendBtn = document.getElementById("chatSend");
   let greeted = false;
 
+  // Pricing/categories, loaded once so the bot can book on the user's behalf.
+  let PRICING = [];
+  api("/api/pricing")
+    .then((list) => {
+      if (Array.isArray(list)) PRICING = list;
+    })
+    .catch((err) => console.warn("[chat] could not load pricing", err));
+
   function addMsg(kind, content) {
     const el = document.createElement("div");
     el.className = "chat-msg " + kind;
@@ -280,6 +288,138 @@ function mountChat() {
     panel.style.height = "";
   }
 
+  // ---- Agentic actions ------------------------------------------------------
+  // Where the bot can navigate: keyword -> page file.
+  const PAGES = {
+    home: "index.html",
+    index: "index.html",
+    register: "register.html",
+    registration: "register.html",
+    pricing: "index.html#pricing",
+    dashboard: "dashboard.html",
+    registrations: "registrations.html",
+    expenses: "expenses.html",
+  };
+
+  function normalizeCategory(cat) {
+    if (!cat) return null;
+    const key = String(cat).trim().toLowerCase();
+    const match = PRICING.find(
+      (c) =>
+        c.id.toLowerCase() === key ||
+        c.name.toLowerCase() === key ||
+        c.name.toLowerCase().includes(key)
+    );
+    return match ? match.id : null;
+  }
+
+  // Split the model reply into the visible message and an optional action.
+  function parseReply(raw) {
+    const marker = raw.indexOf("[[ACTION]]");
+    if (marker === -1) return { message: raw.trim(), action: null };
+    const message = raw.slice(0, marker).trim();
+    let action = null;
+    try {
+      action = JSON.parse(raw.slice(marker + "[[ACTION]]".length).trim());
+    } catch (err) {
+      console.warn("[chat] could not parse action JSON", err);
+    }
+    return { message, action };
+  }
+
+  function handleAssistantReply(raw) {
+    const { message, action } = parseReply(raw);
+    const shown = message || "Okay.";
+    addMsg("assistant", shown);
+    history.push({ role: "assistant", content: shown });
+    if (action) executeAction(action);
+  }
+
+  function executeAction(action) {
+    if (!action || !action.action) return;
+    if (action.action === "navigate") {
+      const target = PAGES[String(action.to || "").toLowerCase()];
+      if (!target) return;
+      addMsg("assistant typing", "Taking you there\u2026");
+      setTimeout(() => {
+        window.location.href = target;
+      }, 700);
+    } else if (action.action === "review_booking") {
+      showBookingConfirm(action);
+    }
+  }
+
+  function showBookingConfirm(a) {
+    const cat = normalizeCategory(a.category);
+    const catObj = PRICING.find((c) => c.id === cat);
+    const card = document.createElement("div");
+    card.className = "chat-msg assistant chat-confirm";
+    card.innerHTML =
+      "<strong>Review your registration</strong>" +
+      row("Name", a.name) +
+      row("Email", a.email) +
+      row("Phone", a.phone) +
+      row("Category", catObj ? catObj.name : a.category || "\u2014") +
+      (catObj ? row("Amount", "\u20b9" + catObj.price) : "") +
+      '<div class="chat-confirm-actions">' +
+      '<button type="button" class="btn ghost small" data-act="cancel">Cancel</button>' +
+      '<button type="button" class="btn primary small chat-confirm-ok" data-act="ok">Confirm &amp; register</button>' +
+      "</div>";
+    log.appendChild(card);
+    log.scrollTop = log.scrollHeight;
+
+    function row(label, value) {
+      return (
+        '<div class="chat-confirm-row"><span>' +
+        escapeHtml(label) +
+        "</span><b>" +
+        escapeHtml(value || "\u2014") +
+        "</b></div>"
+      );
+    }
+
+    card.querySelector('[data-act="cancel"]').addEventListener("click", () => {
+      card.remove();
+      addMsg("assistant", "No problem \u2014 tell me what you'd like to change.");
+    });
+
+    card.querySelector('[data-act="ok"]').addEventListener("click", async (ev) => {
+      const btn = ev.currentTarget;
+      btn.disabled = true;
+      btn.textContent = "Registering\u2026";
+      if (!cat) {
+        btn.disabled = false;
+        btn.textContent = "Confirm & register";
+        addMsg("assistant", "That category didn't match our list \u2014 which stay option would you like?");
+        return;
+      }
+      try {
+        const record = await api("/api/registrations", {
+          method: "POST",
+          body: JSON.stringify({
+            name: a.name,
+            email: a.email,
+            phone: a.phone,
+            categoryId: cat,
+          }),
+        });
+        const ref = "BC-" + String(record.id || "").slice(0, 8).toUpperCase();
+        card.querySelector(".chat-confirm-actions").remove();
+        addMsg(
+          "assistant",
+          "\u2705 You're registered! Your reference is " +
+            ref +
+            ". The team will confirm your payment shortly."
+        );
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = "Confirm & register";
+        addMsg("assistant", "\u26a0\ufe0f Couldn't register: " + (err && err.message ? err.message : err));
+      }
+    });
+  }
+  // ---------------------------------------------------------------------------
+
   fab.addEventListener("click", () => (panel.hidden ? openChat() : closeChat()));
   document.getElementById("chatClose").addEventListener("click", closeChat);
 
@@ -321,8 +461,7 @@ function mountChat() {
       }
 
       const reply = data.reply || "Sorry, I couldn't answer that.";
-      addMsg("assistant", reply);
-      history.push({ role: "assistant", content: reply });
+      handleAssistantReply(reply);
     } catch (err) {
       console.error("[chat] network/exception error:", err);
       typing.remove();
