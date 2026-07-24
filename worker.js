@@ -236,7 +236,7 @@ async function handleApi(request, env) {
     };
 
     try {
-      const result = await env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
+      const result = await env.AI.run("@cf/meta/llama-3.1-8b-instruct-fast", {
         messages: [system, ...cleaned],
         max_tokens: 400,
       });
