@@ -119,7 +119,7 @@ function renderNav(active) {
   return `
   <nav class="nav">
     <a class="brand" href="index.html">
-      <span class="logo"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><polygon points="12,2.5 21.5,20.5 2.5,20.5" stroke="rgba(255,255,255,0.95)" stroke-width="1.8" stroke-linejoin="round" fill="rgba(255,255,255,0.1)"/><text x="12" y="17.5" font-size="8" font-weight="900" fill="white" text-anchor="middle" font-family="Arial,sans-serif">AA</text></svg></span>
+      <span class="logo"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="12" cy="12" r="9.2" stroke="rgba(255,255,255,0.9)" stroke-width="1.5"/><polygon points="12,6 17,15.5 7,15.5" stroke="#fff" stroke-width="1.6" stroke-linejoin="round" fill="none"/></svg></span>
       <span class="brand-name"><b>Bangalore Convention</b>
         <small>Unity · Service · Recovery</small>
       </span>
