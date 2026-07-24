@@ -1122,6 +1122,53 @@ tbody tr:hover {
   letter-spacing: 2px;
 }
 
+.chat-confirm {
+  max-width: 92%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chat-confirm strong {
+  font-size: 13px;
+}
+
+.chat-confirm-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+  padding: 3px 0;
+  border-bottom: 1px dashed var(--border);
+}
+
+.chat-confirm-row:last-of-type {
+  border-bottom: none;
+}
+
+.chat-confirm-row span {
+  color: var(--muted);
+}
+
+.chat-confirm-row b {
+  text-align: right;
+  word-break: break-word;
+}
+
+.chat-confirm-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.chat-confirm-actions .btn {
+  flex: 1;
+}
+
+.chat-confirm-ok {
+  flex: 1.4;
+}
+
 .chat-input {
   display: flex;
   gap: 8px;
