@@ -13,6 +13,20 @@ binding = "ASSETS"
 binding = "CONVENTION_KV"
 id = "523334e302664ae8a883e5a0c44119a0"
 
+# D1 database stores developer-generated pages (the AI agent writes here).
+# Create it once:  npx wrangler d1 create convention-db
+# then paste the printed database_id below.
+[[d1_databases]]
+binding = "CONVENTION_DB"
+database_name = "convention-db"
+database_id = "60bc0f91-4595-478b-a576-1841ebb41588"
+
 # Cloudflare Workers AI powers the chat assistant (env.AI).
 [ai]
 binding = "AI"
+
+# Developer-role gate. Only requests carrying this exact key may create,
+# edit or delete pages through the agent. CHANGE THIS before deploying, and
+# prefer setting it as a secret:  npx wrangler secret put DEV_KEY
+[vars]
+DEV_KEY = "amankumaryadavasasmd"
