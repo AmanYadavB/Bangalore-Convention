@@ -753,6 +753,9 @@ function mountChat() {
   // Drop any recognition results until this time (swallows the speaker echo
   // tail right after the bot stops talking).
   let ignoreResultsUntil = 0;
+  // True from the moment we capture a phrase until the bot has finished
+  // answering + speaking. Blocks new input so mobile can't stack prompts.
+  let processing = false;
 
   // Normalise text so we can tell the user's speech apart from the bot's own
   // voice echoing back through the speakers.
@@ -813,14 +816,14 @@ function mountChat() {
   }
 
   function afterSpeak() {
-    if (!speaking) return; // already handled (onend + onerror can both fire)
     speaking = false;
+    processing = false; // ready for the next phrase
     // Ignore the echo tail for a moment, then start listening again.
     ignoreResultsUntil = Date.now() + 500;
     if (voiceMode) {
       setVoiceStatus("listening");
       setTimeout(() => {
-        if (voiceMode && !speaking) startListening();
+        if (voiceMode && !speaking && !processing) startListening();
       }, 250);
     } else {
       setVoiceStatus("");
@@ -831,6 +834,7 @@ function mountChat() {
   function stopSpeaking() {
     if (!speaking) return;
     speaking = false;
+    processing = false;
     try {
       if (canSpeak) window.speechSynthesis.cancel();
     } catch (e) {}
@@ -838,7 +842,7 @@ function mountChat() {
     if (voiceMode) {
       setVoiceStatus("listening");
       setTimeout(() => {
-        if (voiceMode && !speaking) startListening();
+        if (voiceMode && !speaking && !processing) startListening();
       }, 200);
     }
   }
@@ -852,7 +856,7 @@ function mountChat() {
   }
 
   function startListening() {
-    if (!voiceMode || !canListen || recognizing || speaking) return;
+    if (!voiceMode || !canListen || recognizing || speaking || processing) return;
     try {
       recognition.start();
     } catch (e) {
@@ -890,8 +894,9 @@ function mountChat() {
     };
 
     recognition.onresult = (ev) => {
-      // Ignore anything heard while the bot is talking or in the echo-tail window.
-      if (speaking || Date.now() < ignoreResultsUntil) {
+      // Ignore anything heard while the bot is talking, still answering, or in
+      // the echo-tail window. This is what stops mobile stacking prompts.
+      if (speaking || processing || Date.now() < ignoreResultsUntil) {
         clearInterim();
         return;
       }
@@ -908,6 +913,8 @@ function mountChat() {
       const said = finalText.trim();
       if (said) {
         clearInterim();
+        processing = true; // lock: no more input until we've answered + spoken
+        pauseListening(); // stop the mic immediately (mobile fires extra finals)
         setVoiceStatus("thinking");
         sendToChat(said, { voice: true });
       }
@@ -929,10 +936,10 @@ function mountChat() {
 
     recognition.onend = () => {
       recognizing = false;
-      // Only auto-restart when we're not deliberately paused for the bot's speech.
-      if (voiceMode && !speaking) {
+      // Only auto-restart when we're not paused for speech or a pending answer.
+      if (voiceMode && !speaking && !processing) {
         setTimeout(() => {
-          if (voiceMode && !speaking && !recognizing) startListening();
+          if (voiceMode && !speaking && !processing && !recognizing) startListening();
         }, 200);
       }
     };
@@ -950,6 +957,8 @@ function mountChat() {
     if (!recognition) initRecognition();
     if (panel.hidden) openChat();
     voiceMode = true;
+    processing = false;
+    speaking = false;
     setVoiceStatus("listening");
     startListening();
   }
@@ -964,6 +973,7 @@ function mountChat() {
       if (canSpeak) window.speechSynthesis.cancel();
     } catch (e) {}
     speaking = false;
+    processing = false;
     clearInterim();
     setVoiceStatus("");
   }
