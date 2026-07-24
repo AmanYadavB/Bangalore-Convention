@@ -447,7 +447,7 @@ async function handleApi(request, env) {
         "- To register: use the Register page on this site, or ask me and I can help you book. Payment is confirmed by the organising team; a spot is confirmed once they mark payment received.",
         "",
         "== WHAT YOU DO NOT KNOW - never invent these ==",
-        "You do NOT know the exact venue name or address, the detailed daily schedule or agenda, speaker names, travel/airport/hotel directions, the refund policy, or any phone number or email. If asked, say those details are not finalised here yet and will be shared with registered guests, or suggest contacting the organising committee. Never make up event specifics.",
+        "By default you do NOT know the exact venue name or address, the detailed daily schedule or agenda, speaker names, travel/airport/hotel directions, the refund policy, or any phone number or email. IMPORTANT EXCEPTION: if any of these details ARE provided in the 'EXTRA KNOWLEDGE fed by the organisers' section below, then you DO know them - use that information confidently and answer from it. Only when a detail is NOT covered there, say it is not finalised here yet and will be shared with registered guests, or suggest contacting the organising committee. Never make up event specifics that are not in your knowledge.",
         "",
         "== ABOUT AA & THE FELLOWSHIP (share when asked, keep it brief and accurate) ==",
         "- Alcoholics Anonymous is a worldwide fellowship of people who share their experience, strength and hope to recover from alcoholism and help others do the same. It was started in 1935 by Bill W. (Bill Wilson) and Dr. Bob (Dr. Bob Smith) in Akron, Ohio, USA.",
@@ -480,7 +480,7 @@ async function handleApi(request, env) {
     if (knowledge) {
       content.push(
         "",
-        "== EXTRA KNOWLEDGE fed by the organisers (treat as authoritative and prefer it over general assumptions; answer from it when relevant) ==",
+        "== EXTRA KNOWLEDGE fed by the organisers (AUTHORITATIVE - this overrides the 'what you do not know' list above; whenever the user's question is answered here, answer directly and confidently from it, including venue, hotels, schedule, travel, contacts or any other detail) ==",
         knowledge
       );
     }
