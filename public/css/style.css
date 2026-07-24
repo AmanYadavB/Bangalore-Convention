@@ -1170,58 +1170,16 @@ tbody tr:hover {
     display: none;
     flex-direction: column;
     align-items: stretch;
-    gap: 2px;
-    margin-top: 12px;
-    padding: 8px;
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    box-shadow: var(--shadow-sm), 0 12px 30px -12px rgba(0, 0, 0, 0.25);
-    overflow: hidden;
-    animation: navDrop 0.22s ease;
-  }
-  @keyframes navDrop {
-    from {
-      opacity: 0;
-      transform: translateY(-8px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
+    gap: 4px;
+    margin-top: 8px;
   }
   .nav-links.open {
     display: flex;
   }
   .nav a.link {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 14px 16px;
+    display: block;
+    padding: 12px 14px;
     font-size: 15px;
-    border-radius: 11px;
-    color: var(--text);
-  }
-  .nav a.link::after {
-    content: "›";
-    font-size: 20px;
-    line-height: 1;
-    color: var(--muted);
-    opacity: 0.55;
-  }
-  .nav a.link:hover,
-  .nav a.link:active {
-    background: var(--card-2);
-  }
-  .nav a.link.active {
-    background: color-mix(in srgb, var(--accent) 16%, var(--card));
-    color: var(--accent);
-    font-weight: 700;
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 32%, transparent);
-  }
-  .nav a.link.active::after {
-    color: var(--accent);
-    opacity: 0.9;
   }
   .nav-links .auth-btn {
     margin-top: 6px;
