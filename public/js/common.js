@@ -486,10 +486,18 @@ function mountChat() {
   function handleAssistantReply(raw, voice) {
     const { message, action, html } = parseReply(raw);
     const shown = message || "Okay.";
-    addMsg("assistant", shown);
     history.push({ role: "assistant", content: shown });
-    if (voice) speak(shown);
-    if (action) executeAction(action, html);
+    if (voice) {
+      // Show the text exactly when the voice starts, so they stay in sync
+      // (previously the text appeared well before the neural audio was ready).
+      speak(shown, () => {
+        addMsg("assistant", shown);
+        if (action) executeAction(action, html);
+      });
+    } else {
+      addMsg("assistant", shown);
+      if (action) executeAction(action, html);
+    }
   }
 
   function executeAction(action, html) {
@@ -737,25 +745,25 @@ function mountChat() {
       typing.remove();
 
       if (!res.ok) {
-        const detail =
-          data.error || data.message || raw || res.statusText || "Unknown error";
-        console.error("[chat] request failed", res.status, detail);
-        addMsg("assistant", "\u26a0\ufe0f Chat failed (HTTP " + res.status + "): " + detail);
-        if (opts.voice) afterSpeak();
+        console.error("[chat] request failed", res.status, data.error || raw);
+        handleAssistantReply(
+          "The assistant is resting for a moment \uD83D\uDE34. Please try again shortly \u2014 meanwhile you can sign up on the Register page or reach the organising committee.",
+          opts.voice
+        );
         return;
       }
 
-      const reply = data.reply || "Sorry, I couldn't answer that.";
+      const reply =
+        data.reply ||
+        "Sorry, I couldn't answer that just now \u2014 please try again in a moment.";
       handleAssistantReply(reply, opts.voice);
     } catch (err) {
       console.error("[chat] network/exception error:", err);
       typing.remove();
-      addMsg(
-        "assistant",
-        "\u26a0\ufe0f Could not reach the chat server: " +
-          (err && err.message ? err.message : err)
+      handleAssistantReply(
+        "I couldn't reach the server just now \uD83D\uDCF6. Please check your connection and try again in a moment.",
+        opts.voice
       );
-      if (opts.voice) afterSpeak();
     } finally {
       sendBtn.disabled = false;
       // On mobile, don't re-focus after reply — that would re-open the keyboard.
@@ -865,66 +873,74 @@ function mountChat() {
 
   // Speak the assistant's visible message. The mic is turned OFF while the bot
   // talks so it can't hear itself through the speakers and answer its own voice.
-  // We first try the server's neural TTS (much more natural); if that isn't
-  // available we fall back to the browser's built-in voice.
+  // We always prefer the server's neural TTS (much more natural); if a given
+  // request fails we fall back to the browser voice JUST for that message (we no
+  // longer disable neural TTS for the whole session, so it stays consistent).
+  // onStart() runs the moment audio actually begins, so the on-screen text can
+  // be shown in sync with the voice.
   let currentAudio = null;
-  let serverTtsAvailable = null; // null=unknown, true=on, false=off (skip it)
 
-  function speak(msg) {
+  function speak(msg, onStart) {
+    let started = false;
+    const startOnce = () => {
+      if (started) return;
+      started = true;
+      try {
+        onStart && onStart();
+      } catch (e) {}
+    };
     if (!msg) {
+      startOnce();
       afterSpeak();
       return;
     }
     speaking = true;
     pauseListening(); // mic off while we talk
     setVoiceStatus("speaking");
-    if (serverTtsAvailable === false) {
-      browserSpeak(msg);
-      return;
-    }
-    serverSpeak(msg);
+    // Safety net: never keep the text hidden for long if the audio is slow.
+    const capTimer = setTimeout(startOnce, 2000);
+    const begin = () => {
+      clearTimeout(capTimer);
+      startOnce();
+    };
+    serverSpeak(msg, begin);
   }
 
   // High-quality neural voice from the Worker (Cloudflare MeloTTS).
-  async function serverSpeak(msg) {
+  async function serverSpeak(msg, begin) {
     try {
       const res = await fetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: msg }),
       });
-      if (!res.ok) {
-        serverTtsAvailable = false; // not enabled -> don't try again this session
-        throw new Error("tts http " + res.status);
-      }
+      if (!res.ok) throw new Error("tts http " + res.status);
       const data = await res.json().catch(() => ({}));
-      if (!data.audio) {
-        serverTtsAvailable = false;
-        throw new Error("no audio");
-      }
-      serverTtsAvailable = true;
+      if (!data.audio) throw new Error("no audio");
       try {
         window.speechSynthesis && window.speechSynthesis.cancel();
       } catch (e) {}
       const audio = new Audio("data:audio/mp3;base64," + data.audio);
       currentAudio = audio;
+      audio.onplay = () => begin && begin();
       audio.onended = () => {
         currentAudio = null;
         afterSpeak();
       };
       audio.onerror = () => {
         currentAudio = null;
-        browserSpeak(msg); // playback problem -> fall back for this message
+        browserSpeak(msg, begin); // playback problem -> fall back for this message
       };
       await audio.play();
     } catch (e) {
-      browserSpeak(msg);
+      browserSpeak(msg, begin);
     }
   }
 
   // Fallback: browser speechSynthesis with the best available voice.
-  function browserSpeak(msg) {
+  function browserSpeak(msg, begin) {
     if (!canSpeak) {
+      begin && begin();
       afterSpeak();
       return;
     }
@@ -942,11 +958,15 @@ function mountChat() {
     u.rate = 1; // natural pace
     u.pitch = 1.05; // slightly warmer
     u.volume = 1;
+    u.onstart = () => begin && begin();
     u.onend = afterSpeak;
     u.onerror = afterSpeak;
+    // onstart doesn't always fire; reveal the text shortly after as a backup.
+    setTimeout(() => begin && begin(), 300);
     try {
       window.speechSynthesis.speak(u);
     } catch (e) {
+      begin && begin();
       afterSpeak();
     }
   }
