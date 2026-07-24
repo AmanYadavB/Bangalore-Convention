@@ -60,9 +60,74 @@ async function ensureKnowledgeTable(env) {
   );
 }
 
-// Compact, length-bounded blob of everything developers have fed the AI. This
-// is injected into the chat system prompt so the bot answers from it.
-async function buildKnowledge(env) {
+// Compact, length-bounded blob of the fed knowledge that is MOST RELEVANT to
+// the user's question. This is injected into the chat system prompt so the bot
+// answers from it. When lots of data is fed (e.g. a long doctor's note), we
+// score entries/passages against the question so big notes can't crowd out the
+// small note the user is actually asking about.
+const STOP_WORDS = new Set([
+  "the","and","for","are","but","not","you","your","our","with","this","that",
+  "have","has","was","were","what","when","where","which","who","whom","how",
+  "why","can","could","would","should","about","from","into","over","under",
+  "there","here","then","than","them","they","their","some","any","all","also",
+  "will","shall","may","might","much","many","more","most","tell","give","get",
+  "know","does","did","done","being","been","a","an","of","to","in","on","is",
+  "it","as","at","or","if","so","do","me","my","we","us","i",
+]);
+
+function tokenizeQuery(q) {
+  const set = new Set();
+  String(q || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]+/g, " ")
+    .split(/\s+/)
+    .forEach((w) => {
+      if (w.length >= 3 && !STOP_WORDS.has(w)) set.add(w);
+    });
+  return set;
+}
+
+// How many query words appear in this text (title weighted a little heavier).
+function scoreText(text, qWords, weight) {
+  if (!qWords.size) return 0;
+  const lower = String(text || "").toLowerCase();
+  let score = 0;
+  for (const w of qWords) {
+    if (lower.indexOf(w) !== -1) score += weight || 1;
+  }
+  return score;
+}
+
+// From a long note, pull the paragraphs most relevant to the question, keeping
+// their order, up to maxLen characters. Falls back to the start of the note.
+function relevantSlice(content, qWords, maxLen) {
+  const text = String(content || "");
+  if (text.length <= maxLen) return text;
+  const paras = text
+    .split(/\n\s*\n|\r\n\r\n/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (paras.length <= 1) return text.slice(0, maxLen);
+  const ranked = paras
+    .map((p, i) => ({ p, i, s: scoreText(p, qWords, 1) }))
+    .sort((a, b) => b.s - a.s || a.i - b.i);
+  const picked = [];
+  let used = 0;
+  for (const r of ranked) {
+    if (r.s <= 0 && picked.length) continue; // once we have hits, skip misses
+    if (used + r.p.length > maxLen) {
+      if (!picked.length) picked.push({ i: r.i, p: r.p.slice(0, maxLen) });
+      break;
+    }
+    picked.push({ i: r.i, p: r.p });
+    used += r.p.length + 2;
+    if (used >= maxLen) break;
+  }
+  picked.sort((a, b) => a.i - b.i); // restore reading order
+  return picked.map((x) => x.p).join("\n\n");
+}
+
+async function buildKnowledge(env, query) {
   if (!env.CONVENTION_DB) return "";
   try {
     await ensureKnowledgeTable(env);
@@ -70,16 +135,40 @@ async function buildKnowledge(env) {
       "SELECT title, content FROM knowledge ORDER BY created_at ASC LIMIT 100"
     ).all();
     if (!results || !results.length) return "";
+
+    const budget = 6000; // keep the prompt lean
+    const qWords = tokenizeQuery(query);
+
+    // Score every entry against the question (title counts double).
+    const scored = results.map((r) => ({
+      title: r.title || "",
+      content: r.content || "",
+      score:
+        scoreText(r.title, qWords, 2) + scoreText(r.content, qWords, 1),
+    }));
+
+    const relevant = scored
+      .filter((e) => e.score > 0)
+      .sort((a, b) => b.score - a.score);
+
     const out = [];
-    let budget = 6000; // keep the prompt lean
-    for (const r of results) {
-      const chunk = (r.title ? r.title + ": " : "") + (r.content || "");
-      if (chunk.length >= budget) {
-        out.push(chunk.slice(0, budget));
+    let left = budget;
+
+    // Prefer the relevant entries; pull their most on-topic passages first so a
+    // single huge note can't swallow the whole budget (cap ~2500 chars each).
+    const chosen = relevant.length ? relevant : scored.slice(-8); // fallback: recent
+    for (const e of chosen) {
+      if (left <= 200) break;
+      const slice = relevant.length
+        ? relevantSlice(e.content, qWords, Math.min(2500, left))
+        : e.content;
+      const chunk = (e.title ? e.title + ": " : "") + slice;
+      if (chunk.length > left) {
+        out.push(chunk.slice(0, left));
         break;
       }
       out.push(chunk);
-      budget -= chunk.length;
+      left -= chunk.length + 2;
     }
     return out.join("\n\n");
   } catch (e) {
@@ -476,12 +565,21 @@ async function handleApi(request, env) {
     ];
 
     // Knowledge fed by developers on the Feed AI page (authoritative extras).
-    const knowledge = await buildKnowledge(env);
+    // Pass the user's latest message so we inject the MOST RELEVANT fed notes
+    // (a long note can't crowd out the small one they're actually asking about).
+    const lastUserMsg = (() => {
+      for (let i = cleaned.length - 1; i >= 0; i--) {
+        if (cleaned[i].role === "user") return cleaned[i].content;
+      }
+      return "";
+    })();
+    const knowledge = await buildKnowledge(env, lastUserMsg);
     if (knowledge) {
       content.push(
         "",
         "== EXTRA KNOWLEDGE fed by the organisers (AUTHORITATIVE - this overrides the 'what you do not know' list above; whenever the user's question is answered here, answer directly and confidently from it, including venue, hotels, schedule, travel, contacts or any other detail) ==",
-        knowledge
+        knowledge,
+        "STRICT RULE about the EXTRA KNOWLEDGE: only state facts that are actually written above. If the user asks about something (e.g. hotels) and the specific detail is NOT present in this section, say you don't have that detail yet - NEVER invent names, addresses, prices, numbers or specifics that are not written here."
       );
     }
 
