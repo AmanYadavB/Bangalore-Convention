@@ -16,8 +16,8 @@
         confirmed once payment is marked as received.
       </p>
 
-      <div class="grid" style="grid-template-columns: 1.6fr 1fr; align-items: start">
-        <divclass="card">
+      <div id="reg-layout" class="grid" style="grid-template-columns: 1.6fr 1fr; align-items: start">
+        <div class="card">
           <form id="reg-form">
             <div class="form-grid">
               <div class="field">
@@ -117,19 +117,64 @@
       document.getElementById("reg-form").addEventListener("submit", async (e) => {
         e.preventDefault();
         const form = e.target;
+        const btn = form.querySelector('button[type="submit"]');
         const payload = Object.fromEntries(new FormData(form).entries());
+        btn.disabled = true;
+        btn.textContent = "Confirming…";
         try {
-          await api("/api/registrations", {
+          const record = await api("/api/registrations", {
             method: "POST",
             body: JSON.stringify(payload),
           });
           toast("Registration confirmed! 🎉", "success");
-          form.reset();
-          updateSummary();
+          showConfirmation(record);
         } catch (err) {
           toast(err.message, "error");
+        } finally {
+          btn.disabled = false;
+          btn.textContent = "Confirm Registration";
         }
       });
+
+      function showConfirmation(r) {
+        const ref = "BC-" + String(r.id || "").slice(0, 8).toUpperCase();
+        const layout = document.getElementById("reg-layout");
+        layout.style.gridTemplateColumns = "1fr";
+        layout.innerHTML = `
+          <div class="card" style="max-width:560px;margin:0 auto;text-align:center">
+            <div style="width:64px;height:64px;border-radius:50%;margin:6px auto 14px;
+                        display:grid;place-items:center;font-size:32px;
+                        background:rgba(63,208,127,0.15);color:var(--green)">✓</div>
+            <h2 style="margin:0 0 6px">You're registered!</h2>
+            <p class="muted" style="margin:0 0 20px">
+              Thanks, ${escapeHtml(r.name)}. We've saved your spot for the convention.
+            </p>
+            <div style="text-align:left;border:1px solid var(--border);border-radius:12px;padding:16px">
+              <div class="bar-row" style="grid-template-columns:1fr auto;margin-bottom:8px">
+                <span class="muted">Booking reference</span><b>${ref}</b>
+              </div>
+              <div class="bar-row" style="grid-template-columns:1fr auto;margin-bottom:8px">
+                <span class="muted">Category</span><b>${escapeHtml(r.categoryName)}</b>
+              </div>
+              <div class="bar-row" style="grid-template-columns:1fr auto;margin-bottom:8px">
+                <span class="muted">Amount payable</span><b>${money(r.amount)}</b>
+              </div>
+              <div class="bar-row" style="grid-template-columns:1fr auto;margin:0">
+                <span class="muted">Payment status</span>
+                <span class="pill pending">Pending</span>
+              </div>
+            </div>
+            <p class="muted" style="font-size:13px;margin:16px 0 20px">
+              The organising team will mark your payment as received. Keep your
+              booking reference handy.
+            </p>
+            <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+              <button class="btn primary" type="button" onclick="location.reload()">Register another</button>
+              <a class="btn ghost" href="index.html">Back to home</a>
+            </div>
+          </div>`;
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
     </script>
   </body>
 </html>
