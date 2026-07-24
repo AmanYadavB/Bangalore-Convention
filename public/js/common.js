@@ -224,7 +224,13 @@ function mountChat() {
         <button class="chat-close" id="chatClose" type="button" aria-label="Close chat">\u00d7</button>
       </header>
       <div class="chat-log" id="chatLog"></div>
+      <div class="chat-voice" id="chatVoice" hidden>
+        <span class="chat-voice-dot"></span>
+        <span id="chatVoiceLabel">Talk mode on</span>
+        <button type="button" id="chatVoiceStop" class="chat-voice-stop">Stop</button>
+      </div>
       <form class="chat-input" id="chatForm">
+        <button class="chat-mic" id="chatMic" type="button" aria-label="Talk mode" title="Talk mode (voice)">\uD83C\uDFA4</button>
         <input id="chatText" type="text" autocomplete="off" placeholder="Type your question\u2026" />
         <button class="btn primary small" type="submit" id="chatSend">Send</button>
       </form>
@@ -238,6 +244,9 @@ function mountChat() {
   const form = document.getElementById("chatForm");
   const text = document.getElementById("chatText");
   const sendBtn = document.getElementById("chatSend");
+  const micBtn = document.getElementById("chatMic");
+  const voiceBar = document.getElementById("chatVoice");
+  const voiceLabel = document.getElementById("chatVoiceLabel");
   let greeted = false;
   let lastUserText = "";
 
@@ -323,6 +332,7 @@ function mountChat() {
   }
 
   function closeChat() {
+    stopVoiceMode();
     panel.hidden = true;
     fab.classList.remove("open");
     if (window.visualViewport) {
@@ -442,11 +452,12 @@ function mountChat() {
     return { message, action, html };
   }
 
-  function handleAssistantReply(raw) {
+  function handleAssistantReply(raw, voice) {
     const { message, action, html } = parseReply(raw);
     const shown = message || "Okay.";
     addMsg("assistant", shown);
     history.push({ role: "assistant", content: shown });
+    if (voice) speak(shown);
     if (action) executeAction(action, html);
   }
 
@@ -662,14 +673,14 @@ function mountChat() {
   fab.addEventListener("click", () => (panel.hidden ? openChat() : closeChat()));
   document.getElementById("chatClose").addEventListener("click", closeChat);
 
-  form.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const q = text.value.trim();
+  // ---- Send a message to the assistant (shared by typing and voice) --------
+  async function sendToChat(q, opts) {
+    opts = opts || {};
+    q = (q || "").trim();
     if (!q) return;
     addMsg("user", q);
     history.push({ role: "user", content: q });
     lastUserText = q;
-    text.value = "";
     sendBtn.disabled = true;
     const typing = addMsg("assistant typing", "\u2026");
     console.log("[chat] POST /api/chat", { messages: history });
@@ -690,22 +701,19 @@ function mountChat() {
       } catch (parseErr) {
         console.error("[chat] response was not JSON:", raw);
       }
-      console.log("[chat] status", res.status, res.statusText, data);
       typing.remove();
 
       if (!res.ok) {
         const detail =
           data.error || data.message || raw || res.statusText || "Unknown error";
         console.error("[chat] request failed", res.status, detail);
-        addMsg(
-          "assistant",
-          "\u26a0\ufe0f Chat failed (HTTP " + res.status + "): " + detail
-        );
+        addMsg("assistant", "\u26a0\ufe0f Chat failed (HTTP " + res.status + "): " + detail);
+        if (opts.voice) afterSpeak();
         return;
       }
 
       const reply = data.reply || "Sorry, I couldn't answer that.";
-      handleAssistantReply(reply);
+      handleAssistantReply(reply, opts.voice);
     } catch (err) {
       console.error("[chat] network/exception error:", err);
       typing.remove();
@@ -714,11 +722,261 @@ function mountChat() {
         "\u26a0\ufe0f Could not reach the chat server: " +
           (err && err.message ? err.message : err)
       );
+      if (opts.voice) afterSpeak();
     } finally {
       sendBtn.disabled = false;
       // On mobile, don't re-focus after reply — that would re-open the keyboard.
-      // User can tap the input again when they want to type.
-      if (!isMobile()) text.focus();
+      if (!isMobile() && !opts.voice) text.focus();
     }
+  }
+
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const q = text.value.trim();
+    if (!q) return;
+    text.value = "";
+    sendToChat(q, { voice: false });
   });
+
+  // ---- Voice / talk mode (browser Web Speech API, no install needed) -------
+  // Listen with SpeechRecognition, answer via the same /api/chat, then speak
+  // the reply with speechSynthesis and resume listening — a hands-free loop.
+  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const canListen = !!SpeechRec;
+  const canSpeak = "speechSynthesis" in window;
+  let voiceMode = false;
+  let recognition = null;
+  let recognizing = false;
+  let speaking = false;
+  let interimEl = null;
+  let lastSpoken = "";
+  // Drop any recognition results until this time (swallows the speaker echo
+  // tail right after the bot stops talking).
+  let ignoreResultsUntil = 0;
+
+  // Normalise text so we can tell the user's speech apart from the bot's own
+  // voice echoing back through the speakers.
+  function normalizeSpeech(s) {
+    return String(s || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9 ]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function setVoiceStatus(state) {
+    if (micBtn) {
+      micBtn.classList.toggle("active", voiceMode);
+      micBtn.classList.toggle("listening", voiceMode && state === "listening");
+      micBtn.classList.toggle("speaking", voiceMode && state === "speaking");
+    }
+    if (!voiceBar) return;
+    voiceBar.hidden = !voiceMode;
+    voiceBar.classList.toggle("is-listening", state === "listening");
+    voiceBar.classList.toggle("is-speaking", state === "speaking");
+    if (voiceLabel) {
+      voiceLabel.textContent =
+        state === "listening"
+          ? "Listening\u2026"
+          : state === "speaking"
+          ? "Speaking\u2026"
+          : state === "thinking"
+          ? "Thinking\u2026"
+          : "Talk mode on";
+    }
+  }
+
+  // Speak the assistant's visible message. The mic is turned OFF while the bot
+  // talks so it can't hear itself through the speakers and answer its own voice.
+  function speak(msg) {
+    if (!canSpeak || !msg) {
+      afterSpeak();
+      return;
+    }
+    speaking = true;
+    pauseListening(); // mic off while we talk
+    try {
+      window.speechSynthesis.cancel();
+    } catch (e) {}
+    const u = new SpeechSynthesisUtterance(msg);
+    u.lang = "en-IN";
+    u.rate = 1.02;
+    u.pitch = 1;
+    setVoiceStatus("speaking");
+    u.onend = afterSpeak;
+    u.onerror = afterSpeak;
+    try {
+      window.speechSynthesis.speak(u);
+    } catch (e) {
+      afterSpeak();
+    }
+  }
+
+  function afterSpeak() {
+    if (!speaking) return; // already handled (onend + onerror can both fire)
+    speaking = false;
+    // Ignore the echo tail for a moment, then start listening again.
+    ignoreResultsUntil = Date.now() + 500;
+    if (voiceMode) {
+      setVoiceStatus("listening");
+      setTimeout(() => {
+        if (voiceMode && !speaking) startListening();
+      }, 250);
+    } else {
+      setVoiceStatus("");
+    }
+  }
+
+  // Immediately silence the bot (used by the Stop button).
+  function stopSpeaking() {
+    if (!speaking) return;
+    speaking = false;
+    try {
+      if (canSpeak) window.speechSynthesis.cancel();
+    } catch (e) {}
+    ignoreResultsUntil = Date.now() + 300;
+    if (voiceMode) {
+      setVoiceStatus("listening");
+      setTimeout(() => {
+        if (voiceMode && !speaking) startListening();
+      }, 200);
+    }
+  }
+
+  // Stop the mic (used while the bot is speaking).
+  function pauseListening() {
+    if (!recognition) return;
+    try {
+      recognition.stop();
+    } catch (e) {}
+  }
+
+  function startListening() {
+    if (!voiceMode || !canListen || recognizing || speaking) return;
+    try {
+      recognition.start();
+    } catch (e) {
+      /* start() throws if already started; ignore */
+    }
+  }
+
+  function showInterim(t) {
+    if (!interimEl) {
+      interimEl = document.createElement("div");
+      interimEl.className = "chat-msg user interim";
+      log.appendChild(interimEl);
+    }
+    interimEl.textContent = t;
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function clearInterim() {
+    if (interimEl) {
+      interimEl.remove();
+      interimEl = null;
+    }
+  }
+
+  function initRecognition() {
+    recognition = new SpeechRec();
+    recognition.lang = "en-IN";
+    recognition.interimResults = true;
+    recognition.continuous = true; // stay live for the whole session
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => {
+      recognizing = true;
+      if (!speaking) setVoiceStatus("listening");
+    };
+
+    recognition.onresult = (ev) => {
+      // Ignore anything heard while the bot is talking or in the echo-tail window.
+      if (speaking || Date.now() < ignoreResultsUntil) {
+        clearInterim();
+        return;
+      }
+      let interim = "";
+      let finalText = "";
+      for (let i = ev.resultIndex; i < ev.results.length; i++) {
+        const r = ev.results[i];
+        if (r.isFinal) finalText += r[0].transcript;
+        else interim += r[0].transcript;
+      }
+
+      if (interim) showInterim(interim);
+
+      const said = finalText.trim();
+      if (said) {
+        clearInterim();
+        setVoiceStatus("thinking");
+        sendToChat(said, { voice: true });
+      }
+    };
+
+    recognition.onerror = (ev) => {
+      if (ev.error === "not-allowed" || ev.error === "service-not-allowed") {
+        recognizing = false;
+        voiceMode = false;
+        stopSpeaking();
+        setVoiceStatus("");
+        addMsg(
+          "assistant",
+          "\u26a0\ufe0f I couldn't use the microphone. Please allow mic access in your browser, then tap the mic again."
+        );
+      }
+      // 'no-speech' / 'aborted' fall through; onend restarts listening.
+    };
+
+    recognition.onend = () => {
+      recognizing = false;
+      // Only auto-restart when we're not deliberately paused for the bot's speech.
+      if (voiceMode && !speaking) {
+        setTimeout(() => {
+          if (voiceMode && !speaking && !recognizing) startListening();
+        }, 200);
+      }
+    };
+  }
+
+  function startVoiceMode() {
+    if (!canListen) {
+      if (panel.hidden) openChat();
+      addMsg(
+        "assistant",
+        "\u26a0\ufe0f Voice input isn't supported in this browser \u2014 try Chrome or Edge."
+      );
+      return;
+    }
+    if (!recognition) initRecognition();
+    if (panel.hidden) openChat();
+    voiceMode = true;
+    setVoiceStatus("listening");
+    startListening();
+  }
+
+  function stopVoiceMode() {
+    if (!voiceMode && !recognizing && !speaking) return;
+    voiceMode = false;
+    try {
+      recognition && recognition.stop();
+    } catch (e) {}
+    try {
+      if (canSpeak) window.speechSynthesis.cancel();
+    } catch (e) {}
+    speaking = false;
+    clearInterim();
+    setVoiceStatus("");
+  }
+
+  function toggleVoiceMode() {
+    if (voiceMode) stopVoiceMode();
+    else startVoiceMode();
+  }
+
+  if (micBtn) {
+    if (!canListen && !canSpeak) micBtn.hidden = true;
+    micBtn.addEventListener("click", toggleVoiceMode);
+  }
+  const voiceStopBtn = document.getElementById("chatVoiceStop");
+  if (voiceStopBtn) voiceStopBtn.addEventListener("click", stopVoiceMode);
 }
