@@ -756,6 +756,11 @@ function mountChat() {
   // True from the moment we capture a phrase until the bot has finished
   // answering + speaking. Blocks new input so mobile can't stack prompts.
   let processing = false;
+  // Speech is committed only after a short silence, so we capture the whole
+  // sentence instead of just the first word.
+  let finalBuffer = "";
+  let lastInterim = "";
+  let silenceTimer = null;
 
   // Normalise text so we can tell the user's speech apart from the bot's own
   // voice echoing back through the speakers.
@@ -881,13 +886,30 @@ function mountChat() {
     }
   }
 
+  // Send the accumulated phrase once the user has paused. This is the single
+  // point that locks input and fires the request, so it can't double up.
+  function commitPhrase() {
+    if (silenceTimer) {
+      clearTimeout(silenceTimer);
+      silenceTimer = null;
+    }
+    const said = (finalBuffer + " " + lastInterim).replace(/\s+/g, " ").trim();
+    finalBuffer = "";
+    lastInterim = "";
+    if (!said || processing || speaking) return;
+    clearInterim();
+    processing = true; // lock: no more input until we've answered + spoken
+    pauseListening(); // stop the mic while we answer
+    setVoiceStatus("thinking");
+    sendToChat(said, { voice: true });
+  }
+
   function initRecognition() {
     recognition = new SpeechRec();
     recognition.lang = "en-IN";
     recognition.interimResults = true;
     recognition.continuous = true; // stay live for the whole session
     recognition.maxAlternatives = 1;
-
     recognition.onstart = () => {
       recognizing = true;
       if (!speaking) setVoiceStatus("listening");
@@ -901,23 +923,20 @@ function mountChat() {
         return;
       }
       let interim = "";
-      let finalText = "";
       for (let i = ev.resultIndex; i < ev.results.length; i++) {
         const r = ev.results[i];
-        if (r.isFinal) finalText += r[0].transcript;
+        if (r.isFinal) finalBuffer += r[0].transcript + " ";
         else interim += r[0].transcript;
       }
+      lastInterim = interim;
 
-      if (interim) showInterim(interim);
+      const shown = (finalBuffer + interim).trim();
+      if (shown) showInterim(shown);
 
-      const said = finalText.trim();
-      if (said) {
-        clearInterim();
-        processing = true; // lock: no more input until we've answered + spoken
-        pauseListening(); // stop the mic immediately (mobile fires extra finals)
-        setVoiceStatus("thinking");
-        sendToChat(said, { voice: true });
-      }
+      // Wait for a brief pause before sending so we capture the WHOLE sentence
+      // (mobile emits a final result after each word - don't send on word 1).
+      if (silenceTimer) clearTimeout(silenceTimer);
+      silenceTimer = setTimeout(commitPhrase, 1300);
     };
 
     recognition.onerror = (ev) => {
@@ -936,6 +955,11 @@ function mountChat() {
 
     recognition.onend = () => {
       recognizing = false;
+      // If the user finished a phrase (recognizer stopped on its own), send it.
+      if ((finalBuffer.trim() || lastInterim.trim()) && !processing && !speaking) {
+        commitPhrase();
+        return;
+      }
       // Only auto-restart when we're not paused for speech or a pending answer.
       if (voiceMode && !speaking && !processing) {
         setTimeout(() => {
@@ -959,6 +983,12 @@ function mountChat() {
     voiceMode = true;
     processing = false;
     speaking = false;
+    finalBuffer = "";
+    lastInterim = "";
+    if (silenceTimer) {
+      clearTimeout(silenceTimer);
+      silenceTimer = null;
+    }
     setVoiceStatus("listening");
     startListening();
   }
@@ -974,6 +1004,12 @@ function mountChat() {
     } catch (e) {}
     speaking = false;
     processing = false;
+    finalBuffer = "";
+    lastInterim = "";
+    if (silenceTimer) {
+      clearTimeout(silenceTimer);
+      silenceTimer = null;
+    }
     clearInterim();
     setVoiceStatus("");
   }
