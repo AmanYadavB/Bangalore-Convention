@@ -46,6 +46,74 @@ async function saveList(env, key, list) {
   await env.CONVENTION_KV.put(key, JSON.stringify(list));
 }
 
+// ---- Developer-generated pages (stored in D1) ----------------------------
+async function ensurePagesTable(env) {
+  await env.CONVENTION_DB.exec(
+    "CREATE TABLE IF NOT EXISTS pages (slug TEXT PRIMARY KEY, title TEXT NOT NULL, html TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)"
+  );
+}
+
+const slugify = (s) =>
+  String(s || "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+
+// A request is "developer" only if it carries the exact DEV_KEY secret.
+function isDeveloper(request, env, body) {
+  const key =
+    (body && typeof body.devKey === "string" && body.devKey) ||
+    request.headers.get("x-dev-key") ||
+    "";
+  return Boolean(env.DEV_KEY) && key.length > 0 && key === env.DEV_KEY;
+}
+
+// Compact live snapshot of registrations + expenses for the agent to reason over.
+async function buildDataSummary(env) {
+  const registrations = await loadList(env, "registrations");
+  const expenses = await loadList(env, "expenses");
+  const money = (n) => "\u20b9" + Number(n || 0).toLocaleString("en-IN");
+
+  const paid = registrations.filter((r) => r.paid);
+  const totalPledged = registrations.reduce((s, r) => s + (r.amount || 0), 0);
+  const totalCollected = paid.reduce((s, r) => s + (r.amount || 0), 0);
+  const totalExpenses = expenses.reduce((s, e) => s + (e.amount || 0), 0);
+
+  const byCat = PRICING.map((c) => {
+    const items = registrations.filter((r) => r.categoryId === c.id);
+    return `${c.name}: ${items.length} registered (${money(
+      items.reduce((s, r) => s + (r.amount || 0), 0)
+    )})`;
+  }).join("; ");
+
+  const expGroups = {};
+  for (const e of expenses) {
+    const k = e.category || "General";
+    expGroups[k] = (expGroups[k] || 0) + (e.amount || 0);
+  }
+  const expLines = Object.entries(expGroups)
+    .sort((a, b) => b[1] - a[1])
+    .map(([k, v]) => `${k}: ${money(v)}`)
+    .join("; ");
+
+  return [
+    "== LIVE EVENT DATA (authoritative, use these exact numbers) ==",
+    `Total registrations: ${registrations.length} (paid/confirmed: ${paid.length}, pending payment: ${
+      registrations.length - paid.length
+    }).`,
+    `By category -> ${byCat || "none yet"}.`,
+    `Money pledged: ${money(totalPledged)}; collected: ${money(
+      totalCollected
+    )}; still to collect: ${money(totalPledged - totalCollected)}.`,
+    `Total expenses: ${money(totalExpenses)} across ${expenses.length} item(s). By category -> ${
+      expLines || "none yet"
+    }.`,
+    `Current balance (collected - expenses): ${money(totalCollected - totalExpenses)}.`,
+  ].join("\n");
+}
+
 async function handleApi(request, env) {
   if (!env.CONVENTION_KV) {
     return json(
@@ -195,6 +263,67 @@ async function handleApi(request, env) {
     });
   }
 
+  // ---- Developer key verification ----
+  if (resource === "dev" && parts[2] === "verify" && method === "POST") {
+    return json({ ok: isDeveloper(request, env, body) });
+  }
+
+  // ---- Pages (developer-generated, stored in D1) ----
+  if (resource === "pages") {
+    if (!env.CONVENTION_DB) {
+      return json(
+        { error: "D1 database 'CONVENTION_DB' is not bound. Add it in wrangler.toml or Worker settings." },
+        500
+      );
+    }
+    await ensurePagesTable(env);
+
+    if (method === "GET" && !id) {
+      const { results } = await env.CONVENTION_DB.prepare(
+        "SELECT slug, title, created_at, updated_at FROM pages ORDER BY updated_at DESC"
+      ).all();
+      return json(results || []);
+    }
+
+    if (method === "GET" && id) {
+      const row = await env.CONVENTION_DB.prepare(
+        "SELECT slug, title, html, created_at, updated_at FROM pages WHERE slug = ?"
+      )
+        .bind(id)
+        .first();
+      if (!row) return json({ error: "Not found." }, 404);
+      return json(row);
+    }
+
+    if (method === "POST" && !id) {
+      if (!isDeveloper(request, env, body)) {
+        return json({ error: "Developer key required." }, 403);
+      }
+      const slug = slugify(body.slug || body.title);
+      const title = (body.title || "").trim() || slug;
+      const html = typeof body.html === "string" ? body.html : "";
+      if (!slug || !html.trim()) {
+        return json({ error: "A slug/title and non-empty html are required." }, 400);
+      }
+      const now = new Date().toISOString();
+      await env.CONVENTION_DB.prepare(
+        "INSERT INTO pages (slug, title, html, created_at, updated_at) VALUES (?, ?, ?, ?, ?) " +
+          "ON CONFLICT(slug) DO UPDATE SET title = excluded.title, html = excluded.html, updated_at = excluded.updated_at"
+      )
+        .bind(slug, title, html, now, now)
+        .run();
+      return json({ ok: true, slug, title, url: "/p/" + slug }, 201);
+    }
+
+    if (method === "DELETE" && id) {
+      if (!isDeveloper(request, env, body)) {
+        return json({ error: "Developer key required." }, 403);
+      }
+      await env.CONVENTION_DB.prepare("DELETE FROM pages WHERE slug = ?").bind(id).run();
+      return json({ ok: true });
+    }
+  }
+
   // ---- AI Chat (Cloudflare Workers AI) ----
   if (resource === "chat" && method === "POST") {
     if (!env.AI) {
@@ -217,15 +346,18 @@ async function handleApi(request, env) {
 
     if (cleaned.length === 0) return json({ error: "messages required" }, 400);
 
+    // Role is claimed by the client for reading; developer powers additionally
+    // require the DEV_KEY secret (verified by isDeveloper) before any action runs.
+    const dev = isDeveloper(request, env, body);
+    const staff = dev || body.role === "admin";
+
     const priceLines = PRICING.map(
       (c) => `- ${c.name}: \u20b9${c.price} (${c.description})`
     ).join("\n");
 
     const catLines = PRICING.map((c) => `${c.id} = ${c.name}`).join(", ");
 
-    const system = {
-      role: "system",
-      content: [
+    const content = [
         "You are the warm, friendly assistant for the Bangalore Convention 2027, an Alcoholics Anonymous (AA) recovery gathering.",
         "",
         "== WHAT YOU KNOW FOR CERTAIN about this event (state these confidently) ==",
@@ -263,22 +395,78 @@ async function handleApi(request, env) {
           catLines +
           ".",
         'Once you have ALL FOUR valid details, append [[ACTION]]{"action":"review_booking","name":"...","email":"...","phone":"...","category":"CATEGORY_ID"}. The site then shows a confirmation card and the user taps Confirm to actually register - so never say the booking is already done; say you have prepared it for them to review and confirm.',
-      ].join("\n"),
-    };
+    ];
 
-    try {
-      const result = await env.AI.run("@cf/meta/llama-3.1-8b-instruct-fast", {
-        messages: [system, ...cleaned],
-        max_tokens: 400,
-      });
-      const reply = ((result && (result.response || result.result)) || "").trim();
-      return json({ reply: reply || "Sorry, I couldn't generate a reply. Please try again." });
-    } catch (err) {
-      return json(
-        { error: "AI request failed: " + (err && err.message ? err.message : "unknown") },
-        502
+    // Staff (admin/developer) get live figures so they can ask about numbers.
+    if (staff) {
+      content.push(
+        "",
+        await buildDataSummary(env),
+        "When staff ask how many people registered, totals, collections, pending payments or expenses, answer directly and precisely from the LIVE EVENT DATA above. Present money with the \u20b9 symbol."
       );
     }
+
+    // Developers get page-building superpowers, gated by the verified DEV_KEY.
+    if (dev) {
+      let pageList = "none yet";
+      try {
+        if (env.CONVENTION_DB) {
+          await ensurePagesTable(env);
+          const { results } = await env.CONVENTION_DB.prepare(
+            "SELECT slug, title FROM pages ORDER BY updated_at DESC LIMIT 30"
+          ).all();
+          if (results && results.length) {
+            pageList = results.map((p) => `${p.slug} ("${p.title}")`).join(", ");
+          }
+        }
+      } catch (e) {
+        /* ignore listing errors */
+      }
+      content.push(
+        "",
+        "== DEVELOPER MODE (this user is a verified developer) ==",
+        "You can BUILD and EDIT full web pages for this site. Existing pages: " + pageList + ".",
+        "When the developer asks you to create, design, build, redesign or edit a page, do this:",
+        "1) Write a short friendly one-line message describing what you made.",
+        "2) On a new line put the marker [[ACTION]] then single-line JSON: " +
+          '{"action":"create_page","slug":"short-kebab-slug","title":"Human Title"}. Use "update_page" instead of "create_page" when editing an existing slug.',
+        "3) On the next line put the marker [[HTML]] and then the COMPLETE HTML document. Everything after [[HTML]] until the end of your reply is the page source.",
+        "HTML RULES: start with <!doctype html>; include <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">; put all CSS in an inline <style> block and any JS in inline <script>; make it responsive and visually polished; you MAY fetch live data from /api/dashboard, /api/registrations, /api/expenses or /api/pricing to render real numbers. Do NOT wrap the HTML in markdown code fences. Never mention the markers to the user.",
+        'To delete a page, reply with a short message then [[ACTION]]{"action":"delete_page","slug":"the-slug"} (no [[HTML]] needed).',
+        "For non-page questions, behave normally and do not emit page markers."
+      );
+    }
+
+    const system = { role: "system", content: content.join("\n") };
+
+    // Stronger models for developers (full HTML/CSS/JS generation), with
+    // graceful fallback if a model is unavailable in the account.
+    const models = dev
+      ? ["@cf/zai-org/glm-5.2", "@cf/moonshotai/kimi-k2.7-code", "@cf/meta/llama-3.1-8b-instruct-fast"]
+      : ["@cf/zai-org/glm-4.7-flash", "@cf/meta/llama-3.1-8b-instruct-fast"];
+    const maxTokens = dev ? 3500 : 500;
+
+    let lastErr = null;
+    for (const model of models) {
+      try {
+        const result = await env.AI.run(model, {
+          messages: [system, ...cleaned],
+          max_tokens: maxTokens,
+        });
+        const reply = ((result && (result.response || result.result)) || "").trim();
+        if (reply) return json({ reply });
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+    return json(
+      {
+        error:
+          "AI request failed: " +
+          (lastErr && lastErr.message ? lastErr.message : "no model produced a reply"),
+      },
+      502
+    );
   }
 
   return json({ error: "Not found." }, 404);
@@ -291,6 +479,32 @@ export default {
     // API requests go to the backend.
     if (url.pathname === "/api" || url.pathname.startsWith("/api/")) {
       return handleApi(request, env);
+    }
+
+    // Developer-generated pages, served live from D1 at /p/<slug>.
+    if (url.pathname.startsWith("/p/")) {
+      const slug = decodeURIComponent(url.pathname.slice(3)).replace(/\/+$/, "");
+      if (env.CONVENTION_DB && slug) {
+        try {
+          await ensurePagesTable(env);
+          const row = await env.CONVENTION_DB.prepare(
+            "SELECT html FROM pages WHERE slug = ?"
+          )
+            .bind(slug)
+            .first();
+          if (row && row.html) {
+            return new Response(row.html, {
+              headers: { "content-type": "text/html; charset=utf-8" },
+            });
+          }
+        } catch (e) {
+          /* fall through to 404 */
+        }
+      }
+      return new Response("Page not found.", {
+        status: 404,
+        headers: { "content-type": "text/plain; charset=utf-8" },
+      });
     }
 
     // Everything else is served from the static site (public/).
