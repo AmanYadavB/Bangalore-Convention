@@ -466,8 +466,9 @@ async function handleApi(request, env) {
         "Keep every reply SHORT but information-rich: 2-4 crisp sentences, or up to 4 tight bullet points. Lead with the direct answer, then add only the most useful specifics. No filler, no repetition, and don't restate the question. You are not a medical professional - for health, withdrawal or crisis concerns, gently suggest seeing a doctor or local emergency services. Respect anonymity. If you are unsure, say so briefly and suggest contacting the organising committee.",
         "",
         "== AGENTIC ACTIONS ==",
-        "You can move the user around the site and help them register. When (and only when) an action is useful, append it at the VERY END of your reply on its own line, starting with the exact marker [[ACTION]] then a single-line JSON object. Put your normal friendly message BEFORE the marker. Never mention the marker or the JSON to the user.",
+        "You can help the user by moving them around the site or preparing a registration. When (and only when) an action is genuinely needed, append it at the VERY END of your reply on its own line, starting with the exact marker [[ACTION]] then a single-line JSON object. Put your normal friendly message BEFORE the marker. Never mention the marker or the JSON to the user.",
         'Navigate: [[ACTION]]{"action":"navigate","to":"PAGE"} where PAGE is one of: home, register, pricing, dashboard, registrations, expenses.',
+        "NAVIGATION RULES (important): ONLY add a navigate action when the user EXPLICITLY asks to go to or open a page (for example 'take me to register', 'open the dashboard', 'show me the expenses page'). If they are simply asking a question, answer in words and DO NOT navigate. Never send them to the register page unless they clearly asked to go there. Never claim that you have moved them, that a page is now open, or that they are 'already on' a page - the website itself performs and confirms the move. At most, offer to take them there.",
         "Booking: gather the person's full name, email, phone and chosen category across the conversation. Ask for just ONE detail at a time - each question a single short, friendly line (1-2 lines max). Never list all the fields at once. The category id must be one of: " +
           catLines +
           ".",
@@ -489,7 +490,7 @@ async function handleApi(request, env) {
       content.push(
         "",
         await buildDataSummary(env),
-        "When staff ask how many people registered, totals, collections, pending payments or expenses, answer directly and precisely from the LIVE EVENT DATA above. Present money with the \u20b9 symbol."
+        "When staff ask about numbers, answer directly and precisely from the LIVE EVENT DATA above, and answer ONLY the specific thing they asked about: a question about expenses, expenditure or spending gets expense figures only; a question about registrations or sign-ups gets registration figures only; a question about money collected or pending gets those figures only. Never mix registration details into an expense answer or expense details into a registration answer. Present money with the \u20b9 symbol."
       );
     }
 
