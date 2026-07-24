@@ -261,12 +261,6 @@ function mountChat() {
       window.visualViewport.addEventListener("scroll", fitPanel);
     }
     fitPanel();
-    // Focus so the keyboard opens; fitPanel keeps the panel anchored in the
-    // visible viewport so the page itself does not scroll up.
-    setTimeout(() => {
-      text.focus();
-      fitPanel();
-    }, 50);
   }
 
   function closeChat() {
