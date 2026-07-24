@@ -227,7 +227,9 @@ function mountChat() {
         "Hi! I can help with registration, pricing, dates and what's included. What would you like to know?"
       );
     }
-    setTimeout(() => text.focus(), 50);
+    // Only auto-focus on larger screens; on phones this pops the keyboard
+    // open immediately and shoves the panel off-screen.
+    if (window.innerWidth > 720) setTimeout(() => text.focus(), 50);
   }
 
   function closeChat() {
