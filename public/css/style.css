@@ -1124,7 +1124,15 @@ tbody tr:hover {
     bottom: 14px;
   }
   .chat-panel {
-    height: 68vh;
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    top: 72px;
+    bottom: 84px;
+    width: auto;
+    max-width: none;
+    height: auto;
+    max-height: none;
   }
 }
 
