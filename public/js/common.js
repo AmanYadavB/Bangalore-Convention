@@ -217,6 +217,35 @@ function mountChat() {
     return el;
   }
 
+  const isMobile = () => window.innerWidth <= 720;
+
+  // Keep the chat panel fitted inside the *visible* viewport. When the mobile
+  // keyboard opens, window.visualViewport shrinks; we anchor the panel to that
+  // visible area so the header stays on screen and the input sits just above
+  // the keyboard instead of the whole page scrolling up.
+  function fitPanel() {
+    const vv = window.visualViewport;
+    if (!isMobile() || !vv) {
+      panel.style.position = "";
+      panel.style.top = "";
+      panel.style.left = "";
+      panel.style.right = "";
+      panel.style.bottom = "";
+      panel.style.width = "";
+      panel.style.height = "";
+      return;
+    }
+    const topGap = 12;
+    const bottomGap = 12;
+    panel.style.position = "fixed";
+    panel.style.left = "12px";
+    panel.style.right = "12px";
+    panel.style.width = "auto";
+    panel.style.bottom = "auto";
+    panel.style.top = vv.offsetTop + topGap + "px";
+    panel.style.height = vv.height - topGap - bottomGap + "px";
+  }
+
   function openChat() {
     panel.hidden = false;
     fab.classList.add("open");
@@ -227,14 +256,34 @@ function mountChat() {
         "Hi! I can help with registration, pricing, dates and what's included. What would you like to know?"
       );
     }
-    // Only auto-focus on larger screens; on phones this pops the keyboard
-    // open immediately and shoves the panel off-screen.
-    if (window.innerWidth > 720) setTimeout(() => text.focus(), 50);
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("resize", fitPanel);
+      window.visualViewport.addEventListener("scroll", fitPanel);
+    }
+    fitPanel();
+    // Focus so the keyboard opens; fitPanel keeps the panel anchored in the
+    // visible viewport so the page itself does not scroll up.
+    setTimeout(() => {
+      text.focus();
+      fitPanel();
+    }, 50);
   }
 
   function closeChat() {
     panel.hidden = true;
     fab.classList.remove("open");
+    if (window.visualViewport) {
+      window.visualViewport.removeEventListener("resize", fitPanel);
+      window.visualViewport.removeEventListener("scroll", fitPanel);
+    }
+    // Reset any inline sizing so desktop/CSS rules take over again.
+    panel.style.position = "";
+    panel.style.top = "";
+    panel.style.left = "";
+    panel.style.right = "";
+    panel.style.bottom = "";
+    panel.style.width = "";
+    panel.style.height = "";
   }
 
   fab.addEventListener("click", () => (panel.hidden ? openChat() : closeChat()));
@@ -290,7 +339,8 @@ function mountChat() {
       );
     } finally {
       sendBtn.disabled = false;
-      if (window.innerWidth > 720) text.focus();
+      text.focus();
+      fitPanel();
     }
   });
 }
