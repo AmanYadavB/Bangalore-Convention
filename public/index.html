@@ -10,19 +10,23 @@
     <div id="nav"></div>
 
     <section class="hero">
-      <div class="eyebrow">Annual Recovery Gathering</div>
-      <h1>Bangalore Convention 2026</h1>
+      <div class="hero-grid"></div>
+      <div class="eyebrow">Annual Recovery Gathering 2026</div>
+      <h1>Bangalore Convention<br /><span class="grad">Unity in Recovery</span></h1>
       <p>
         A weekend of unity, fellowship and service. Join friends from across the
         region for shared meals, sessions and sober fun. Everyone in recovery is
         welcome.
       </p>
+
+      <div class="countdown" id="countdown" aria-label="Countdown to the convention"></div>
+
       <div class="hero-meta">
-        <div>📅 <b>09 – 11 July 2027</b></div>
+        <div>📅 <b>09 – 11 July 2026</b></div>
         <div>📍 <b>Bangalore</b></div>
         <div>🎟️ <b>Registrations open</b></div>
       </div>
-      <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap">
+      <div class="hero-cta" style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap">
         <a class="btn primary" href="register.html">Register Now</a>
         <a class="btn ghost" href="#pricing">View Pricing</a>
       </div>
@@ -41,22 +45,25 @@
         <h2>What's Included</h2>
       </div>
       <div class="grid cols-3">
-        <div class="card">
-          <h3>🍽️ Meals & Refreshments</h3>
+        <div class="card feature-card">
+          <div class="feature-icon">🍽️</div>
+          <h3>Meals &amp; Refreshments</h3>
           <p class="muted">
             Breakfast, lunch, dinner and tea breaks are covered for all stay
             categories through the convention.
           </p>
         </div>
-        <div class="card">
-          <h3>🎤 Sessions & Speakers</h3>
+        <div class="card feature-card">
+          <div class="feature-icon">🎤</div>
+          <h3>Sessions &amp; Speakers</h3>
           <p class="muted">
             Open meetings, workshops and speaker sharings across all three days
             for every registered guest.
           </p>
         </div>
-        <div class="card">
-          <h3>🤝 Fellowship</h3>
+        <div class="card feature-card">
+          <div class="feature-icon">🤝</div>
+          <h3>Fellowship</h3>
           <p class="muted">
             Marathon meetings, entertainment evenings and time to connect with
             friends new and old.
@@ -73,6 +80,34 @@
     <script src="js/common.js"></script>
     <script>
       mountNav("home");
+
+      // Live countdown to the convention (09 July 2026, 09:00 IST).
+      (function () {
+        const target = new Date("2026-07-09T09:00:00+05:30").getTime();
+        const el = document.getElementById("countdown");
+        function tick() {
+          const diff = target - Date.now();
+          if (diff <= 0) {
+            el.style.display = "none";
+            return;
+          }
+          const units = [
+            [Math.floor(diff / 8.64e7), "Days"],
+            [Math.floor((diff / 3.6e6) % 24), "Hours"],
+            [Math.floor((diff / 6e4) % 60), "Mins"],
+            [Math.floor((diff / 1e3) % 60), "Secs"],
+          ];
+          el.innerHTML = units
+            .map(
+              ([n, cap]) =>
+                `<div class="count-box"><div class="num">${String(n).padStart(2, "0")}</div><span class="cap">${cap}</span></div>`
+            )
+            .join("");
+        }
+        tick();
+        setInterval(tick, 1000);
+      })();
+
       (async () => {
         try {
           const pricing = await api("/api/pricing");
