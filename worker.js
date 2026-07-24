@@ -53,6 +53,40 @@ async function ensurePagesTable(env) {
   );
 }
 
+// ---- Developer-fed knowledge for the AI (stored in D1) -------------------
+async function ensureKnowledgeTable(env) {
+  await env.CONVENTION_DB.exec(
+    "CREATE TABLE IF NOT EXISTS knowledge (id TEXT PRIMARY KEY, title TEXT NOT NULL, content TEXT NOT NULL, created_at TEXT NOT NULL)"
+  );
+}
+
+// Compact, length-bounded blob of everything developers have fed the AI. This
+// is injected into the chat system prompt so the bot answers from it.
+async function buildKnowledge(env) {
+  if (!env.CONVENTION_DB) return "";
+  try {
+    await ensureKnowledgeTable(env);
+    const { results } = await env.CONVENTION_DB.prepare(
+      "SELECT title, content FROM knowledge ORDER BY created_at ASC LIMIT 100"
+    ).all();
+    if (!results || !results.length) return "";
+    const out = [];
+    let budget = 6000; // keep the prompt lean
+    for (const r of results) {
+      const chunk = (r.title ? r.title + ": " : "") + (r.content || "");
+      if (chunk.length >= budget) {
+        out.push(chunk.slice(0, budget));
+        break;
+      }
+      out.push(chunk);
+      budget -= chunk.length;
+    }
+    return out.join("\n\n");
+  } catch (e) {
+    return "";
+  }
+}
+
 const slugify = (s) =>
   String(s || "")
     .toLowerCase()
@@ -268,6 +302,49 @@ async function handleApi(request, env) {
     return json({ ok: isDeveloper(request, env, body) });
   }
 
+  // ---- AI knowledge (Feed AI page; developer-gated, stored in D1) ----
+  if (resource === "knowledge") {
+    if (!env.CONVENTION_DB) {
+      return json(
+        { error: "D1 database 'CONVENTION_DB' is not bound. Add it in wrangler.toml or Worker settings." },
+        500
+      );
+    }
+    await ensureKnowledgeTable(env);
+
+    if (method === "GET" && !id) {
+      const { results } = await env.CONVENTION_DB.prepare(
+        "SELECT id, title, substr(content, 1, 200) AS preview, length(content) AS size, created_at FROM knowledge ORDER BY created_at DESC"
+      ).all();
+      return json(results || []);
+    }
+
+    if (method === "POST" && !id) {
+      if (!isDeveloper(request, env, body)) {
+        return json({ error: "Developer key required." }, 403);
+      }
+      const title = (body.title || "").trim() || "Untitled note";
+      const text = typeof body.content === "string" ? body.content.trim() : "";
+      if (!text) return json({ error: "Some text content is required." }, 400);
+      const rid = crypto.randomUUID();
+      const now = new Date().toISOString();
+      await env.CONVENTION_DB.prepare(
+        "INSERT INTO knowledge (id, title, content, created_at) VALUES (?, ?, ?, ?)"
+      )
+        .bind(rid, title.slice(0, 120), text.slice(0, 20000), now)
+        .run();
+      return json({ ok: true, id: rid }, 201);
+    }
+
+    if (method === "DELETE" && id) {
+      if (!isDeveloper(request, env, body)) {
+        return json({ error: "Developer key required." }, 403);
+      }
+      await env.CONVENTION_DB.prepare("DELETE FROM knowledge WHERE id = ?").bind(id).run();
+      return json({ ok: true });
+    }
+  }
+
   // ---- Pages (developer-generated, stored in D1) ----
   if (resource === "pages") {
     if (!env.CONVENTION_DB) {
@@ -386,16 +463,26 @@ async function handleApi(request, env) {
         "- Describe these warmly, but do not quote long passages or cite exact page numbers; suggest reading the book or asking a sponsor for specifics.",
         "",
         "== STYLE ==",
-        "Keep replies short, warm, encouraging and clear. You are not a medical professional - for health, withdrawal or crisis concerns, gently suggest seeing a doctor or local emergency services. Respect anonymity. If you are unsure, say so and suggest contacting the organising committee.",
+        "Keep every reply SHORT but information-rich: 2-4 crisp sentences, or up to 4 tight bullet points. Lead with the direct answer, then add only the most useful specifics. No filler, no repetition, and don't restate the question. You are not a medical professional - for health, withdrawal or crisis concerns, gently suggest seeing a doctor or local emergency services. Respect anonymity. If you are unsure, say so briefly and suggest contacting the organising committee.",
         "",
         "== AGENTIC ACTIONS ==",
         "You can move the user around the site and help them register. When (and only when) an action is useful, append it at the VERY END of your reply on its own line, starting with the exact marker [[ACTION]] then a single-line JSON object. Put your normal friendly message BEFORE the marker. Never mention the marker or the JSON to the user.",
         'Navigate: [[ACTION]]{"action":"navigate","to":"PAGE"} where PAGE is one of: home, register, pricing, dashboard, registrations, expenses.',
-        "Booking: gather the person's full name, email, phone and chosen category across the conversation (ask one or two questions at a time). The category id must be one of: " +
+        "Booking: gather the person's full name, email, phone and chosen category across the conversation. Ask for just ONE detail at a time - each question a single short, friendly line (1-2 lines max). Never list all the fields at once. The category id must be one of: " +
           catLines +
           ".",
         'Once you have ALL FOUR valid details, append [[ACTION]]{"action":"review_booking","name":"...","email":"...","phone":"...","category":"CATEGORY_ID"}. The site then shows a confirmation card and the user taps Confirm to actually register - so never say the booking is already done; say you have prepared it for them to review and confirm.',
     ];
+
+    // Knowledge fed by developers on the Feed AI page (authoritative extras).
+    const knowledge = await buildKnowledge(env);
+    if (knowledge) {
+      content.push(
+        "",
+        "== EXTRA KNOWLEDGE fed by the organisers (treat as authoritative and prefer it over general assumptions; answer from it when relevant) ==",
+        knowledge
+      );
+    }
 
     // Staff (admin/developer) get live figures so they can ask about numbers.
     if (staff) {
@@ -468,8 +555,9 @@ async function handleApi(request, env) {
       // Fast path for questions, data lookups and general chat. Put the known
       // low-latency model FIRST so replies stay quick even if the newer models
       // are not enabled on this account (trying a missing model adds delay).
+      // Smaller token budget keeps answers short and snappy.
       models = ["@cf/meta/llama-3.1-8b-instruct-fast", "@cf/zai-org/glm-4.7-flash"];
-      maxTokens = staff ? 600 : 500;
+      maxTokens = staff ? 340 : 280;
     }
 
     let lastErr = null;
