@@ -691,6 +691,30 @@ async function handleApi(request, env) {
     );
   }
 
+  // ---- Neural text-to-speech (Workers AI MeloTTS; no extra key needed) ----
+  // The chat widget calls this for a natural voice, falling back to the
+  // browser's built-in voice if this isn't available on the account.
+  if (resource === "tts" && method === "POST") {
+    if (!env.AI) return json({ error: "AI is not configured." }, 503);
+    const text =
+      (typeof body.text === "string" ? body.text : "").replace(/\s+/g, " ").trim().slice(0, 800);
+    if (!text) return json({ error: "text required" }, 400);
+    try {
+      const res = await env.AI.run("@cf/myshell-ai/melotts", {
+        prompt: text,
+        lang: "en",
+      });
+      const audio = res && res.audio ? res.audio : null; // base64 mp3
+      if (!audio) return json({ error: "no audio produced" }, 502);
+      return json({ audio });
+    } catch (err) {
+      return json(
+        { error: "tts failed: " + (err && err.message ? err.message : "unknown") },
+        502
+      );
+    }
+  }
+
   return json({ error: "Not found." }, 404);
 }
 
