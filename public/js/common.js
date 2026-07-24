@@ -239,6 +239,7 @@ function mountChat() {
   const text = document.getElementById("chatText");
   const sendBtn = document.getElementById("chatSend");
   let greeted = false;
+  let lastUserText = "";
 
   // Pricing/categories, loaded once so the bot can book on the user's behalf.
   let PRICING = [];
@@ -351,6 +352,56 @@ function mountChat() {
     expenses: "expenses.html",
   };
 
+  const NAV_LABELS = {
+    home: "Home",
+    index: "Home",
+    register: "Register",
+    registration: "Register",
+    pricing: "Pricing",
+    dashboard: "Dashboard",
+    registrations: "Registrations",
+    expenses: "Expenses",
+  };
+
+  // Did the user's last message actually ask to move to a page? Guards against
+  // the model deciding to navigate on its own (a common hallucination).
+  function userAskedToNavigate(msg) {
+    return /\b(go to|goto|take me|bring me|open|show me|navigate|visit|head to|jump to|move to|switch to|send me)\b/i.test(
+      msg || ""
+    );
+  }
+
+  // Are we already viewing this target page?
+  function isCurrentPage(target) {
+    const file = String(target).split("#")[0].toLowerCase();
+    let cur = (location.pathname.split("/").pop() || "").toLowerCase();
+    if (!cur) cur = "index.html";
+    return cur === file;
+  }
+
+  // A tap-to-open suggestion, used instead of an automatic redirect when the
+  // navigation wasn't clearly requested.
+  function showNavChip(label, target) {
+    const card = document.createElement("div");
+    card.className = "chat-msg assistant chat-confirm";
+    card.innerHTML =
+      "<strong>Open the " +
+      escapeHtml(label) +
+      " page?</strong>" +
+      '<div class="chat-confirm-actions">' +
+      '<button type="button" class="btn ghost small" data-act="no">No thanks</button>' +
+      '<button type="button" class="btn primary small" data-act="go">Open ' +
+      escapeHtml(label) +
+      "</button>" +
+      "</div>";
+    log.appendChild(card);
+    log.scrollTop = log.scrollHeight;
+    card.querySelector('[data-act="no"]').addEventListener("click", () => card.remove());
+    card
+      .querySelector('[data-act="go"]')
+      .addEventListener("click", () => (window.location.href = target));
+  }
+
   function normalizeCategory(cat) {
     if (!cat) return null;
     const key = String(cat).trim().toLowerCase();
@@ -402,12 +453,25 @@ function mountChat() {
   function executeAction(action, html) {
     if (!action || !action.action) return;
     if (action.action === "navigate") {
-      const target = PAGES[String(action.to || "").toLowerCase()];
+      const key = String(action.to || "").toLowerCase();
+      const target = PAGES[key];
       if (!target) return;
-      addMsg("assistant typing", "Taking you there\u2026");
-      setTimeout(() => {
-        window.location.href = target;
-      }, 700);
+      const label = NAV_LABELS[key] || key;
+      if (isCurrentPage(target)) {
+        addMsg("assistant", "You're already on the " + label + " page.");
+        return;
+      }
+      if (userAskedToNavigate(lastUserText)) {
+        // Clear request -> take them, but leave a moment to read the reply.
+        addMsg("assistant typing", "Opening the " + label + " page\u2026");
+        setTimeout(() => {
+          window.location.href = target;
+        }, 1200);
+      } else {
+        // Not a clear navigation ask -> don't redirect on our own; offer a
+        // button the user can tap if they actually want to go.
+        showNavChip(label, target);
+      }
     } else if (action.action === "review_booking") {
       showBookingConfirm(action);
     } else if (action.action === "create_page" || action.action === "update_page") {
@@ -604,6 +668,7 @@ function mountChat() {
     if (!q) return;
     addMsg("user", q);
     history.push({ role: "user", content: q });
+    lastUserText = q;
     text.value = "";
     sendBtn.disabled = true;
     const typing = addMsg("assistant typing", "\u2026");
