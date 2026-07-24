@@ -923,14 +923,18 @@ function mountChat() {
         return;
       }
       let interim = "";
-      for (let i = ev.resultIndex; i < ev.results.length; i++) {
+      let finalText = "";
+      // Rebuild from the FULL results list each time (don't append incrementally,
+      // or repeated onresult events duplicate words -> "what what are are").
+      for (let i = 0; i < ev.results.length; i++) {
         const r = ev.results[i];
-        if (r.isFinal) finalBuffer += r[0].transcript + " ";
-        else interim += r[0].transcript;
+        if (r.isFinal) finalText += r[0].transcript + " ";
+        else interim += r[0].transcript + " ";
       }
+      finalBuffer = finalText;
       lastInterim = interim;
 
-      const shown = (finalBuffer + interim).trim();
+      const shown = (finalBuffer + interim).replace(/\s+/g, " ").trim();
       if (shown) showInterim(shown);
 
       // Wait for a brief pause before sending so we capture the WHOLE sentence
