@@ -169,4 +169,99 @@ function mountNav(active) {
   }
 
   applyTheme(currentTheme());
+  mountChat();
+}
+
+// ---- AI chat assistant (Cloudflare Workers AI on the live site) ----
+function mountChat() {
+  if (document.getElementById("chatWidget")) return;
+
+  const wrap = document.createElement("div");
+  wrap.id = "chatWidget";
+  wrap.className = "chat-widget";
+  wrap.innerHTML = `
+    <button class="chat-fab" id="chatFab" type="button" aria-label="Open chat" title="Ask a question">
+      <span class="chat-fab-icon">\uD83D\uDCAC</span>
+    </button>
+    <section class="chat-panel" id="chatPanel" aria-live="polite" hidden>
+      <header class="chat-head">
+        <div>
+          <strong>Convention Helper</strong>
+          <small>Ask about registration &amp; pricing</small>
+        </div>
+        <button class="chat-close" id="chatClose" type="button" aria-label="Close chat">\u00d7</button>
+      </header>
+      <div class="chat-log" id="chatLog"></div>
+      <form class="chat-input" id="chatForm">
+        <input id="chatText" type="text" autocomplete="off" placeholder="Type your question\u2026" />
+        <button class="btn primary small" type="submit" id="chatSend">Send</button>
+      </form>
+    </section>`;
+  document.body.appendChild(wrap);
+
+  const history = [];
+  const panel = document.getElementById("chatPanel");
+  const fab = document.getElementById("chatFab");
+  const log = document.getElementById("chatLog");
+  const form = document.getElementById("chatForm");
+  const text = document.getElementById("chatText");
+  const sendBtn = document.getElementById("chatSend");
+  let greeted = false;
+
+  function addMsg(kind, content) {
+    const el = document.createElement("div");
+    el.className = "chat-msg " + kind;
+    el.innerHTML = escapeHtml(content).replace(/\n/g, "<br>");
+    log.appendChild(el);
+    log.scrollTop = log.scrollHeight;
+    return el;
+  }
+
+  function openChat() {
+    panel.hidden = false;
+    fab.classList.add("open");
+    if (!greeted) {
+      greeted = true;
+      addMsg(
+        "assistant",
+        "Hi! I can help with registration, pricing, dates and what's included. What would you like to know?"
+      );
+    }
+    setTimeout(() => text.focus(), 50);
+  }
+
+  function closeChat() {
+    panel.hidden = true;
+    fab.classList.remove("open");
+  }
+
+  fab.addEventListener("click", () => (panel.hidden ? openChat() : closeChat()));
+  document.getElementById("chatClose").addEventListener("click", closeChat);
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const q = text.value.trim();
+    if (!q) return;
+    addMsg("user", q);
+    history.push({ role: "user", content: q });
+    text.value = "";
+    sendBtn.disabled = true;
+    const typing = addMsg("assistant typing", "\u2026");
+    try {
+      const data = await api("/api/chat", {
+        method: "POST",
+        body: JSON.stringify({ messages: history }),
+      });
+      typing.remove();
+      const reply = data.reply || "Sorry, I couldn't answer that.";
+      addMsg("assistant", reply);
+      history.push({ role: "assistant", content: reply });
+    } catch (err) {
+      typing.remove();
+      addMsg("assistant", "Sorry, I'm having trouble right now. Please try again in a moment.");
+    } finally {
+      sendBtn.disabled = false;
+      text.focus();
+    }
+  });
 }
