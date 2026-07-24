@@ -865,13 +865,69 @@ function mountChat() {
 
   // Speak the assistant's visible message. The mic is turned OFF while the bot
   // talks so it can't hear itself through the speakers and answer its own voice.
+  // We first try the server's neural TTS (much more natural); if that isn't
+  // available we fall back to the browser's built-in voice.
+  let currentAudio = null;
+  let serverTtsAvailable = null; // null=unknown, true=on, false=off (skip it)
+
   function speak(msg) {
-    if (!canSpeak || !msg) {
+    if (!msg) {
       afterSpeak();
       return;
     }
     speaking = true;
     pauseListening(); // mic off while we talk
+    setVoiceStatus("speaking");
+    if (serverTtsAvailable === false) {
+      browserSpeak(msg);
+      return;
+    }
+    serverSpeak(msg);
+  }
+
+  // High-quality neural voice from the Worker (Cloudflare MeloTTS).
+  async function serverSpeak(msg) {
+    try {
+      const res = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: msg }),
+      });
+      if (!res.ok) {
+        serverTtsAvailable = false; // not enabled -> don't try again this session
+        throw new Error("tts http " + res.status);
+      }
+      const data = await res.json().catch(() => ({}));
+      if (!data.audio) {
+        serverTtsAvailable = false;
+        throw new Error("no audio");
+      }
+      serverTtsAvailable = true;
+      try {
+        window.speechSynthesis && window.speechSynthesis.cancel();
+      } catch (e) {}
+      const audio = new Audio("data:audio/mp3;base64," + data.audio);
+      currentAudio = audio;
+      audio.onended = () => {
+        currentAudio = null;
+        afterSpeak();
+      };
+      audio.onerror = () => {
+        currentAudio = null;
+        browserSpeak(msg); // playback problem -> fall back for this message
+      };
+      await audio.play();
+    } catch (e) {
+      browserSpeak(msg);
+    }
+  }
+
+  // Fallback: browser speechSynthesis with the best available voice.
+  function browserSpeak(msg) {
+    if (!canSpeak) {
+      afterSpeak();
+      return;
+    }
     try {
       window.speechSynthesis.cancel();
     } catch (e) {}
@@ -886,7 +942,6 @@ function mountChat() {
     u.rate = 1; // natural pace
     u.pitch = 1.05; // slightly warmer
     u.volume = 1;
-    setVoiceStatus("speaking");
     u.onend = afterSpeak;
     u.onerror = afterSpeak;
     try {
@@ -916,6 +971,14 @@ function mountChat() {
     if (!speaking) return;
     speaking = false;
     processing = false;
+    try {
+      if (currentAudio) {
+        currentAudio.onended = null;
+        currentAudio.onerror = null;
+        currentAudio.pause();
+        currentAudio = null;
+      }
+    } catch (e) {}
     try {
       if (canSpeak) window.speechSynthesis.cancel();
     } catch (e) {}
@@ -984,10 +1047,15 @@ function mountChat() {
     recognition = new SpeechRec();
     recognition.lang = "en-IN";
     recognition.interimResults = true;
-    recognition.continuous = true; // stay live for the whole session
+    // One utterance per listen session. Continuous mode kept a cumulative
+    // results array that duplicated words across events; this avoids that.
+    recognition.continuous = false;
     recognition.maxAlternatives = 1;
     recognition.onstart = () => {
       recognizing = true;
+      // Fresh session -> start with an empty transcript so nothing carries over.
+      finalBuffer = "";
+      lastInterim = "";
       if (!speaking) setVoiceStatus("listening");
     };
 
@@ -1013,10 +1081,10 @@ function mountChat() {
       const shown = (finalBuffer + interim).replace(/\s+/g, " ").trim();
       if (shown) showInterim(shown);
 
-      // Wait for a brief pause before sending so we capture the WHOLE sentence
-      // (mobile emits a final result after each word - don't send on word 1).
+      // Backup: if the recognizer keeps the session open, send after a pause.
+      // (The primary commit happens on onend when the utterance finishes.)
       if (silenceTimer) clearTimeout(silenceTimer);
-      silenceTimer = setTimeout(commitPhrase, 1300);
+      silenceTimer = setTimeout(commitPhrase, 1400);
     };
 
     recognition.onerror = (ev) => {
@@ -1078,6 +1146,14 @@ function mountChat() {
     voiceMode = false;
     try {
       recognition && recognition.stop();
+    } catch (e) {}
+    try {
+      if (currentAudio) {
+        currentAudio.onended = null;
+        currentAudio.onerror = null;
+        currentAudio.pause();
+        currentAudio = null;
+      }
     } catch (e) {}
     try {
       if (canSpeak) window.speechSynthesis.cancel();
