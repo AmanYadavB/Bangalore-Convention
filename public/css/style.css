@@ -491,6 +491,48 @@ a:hover {
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* Subtle ambient colour drift. A soft tint layer sits behind all content and
+   slowly cycles blue -> near-black -> amber -> red and back. Minimal on purpose
+   so only the mood of the page shifts, never the layout or readable colours. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(1200px 720px at 82% -12%, rgba(56, 120, 255, 0.22), transparent 60%),
+    radial-gradient(900px 620px at 0% 105%, rgba(56, 120, 255, 0.10), transparent 55%);
+  animation: ambientShift 48s ease-in-out infinite;
+}
+
+@keyframes ambientShift {
+  0%, 100% {
+    background:
+      radial-gradient(1200px 720px at 82% -12%, rgba(56, 120, 255, 0.22), transparent 60%),
+      radial-gradient(900px 620px at 0% 105%, rgba(56, 120, 255, 0.10), transparent 55%);
+  }
+  25% { /* near-black, dim */
+    background:
+      radial-gradient(1200px 720px at 82% -12%, rgba(18, 24, 44, 0.30), transparent 60%),
+      radial-gradient(900px 620px at 0% 105%, rgba(18, 24, 44, 0.14), transparent 55%);
+  }
+  50% { /* warm amber */
+    background:
+      radial-gradient(1200px 720px at 82% -12%, rgba(250, 190, 60, 0.20), transparent 60%),
+      radial-gradient(900px 620px at 0% 105%, rgba(250, 190, 60, 0.09), transparent 55%);
+  }
+  75% { /* soft red */
+    background:
+      radial-gradient(1200px 720px at 82% -12%, rgba(240, 92, 72, 0.20), transparent 60%),
+      radial-gradient(900px 620px at 0% 105%, rgba(240, 92, 72, 0.09), transparent 55%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body::before { animation: none; }
+}
+
 .hero .eyebrow,
 .hero h1,
 .hero p,
