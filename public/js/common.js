@@ -204,6 +204,300 @@ function mountNav(active) {
   mountChat();
 }
 
+// ---- Attention mascot: ONE little robot that lives on the chat button. It
+// rests in the corner as the chat bubble, morphs into the robot, waves, rolls,
+// jumps, sometimes swells into a huge demon with an evil laugh, then takes off
+// (helicopter rotor) and flies a loop around the screen before landing back
+// home. Clicking it always opens the assistant. Speech bubbles pop up only now
+// and then with short lines. Sound only starts after the first user gesture.
+function mountMascot() {
+  if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches)
+    return;
+
+  const isChatOpen = () => document.body.classList.contains("chat-open");
+
+  // ---------------- Funny synth sounds (Web Audio, no files) ----------------
+  let actx = null;
+  const unlock = () => {
+    if (actx) return;
+    try {
+      actx = new (window.AudioContext || window.webkitAudioContext)();
+    } catch (e) {}
+  };
+  ["pointerdown", "keydown", "touchstart"].forEach((ev) =>
+    window.addEventListener(ev, unlock, { once: true, passive: true })
+  );
+  // Ask for the mic on the first interaction so a clap can flip the theme.
+  ["pointerdown", "keydown", "touchstart"].forEach((ev) =>
+    window.addEventListener(ev, initClap, { once: true, passive: true })
+  );
+  const canPlay = () => actx && actx.state === "running" && !document.hidden;
+
+  function tone(freq, start, dur, type, peak) {
+    if (!actx) return;
+    const t0 = actx.currentTime + start;
+    const o = actx.createOscillator();
+    const g = actx.createGain();
+    o.type = type || "square";
+    o.frequency.setValueAtTime(freq, t0);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(peak || 0.05, t0 + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(g).connect(actx.destination);
+    o.start(t0);
+    o.stop(t0 + dur + 0.03);
+  }
+  function glide(f1, f2, start, dur, type, peak) {
+    if (!actx) return;
+    const t0 = actx.currentTime + start;
+    const o = actx.createOscillator();
+    const g = actx.createGain();
+    o.type = type || "sine";
+    o.frequency.setValueAtTime(f1, t0);
+    o.frequency.exponentialRampToValueAtTime(Math.max(1, f2), t0 + dur);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(peak || 0.05, t0 + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(g).connect(actx.destination);
+    o.start(t0);
+    o.stop(t0 + dur + 0.03);
+  }
+  const longPueee = () => glide(240, 1350, 0, 1.2, "sawtooth", 0.05); // pueeeeeee up
+  const longWoooo = () => glide(1250, 220, 0, 1.3, "sine", 0.055); // wooooooo down
+  const boops = () => {
+    tone(660, 0, 0.09, "square", 0.05);
+    tone(880, 0.11, 0.13, "square", 0.05);
+  };
+
+  // Extra sounds for the take-off, landing and growing moments.
+  const takeoffSound = () => glide(170, 950, 0, 0.8, "sawtooth", 0.06); // whoooosh up
+  const landSound = () => glide(760, 150, 0, 0.5, "sine", 0.05); // settle down
+  const growSound = () => glide(300, 620, 0, 1.1, "sine", 0.05); // gentle swell
+
+  // ---------------- ONE mascot, living on the chat button ----------------
+  const fab = document.getElementById("chatFab");
+  if (!fab || fab.__mascotLive) return;
+  fab.__mascotLive = true;
+  const bubble = document.getElementById("fabBubble");
+
+  // A stationary, waving chat button that stays in the corner while the mascot
+  // is off flying, so you can always tap to open the chat.
+  const ghost = document.createElement("button");
+  ghost.type = "button";
+  ghost.className = "fab-ghost";
+  ghost.setAttribute("aria-label", "Open chat");
+  ghost.setAttribute("title", "Open chat");
+  ghost.innerHTML = '<span class="fg-icon">\uD83D\uDCAC</span><span class="fg-hand">\uD83D\uDC4B</span>';
+  (fab.parentElement || document.body).appendChild(ghost);
+  ghost.addEventListener("click", () => {
+    const panel = document.getElementById("chatPanel");
+    if (panel && panel.hidden) fab.click();
+  });
+  function showGhost(on) {
+    ghost.classList.toggle("show", !!on && !isChatOpen());
+  }
+
+  const SAYS = [
+    "hi there! \uD83D\uDC4B",
+    "psst\u2026 need help?",
+    "ask me anything!",
+    "beep boop \uD83E\uDD16",
+    "tap me to chat!",
+    "I know the schedule!",
+    "wheee!",
+    "hello! \uD83D\uDE04",
+  ];
+  function say(txt, ms) {
+    if (!bubble || isChatOpen()) return;
+    bubble.textContent = txt || SAYS[Math.floor(Math.random() * SAYS.length)];
+    bubble.classList.add("show");
+    setTimeout(() => bubble.classList.remove("show"), ms || 2400);
+  }
+  function setForm(form) {
+    fab.classList.toggle("as-box", form === "box");
+    fab.classList.toggle("as-bot", form === "bot");
+  }
+  function clearMoves() {
+    fab.classList.remove("waving", "rolling", "jumping", "huge", "demonic", "flying");
+  }
+
+  // Each "scene" performs an action and returns how long it lasts (ms).
+  function toMascot() {
+    setForm("bot");
+    if (canPlay()) boops();
+    if (Math.random() < 0.6) say(null, 1800);
+    return 1000;
+  }
+  function toBox() {
+    clearMoves();
+    setForm("box");
+    return 1000;
+  }
+  function idleBox() {
+    return 4500 + Math.random() * 3000;
+  }
+  function wave() {
+    fab.classList.add("waving");
+    if (Math.random() < 0.7) say("hello there! \uD83D\uDC4B", 2200);
+    if (canPlay() && Math.random() < 0.5) boops();
+    setTimeout(() => fab.classList.remove("waving"), 2600);
+    return 2900;
+  }
+  function roll() {
+    fab.classList.add("rolling");
+    if (canPlay()) longWoooo();
+    setTimeout(() => fab.classList.remove("rolling"), 1200);
+    return 1500;
+  }
+  function jump() {
+    fab.classList.add("jumping");
+    if (canPlay()) longPueee();
+    setTimeout(() => fab.classList.remove("jumping"), 700);
+    return 950;
+  }
+  function grow() {
+    setForm("bot");
+    fab.classList.add("huge"); // slowly swells up in the same friendly colours
+    if (canPlay()) growSound();
+    setTimeout(() => fab.classList.remove("huge"), 5000);
+    return 5600;
+  }
+  function takeOff() {
+    clearMoves();
+    setForm("bot");
+    showGhost(true); // leave a waving chat button behind so you can still tap
+    fab.classList.add("flying");
+    if (canPlay()) takeoffSound();
+    if (Math.random() < 0.6) say("wheee! \uD83D\uDEF8", 1800);
+    setTimeout(() => {
+      if (canPlay()) (Math.random() < 0.5 ? longPueee : longWoooo)();
+    }, 5200);
+    setTimeout(() => {
+      fab.classList.remove("flying");
+      showGhost(false);
+      if (canPlay()) landSound();
+      if (Math.random() < 0.6) say("I\u2019m back!", 1600);
+    }, 13000);
+    return 13700;
+  }
+  function antic() {
+    const r = Math.random();
+    if (r < 0.4) return wave();
+    if (r < 0.7) return jump();
+    return roll();
+  }
+
+  // Run the scenes one after another, forever. Pause while the chat is open.
+  function chain(steps, done) {
+    let i = 0;
+    (function step() {
+      if (i >= steps.length) return done();
+      if (isChatOpen()) {
+        clearMoves();
+        setForm("box");
+        return setTimeout(step, 900);
+      }
+      const dur = steps[i++]() || 600;
+      setTimeout(step, dur);
+    })();
+  }
+  function cycle() {
+    chain(
+      [
+        toMascot,
+        antic,
+        antic,
+        () => (Math.random() < 0.5 ? grow() : antic()),
+        antic,
+        toBox,
+        idleBox,
+        toMascot,
+        takeOff,
+      ],
+      cycle
+    );
+  }
+
+  // ---- Clap to flip the theme (dark <-> light). Best-effort: uses the mic to
+  // hear a sharp clap; if the browser blocks the mic, it simply does nothing.
+  let clapStarted = false;
+  function onClap() {
+    toggleTheme();
+    say("wooooh seriously?! \uD83D\uDE32", 2400);
+    if (canPlay()) boops();
+  }
+  async function initClap() {
+    if (clapStarted) return;
+    clapStarted = true;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const ac = actx || new (window.AudioContext || window.webkitAudioContext)();
+      actx = ac;
+      const src = ac.createMediaStreamSource(stream);
+      const analyser = ac.createAnalyser();
+      analyser.fftSize = 1024;
+      analyser.smoothingTimeConstant = 0;
+      src.connect(analyser);
+      const time = new Uint8Array(analyser.fftSize);
+      const freq = new Uint8Array(analyser.frequencyBinCount);
+      const hzPerBin = ac.sampleRate / 2 / analyser.frequencyBinCount;
+      let prevPeak = 0;
+      let lastClap = 0;
+      // A hand-clap is special: a very short, LOUD spike (fast attack from near
+      // silence) whose energy is spread BROADBAND and BRIGHT (lots of treble).
+      // Voices, music and the mascot's own beeps are tonal / low-pitched, so we
+      // reject anything that isn't both wide-band and bright \u2014 that way ONLY a
+      // real clap flips the theme, not other sounds.
+      (function listen() {
+        analyser.getByteTimeDomainData(time);
+        analyser.getByteFrequencyData(freq);
+        let peak = 0;
+        for (let i = 0; i < time.length; i++) {
+          const v = Math.abs(time[i] - 128);
+          if (v > peak) peak = v;
+        }
+        let total = 0;
+        let high = 0;
+        let loudBins = 0;
+        for (let i = 0; i < freq.length; i++) {
+          const v = freq[i];
+          total += v;
+          if (i * hzPerBin > 2500) high += v; // treble energy
+          if (v > 96) loudBins++; // how many bands lit up
+        }
+        const highRatio = total > 0 ? high / total : 0; // brightness
+        const spread = loudBins / freq.length; // broadband-ness
+        const now = performance.now();
+        const sharp = peak > 80 && prevPeak < 22; // sudden loud from quiet
+        const clapLike = spread > 0.28 && highRatio > 0.3;
+        if (sharp && clapLike && now - lastClap > 1200) {
+          lastClap = now;
+          onClap();
+        }
+        prevPeak = peak;
+        requestAnimationFrame(listen);
+      })();
+    } catch (e) {
+      /* mic blocked or unavailable \u2014 clap-to-theme just stays off */
+    }
+  }
+
+  // Start life as the chat bubble in the corner, then begin the loop.
+  setForm("box");
+  setTimeout(cycle, 4000);
+
+  // When the chat opens, calm down and stay a plain chat button.
+  const obs = new MutationObserver(() => {
+    if (isChatOpen()) {
+      clearMoves();
+      showGhost(false);
+      setForm("box");
+    }
+  });
+  obs.observe(document.body, { attributes: true, attributeFilter: ["class"] });
+}
+
 // ---- AI chat assistant (Cloudflare Workers AI on the live site) ----
 function mountChat() {
   if (document.getElementById("chatWidget")) return;
@@ -212,14 +506,28 @@ function mountChat() {
   wrap.id = "chatWidget";
   wrap.className = "chat-widget";
   wrap.innerHTML = `
-    <button class="chat-fab" id="chatFab" type="button" aria-label="Open chat" title="Ask a question">
-      <span class="chat-fab-icon">\uD83D\uDCAC</span>
+    <button class="chat-fab as-box" id="chatFab" type="button" aria-label="Open chat" title="Ask a question">
+      <span class="fab-bubble" id="fabBubble" aria-hidden="true"></span>
+      <span class="fab-box">\uD83D\uDCAC</span>
+      <span class="fab-mascot" aria-hidden="true">
+        <span class="fm-rotor"></span>
+        <span class="fm-antenna"></span>
+        <span class="fm-head"><i class="fm-eye"></i><i class="fm-eye"></i></span>
+        <span class="fm-body"></span>
+        <span class="fm-arm"></span>
+        <span class="fm-legs"><i></i><i></i></span>
+      </span>
     </button>
     <section class="chat-panel" id="chatPanel" aria-live="polite" hidden>
       <header class="chat-head">
-        <div>
-          <strong>Convention Helper</strong>
-          <small>Ask about registration &amp; pricing</small>
+        <div class="chat-head-main">
+          <span class="chat-avatar mini-bot" id="chatAvatar" aria-hidden="true">
+            <i class="mb-eye"></i><i class="mb-eye"></i><span class="mb-mouth"></span>
+          </span>
+          <div>
+            <strong>Convention Helper</strong>
+            <small>Ask about registration &amp; pricing</small>
+          </div>
         </div>
         <button class="chat-close" id="chatClose" type="button" aria-label="Close chat">\u00d7</button>
       </header>
@@ -236,6 +544,7 @@ function mountChat() {
       </form>
     </section>`;
   document.body.appendChild(wrap);
+  mountMascot();
 
   const history = [];
   const panel = document.getElementById("chatPanel");
@@ -261,7 +570,14 @@ function mountChat() {
   function addMsg(kind, content) {
     const el = document.createElement("div");
     el.className = "chat-msg " + kind;
-    el.innerHTML = escapeHtml(content).replace(/\n/g, "<br>");
+    if (kind.indexOf("typing") !== -1 && content === "\u2026") {
+      // Make the loading indicator look like the mascot is typing.
+      el.innerHTML =
+        '<span class="mini-bot thinking" aria-hidden="true"><i class="mb-eye"></i><i class="mb-eye"></i><span class="mb-mouth"></span></span>' +
+        '<span class="typing-dots"><i></i><i></i><i></i></span>';
+    } else {
+      el.innerHTML = escapeHtml(content).replace(/\n/g, "<br>");
+    }
     log.appendChild(el);
     scrollToMsg(el, kind);
     return el;
@@ -281,6 +597,37 @@ function mountChat() {
     } else {
       log.scrollTop = log.scrollHeight;
     }
+  }
+
+  // Reveal an assistant reply one character at a time, like the mascot is
+  // writing it out on a board. Calls done() when the whole line is written.
+  function typeOut(el, txt, msPerChar, done) {
+    let i = 0;
+    const paint = (withCaret) => {
+      const part = escapeHtml(txt.slice(0, i)).replace(/\n/g, "<br>");
+      el.innerHTML = withCaret ? part + '<span class="type-caret"></span>' : part;
+      scrollToMsg(el, "assistant");
+    };
+    paint(true);
+    const timer = setInterval(() => {
+      i++;
+      paint(i < txt.length);
+      if (i >= txt.length) {
+        clearInterval(timer);
+        paint(false);
+        if (done) done();
+      }
+    }, msPerChar);
+    return timer;
+  }
+
+  // Snappy when typing text; a little slower in voice mode so the words appear
+  // roughly in step with the spoken audio.
+  function writeSpeed(txt, voice) {
+    const len = Math.max(1, txt.length);
+    return voice
+      ? Math.min(60, Math.max(24, Math.round(6500 / len)))
+      : Math.min(38, Math.max(9, Math.round(2200 / len)));
   }
 
   const isMobile = () => window.innerWidth <= 720;
@@ -315,6 +662,7 @@ function mountChat() {
   function openChat() {
     panel.hidden = false;
     fab.classList.add("open");
+    document.body.classList.add("chat-open");
     if (!greeted) {
       greeted = true;
       const greeting = isDeveloper()
@@ -335,6 +683,7 @@ function mountChat() {
     stopVoiceMode();
     panel.hidden = true;
     fab.classList.remove("open");
+    document.body.classList.remove("chat-open");
     if (window.visualViewport) {
       window.visualViewport.removeEventListener("resize", fitPanel);
       window.visualViewport.removeEventListener("scroll", fitPanel);
@@ -488,14 +837,21 @@ function mountChat() {
     const shown = message || "Okay.";
     history.push({ role: "assistant", content: shown });
     if (voice) {
-      // Show the text exactly when the voice starts, so they stay in sync
-      // (previously the text appeared well before the neural audio was ready).
+      // Show the text exactly when the voice starts, then write it out so it
+      // feels like the same mascot is speaking AND writing it on a board.
       speak(shown, () => {
-        addMsg("assistant", shown);
+        const el = addMsg("assistant", "");
+        typeOut(el, shown, writeSpeed(shown, true));
         if (action) executeAction(action, html);
       });
     } else {
-      addMsg("assistant", shown);
+      // Type it out character by character, like someone writing on a board.
+      const el = addMsg("assistant", "");
+      const av = document.getElementById("chatAvatar");
+      if (av) av.classList.add("talking");
+      typeOut(el, shown, writeSpeed(shown, false), () => {
+        if (av) av.classList.remove("talking");
+      });
       if (action) executeAction(action, html);
     }
   }
@@ -733,6 +1089,7 @@ function mountChat() {
           messages: history,
           role: localStorage.getItem("role") || "user",
           devKey: getDevKey(),
+          voice: !!opts.voice,
         }),
       });
       const raw = await res.text();
@@ -828,6 +1185,12 @@ function mountChat() {
       micBtn.classList.toggle("listening", voiceMode && state === "listening");
       micBtn.classList.toggle("speaking", voiceMode && state === "speaking");
     }
+    const chatAvatar = document.getElementById("chatAvatar");
+    if (chatAvatar) {
+      // In voice mode the header mascot 'talks' while it speaks.
+      chatAvatar.classList.toggle("talking", voiceMode && state === "speaking");
+      chatAvatar.classList.toggle("thinking", voiceMode && state === "thinking");
+    }
     if (!voiceBar) return;
     voiceBar.hidden = !voiceMode;
     voiceBar.classList.toggle("is-listening", state === "listening");
@@ -904,6 +1267,7 @@ function mountChat() {
       return;
     }
     speaking = true;
+    speakId++; // invalidate any in-flight chunk playback from a previous turn
     pauseListening(); // mic off while we talk
     setVoiceStatus("speaking");
     // Safety net: never keep the text hidden for long if the audio is slow.
@@ -916,34 +1280,79 @@ function mountChat() {
   }
 
   // High-quality neural voice from the Worker (Cloudflare MeloTTS).
-  async function serverSpeak(msg, begin) {
+  // To cut the wait, we speak in CHUNKS: the first sentence is generated and
+  // played almost immediately, while the rest is fetched in the background and
+  // queued right behind it. Time-to-first-word drops from "whole reply" to
+  // "one short sentence".
+  let speakId = 0;
+
+  function splitForSpeech(msg) {
+    const text = String(msg || "").replace(/\s+/g, " ").trim();
+    if (!text) return [];
+    const sentences = (text.match(/[^.!?]+[.!?]*/g) || [text])
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (sentences.length <= 1) return [text.slice(0, 800)];
+    // First chunk = just the opening sentence (fast to synthesise); the rest
+    // becomes a second chunk so we make at most two TTS calls.
+    const first = sentences[0].slice(0, 320);
+    const rest = sentences.slice(1).join(" ").slice(0, 700);
+    return rest ? [first, rest] : [first];
+  }
+
+  async function fetchTts(textPart) {
     try {
       const res = await fetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: msg }),
+        body: JSON.stringify({ text: textPart }),
       });
-      if (!res.ok) throw new Error("tts http " + res.status);
+      if (!res.ok) return null;
       const data = await res.json().catch(() => ({}));
-      if (!data.audio) throw new Error("no audio");
+      return data.audio || null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function playClip(audio64, onStart, myId) {
+    return new Promise((resolve) => {
+      if (myId !== speakId) return resolve(); // a newer utterance took over
       try {
         window.speechSynthesis && window.speechSynthesis.cancel();
       } catch (e) {}
-      const audio = new Audio("data:audio/mp3;base64," + data.audio);
+      const audio = new Audio("data:audio/mp3;base64," + audio64);
       currentAudio = audio;
-      audio.onplay = () => begin && begin();
-      audio.onended = () => {
-        currentAudio = null;
-        afterSpeak();
-      };
-      audio.onerror = () => {
-        currentAudio = null;
-        browserSpeak(msg, begin); // playback problem -> fall back for this message
-      };
-      await audio.play();
-    } catch (e) {
-      browserSpeak(msg, begin);
+      audio.onplay = () => onStart && onStart();
+      audio.onended = () => resolve();
+      audio.onerror = () => resolve();
+      audio.play().catch(() => resolve());
+    });
+  }
+
+  async function serverSpeak(msg, begin) {
+    const myId = speakId;
+    const chunks = splitForSpeech(msg);
+    if (!chunks.length) {
+      begin && begin();
+      afterSpeak();
+      return;
     }
+    // Prefetch the first chunk; then loop, prefetching the next while the
+    // current one plays so playback is gapless.
+    let nextAudio = fetchTts(chunks[0]);
+    for (let i = 0; i < chunks.length; i++) {
+      if (myId !== speakId) return; // stopped or superseded
+      const audio64 = await nextAudio;
+      nextAudio = i + 1 < chunks.length ? fetchTts(chunks[i + 1]) : Promise.resolve(null);
+      if (!audio64) {
+        // This chunk failed -> speak the remainder with the browser voice.
+        browserSpeak(chunks.slice(i).join(" "), i === 0 ? begin : null);
+        return;
+      }
+      await playClip(audio64, i === 0 ? begin : null, myId);
+    }
+    if (myId === speakId) afterSpeak();
   }
 
   // Fallback: browser speechSynthesis with the best available voice.
@@ -1000,6 +1409,7 @@ function mountChat() {
     if (!speaking) return;
     speaking = false;
     processing = false;
+    speakId++; // abort any queued/in-flight chunk playback
     try {
       if (currentAudio) {
         currentAudio.onended = null;
