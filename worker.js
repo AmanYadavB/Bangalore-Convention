@@ -791,7 +791,7 @@ async function handleApi(request, env) {
     try {
       const res = await env.AI.run("@cf/myshell-ai/melotts", {
         prompt: text,
-        lang: "es",
+        lang: "en",
       });
       const audio = res && res.audio ? res.audio : null; // base64 mp3
       if (!audio) return json({ error: "no audio produced" }, 502);
