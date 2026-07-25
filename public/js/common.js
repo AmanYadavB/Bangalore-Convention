@@ -744,12 +744,19 @@ function mountChat() {
       }
       typing.remove();
 
+      // If the server sent a technical reason (degraded reply or hard error),
+      // always log it, and show it inline for developers (dev key present) so
+      // "no response" is never a mystery. End users only see the friendly text.
+      const detail = data.detail || data.error;
+      if (detail) console.error("[chat] server detail:", detail);
+
       if (!res.ok) {
-        console.error("[chat] request failed", res.status, data.error || raw);
+        console.error("[chat] request failed", res.status, detail || raw);
         handleAssistantReply(
           "The assistant is resting for a moment \uD83D\uDE34. Please try again shortly \u2014 meanwhile you can sign up on the Register page or reach the organising committee.",
           opts.voice
         );
+        if (detail && getDevKey()) addMsg("assistant", "\uD83D\uDEE0\ufe0f debug: " + detail);
         return;
       }
 
@@ -757,6 +764,8 @@ function mountChat() {
         data.reply ||
         "Sorry, I couldn't answer that just now \u2014 please try again in a moment.";
       handleAssistantReply(reply, opts.voice);
+      if (data.degraded && detail && getDevKey())
+        addMsg("assistant", "\uD83D\uDEE0\ufe0f debug: " + detail);
     } catch (err) {
       console.error("[chat] network/exception error:", err);
       typing.remove();
