@@ -407,6 +407,7 @@ function mountMascot() {
       [
         toMascot,
         antic,
+        takeOff,
         antic,
         () => (Math.random() < 0.5 ? grow() : antic()),
         antic,
