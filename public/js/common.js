@@ -414,7 +414,6 @@ function mountMascot() {
         toBox,
         idleBox,
         toMascot,
-        takeOff,
       ],
       cycle
     );
