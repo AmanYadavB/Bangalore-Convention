@@ -789,9 +789,9 @@ async function handleApi(request, env) {
       (typeof body.text === "string" ? body.text : "").replace(/\s+/g, " ").trim().slice(0, 800);
     if (!text) return json({ error: "text required" }, 400);
     try {
-      const res = await env.AI.run("@cf/deepgram/aura-2-es", {
+      const res = await env.AI.run("@cf/deepgram/aura-2-en", {
         text,
-        voice: "diana",
+        voice: "orpheus",
       });
       const audio = res && res.audio ? res.audio : null; // base64 mp3
       if (!audio) return json({ error: "no audio produced" }, 502);
