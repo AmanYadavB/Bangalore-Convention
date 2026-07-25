@@ -1957,6 +1957,76 @@ tbody tr:hover {
   50% { opacity: 0; }
 }
 
+/* --- assistant reply where the mascot itself writes / speaks the message --- */
+.chat-msg.assistant.bot-row {
+  background: transparent;
+  border: none;
+  padding: 0;
+  max-width: 90%;
+  display: flex;
+  align-items: flex-end;
+  gap: 9px;
+}
+.bot-row .msg-bot {
+  flex: 0 0 auto;
+  margin-bottom: 2px;
+}
+.bot-row .msg-text {
+  display: block;
+  background: var(--card);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 9px 13px;
+  border-radius: 14px;
+  border-bottom-left-radius: 4px;
+  line-height: 1.45;
+  word-wrap: break-word;
+  min-height: 1.2em;
+}
+/* while writing, the mascot leans in and scribbles a pencil */
+.msg-bot.writing { animation: mbBob 0.7s ease-in-out infinite; }
+.mb-pen {
+  position: absolute;
+  right: -9px;
+  bottom: -5px;
+  font-size: 14px;
+  opacity: 0;
+  transform-origin: bottom left;
+}
+.msg-bot.writing .mb-pen {
+  opacity: 1;
+  animation: penScribble 0.4s ease-in-out infinite;
+}
+@keyframes penScribble {
+  0%, 100% { transform: translateY(0) rotate(-10deg); }
+  50% { transform: translateY(-2px) rotate(8deg); }
+}
+/* while speaking, the mouth moves and little sound bars bounce */
+.msg-bot.speaking .mb-mouth { animation: mbTalk 0.28s ease-in-out infinite; }
+.mb-waves {
+  position: absolute;
+  right: -14px;
+  bottom: 3px;
+  display: none;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+}
+.msg-bot.speaking .mb-waves { display: flex; }
+.mb-waves i {
+  width: 3px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+  animation: eqBar 0.5s ease-in-out infinite;
+}
+.mb-waves i:nth-child(2) { animation-delay: 0.15s; }
+.mb-waves i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes eqBar {
+  0%, 100% { height: 3px; }
+  50% { height: 12px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .fab-mascot,
   .fab-ghost,
