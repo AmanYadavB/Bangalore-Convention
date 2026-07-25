@@ -514,6 +514,9 @@ async function handleApi(request, env) {
     // require the DEV_KEY secret (verified by isDeveloper) before any action runs.
     const dev = isDeveloper(request, env, body);
     const staff = dev || body.role === "admin";
+    // Voice mode: the user is listening, so we keep answers short and snappy so
+    // the neural TTS returns quickly and there is far less to wait for.
+    const voice = body.voice === true;
 
     const priceLines = PRICING.map(
       (c) => `- ${c.name}: \u20b9${c.price} (${c.description})`
@@ -551,6 +554,11 @@ async function handleApi(request, env) {
         "",
         "== STYLE ==",
         "Keep every reply SHORT but information-rich: 2-4 crisp sentences, or up to 4 tight bullet points. Lead with the direct answer, then add only the most useful specifics. No filler, no repetition, and don't restate the question. You are not a medical professional - for health, withdrawal or crisis concerns, gently suggest seeing a doctor or local emergency services. Respect anonymity. If you are unsure, say so briefly and suggest contacting the organising committee.",
+        "",
+        "== PERSONALITY (be a character, not a robot) ==",
+        "You have a warm, upbeat personality with a light, friendly sense of humour - like a cheerful buddy who genuinely enjoys helping. A small playful quip or a wink of an emoji is welcome when it fits. BUT stay kind and respectful at ALL times: many guests are in recovery, so never mock, shame, belittle or make anyone feel judged.",
+        "If the user asks something you ALREADY answered in this chat, answer it again anyway, but open with a good-natured, teasing acknowledgement - e.g. 'Haha, you again? \\uD83D\\uDE04 As I said,\\u2026' or 'Bro, I just told you this \\uD83D\\uDE05 \\u2014 here it is again:' - then give the answer. Be playful, never annoyed or rude.",
+        "If a question is very obvious or the answer is staring right there, still help cheerfully with a tiny wink like 'Easy one! \\uD83D\\uDE09' - warm teasing at most, never harsh.",
         "",
         "== SCOPE - STAY ON THE CONVENTION (very important) ==",
         "You ONLY help with this Bangalore Convention: registration, pricing, the AA fellowship, and practical help for people ATTENDING it - including planning travel to reach the convention in Bangalore. If a request is NOT connected to attending this convention (for example: unrelated holidays or sightseeing, general web lookups, news, sports, coding help, or any off-topic task), politely decline in one short line and steer back to convention help. Do NOT plan unrelated trips or answer unrelated questions at any cost.",
@@ -627,7 +635,15 @@ async function handleApi(request, env) {
       );
     }
 
-    const system = { role: "system", content: content.join("\n") };
+    // In voice mode keep replies short and spoken-friendly so the neural TTS is
+    // quick to generate and there is far less audio to wait for.
+    if (voice) {
+      content.push(
+        "",
+        "== VOICE MODE (the user is listening, not reading) ==",
+        "Answer in 1-2 short spoken sentences (about 40 words max). Be warm and natural. No lists, no markdown, no emojis - just plain speech."
+      );
+    }
 
     // A lean prompt WITHOUT the fed knowledge, kept so we can retry with it if a
     // very large knowledge blob ever overflows the model's context window.
@@ -666,9 +682,10 @@ async function handleApi(request, env) {
       // Fast path for questions, data lookups and general chat. Put the known
       // low-latency model FIRST so replies stay quick even if the newer models
       // are not enabled on this account (trying a missing model adds delay).
-      // Smaller token budget keeps answers short and snappy.
+      // Smaller token budget keeps answers short and snappy (shorter still for
+      // voice, where the reply is spoken aloud).
       models = ["@cf/meta/llama-3.1-8b-instruct-fast", "@cf/zai-org/glm-4.7-flash"];
-      maxTokens = staff ? 340 : 280;
+      maxTokens = voice ? 170 : staff ? 340 : 280;
     }
 
     const runModel = async (sys, model, tokens) => {
