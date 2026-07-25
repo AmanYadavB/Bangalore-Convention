@@ -681,14 +681,17 @@ async function handleApi(request, env) {
       return reply.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
     };
 
-    let lastErr = null;
+    // Collect what went wrong per model so the real reason is never lost - it is
+    // logged (wrangler tail) AND returned in a `detail` field for debugging.
+    const attempts = [];
     // 1) Normal attempt with the full prompt (including any fed knowledge).
     for (const model of models) {
       try {
         const reply = await runModel(fullSystem, model, maxTokens);
         if (reply) return json({ reply });
+        attempts.push(model + ": empty reply");
       } catch (err) {
-        lastErr = err;
+        attempts.push(model + ": " + (err && err.message ? err.message : String(err)));
       }
     }
     // 2) Degraded retry: a large knowledge blob may have overflowed the context,
@@ -697,15 +700,21 @@ async function handleApi(request, env) {
     try {
       const reply = await runModel(leanSystem, "@cf/meta/llama-3.1-8b-instruct-fast", 256);
       if (reply) return json({ reply });
+      attempts.push("lean-retry: empty reply");
     } catch (err) {
-      lastErr = err;
+      attempts.push("lean-retry: " + (err && err.message ? err.message : String(err)));
     }
     // 3) Everything failed -> a friendly "resting" reply (never a raw error) with
-    //    a helpful alternative, returned as a normal message (HTTP 200).
-    console.log("chat fallback:", lastErr && lastErr.message);
+    //    a helpful alternative, returned as a normal message (HTTP 200). The real
+    //    reason travels in `detail` so developers can see it in the console /
+    //    Network tab without scaring end users.
+    const detail = attempts.join(" | ");
+    console.log("chat fallback:", detail);
     return json({
       reply:
         "I'm taking a short breather right now and couldn't work that out this second \uD83D\uDE4F. Please try again in a moment. Meanwhile you can register or check details on the Register page, or reach the organising committee for anything urgent.",
+      degraded: true,
+      detail,
     });
   }
 
@@ -742,7 +751,15 @@ export default {
 
     // API requests go to the backend.
     if (url.pathname === "/api" || url.pathname.startsWith("/api/")) {
-      return handleApi(request, env);
+      try {
+        return await handleApi(request, env);
+      } catch (err) {
+        // Never let the backend crash into a blank 500 - surface the real reason
+        // as JSON so it shows up in the browser console / Network tab.
+        const detail = err && err.message ? err.message : String(err);
+        console.log("handleApi error:", detail, err && err.stack);
+        return json({ error: "Server error", detail }, 500);
+      }
     }
 
     // Developer-generated pages, served live from D1 at /p/<slug>.
