@@ -485,7 +485,7 @@ function mountMascot() {
 
   // Start life as the chat bubble in the corner, then begin the loop.
   setForm("box");
-  setTimeout(cycle, 4000);
+  setTimeout(cycle, 1000);
 
   // When the chat opens, calm down and stay a plain chat button.
   const obs = new MutationObserver(() => {
