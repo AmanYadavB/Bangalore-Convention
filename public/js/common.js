@@ -380,6 +380,7 @@ function mountMascot() {
     }, 13000);
     return 13700;
   }
+  
   function antic() {
     const r = Math.random();
     if (r < 0.4) return wave();
