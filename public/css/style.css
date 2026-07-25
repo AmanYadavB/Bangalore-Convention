@@ -1250,8 +1250,11 @@ tbody tr:hover {
 }
 
 .chat-msg.typing {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   color: var(--muted);
-  letter-spacing: 2px;
+  letter-spacing: normal;
 }
 
 .chat-confirm {
@@ -1536,5 +1539,480 @@ tbody tr:hover {
     min-width: 0;
     flex: 1 1 140px;
   }
+}
+
+/* ============================================================
+   Attention mascot + AI-button pulse + professional polish
+   ============================================================ */
+
+/* A soft, expanding ring behind the chat button draws the eye to the AI.
+   It calms down once the chat is opened. */
+.chat-fab {
+  position: relative;
+}
+.chat-fab::before {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 55%, transparent), transparent 70%);
+  z-index: -1;
+  animation: fabPulse 2.6s ease-out infinite;
+}
+.chat-fab.open::before {
+  animation: none;
+  opacity: 0;
+}
+@keyframes fabPulse {
+  0% { transform: scale(0.85); opacity: 0.7; }
+  70% { transform: scale(1.55); opacity: 0; }
+  100% { transform: scale(1.55); opacity: 0; }
+}
+
+/* ============================================================
+   ONE mascot that lives on the chat button. It rests in the corner as the
+   chat bubble, morphs into a little robot, waves, rolls, jumps, sometimes
+   swells into a huge demon with an evil laugh, then takes off (helicopter
+   rotor) and flies a loop around the screen before landing back home.
+   Clicking it always opens the chat.
+   ============================================================ */
+
+/* --- crossfade between the chat-bubble face and the robot --- */
+.fab-box,
+.fab-mascot {
+  grid-area: 1 / 1;
+  transition: opacity 0.5s ease, transform 0.5s ease;
+}
+.fab-box {
+  font-size: 24px;
+  line-height: 1;
+}
+.fab-mascot {
+  position: relative;
+  width: 44px;
+  height: 50px;
+  opacity: 0;
+  transform: scale(0.4) rotate(-10deg);
+}
+.chat-fab.as-box .fab-box { opacity: 1; transform: scale(1); }
+.chat-fab.as-box .fab-mascot { opacity: 0; transform: scale(0.4); }
+.chat-fab.as-bot .fab-box { opacity: 0; transform: scale(0.4); }
+.chat-fab.as-bot .fab-mascot { opacity: 1; transform: scale(1) rotate(0deg); }
+
+/* In robot form the coloured pod + attention ring fade so the bot shows bare. */
+.chat-fab.as-bot {
+  background: transparent;
+  box-shadow: none;
+}
+.chat-fab.as-bot::before { opacity: 0; animation: none; }
+
+/* --- the robot itself (colours transition slowly for the demon morph) --- */
+.fm-head {
+  position: absolute;
+  top: 8px;
+  left: 4px;
+  width: 36px;
+  height: 26px;
+  border-radius: 10px;
+  background: linear-gradient(160deg, #eef2ff, #c7d2fe);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, #fff);
+  box-shadow: inset 0 -3px 6px rgba(99, 102, 241, 0.25), 0 3px 8px -3px rgba(30, 30, 60, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: background 0.9s ease, border-color 0.9s ease, box-shadow 0.9s ease;
+}
+.fm-eye {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-ink);
+  animation: mascotBlink 3.4s infinite;
+  transition: background 0.9s ease, box-shadow 0.9s ease;
+}
+@keyframes mascotBlink {
+  0%, 92%, 100% { transform: scaleY(1); }
+  95% { transform: scaleY(0.1); }
+}
+.fm-antenna {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 2px;
+  height: 9px;
+  transform: translateX(-50%);
+  background: color-mix(in srgb, var(--accent) 60%, #fff);
+}
+.fm-antenna::after {
+  content: "";
+  position: absolute;
+  top: -5px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-2);
+  box-shadow: 0 0 8px 1px color-mix(in srgb, var(--accent-2) 70%, transparent);
+  animation: mascotBlink 2s infinite;
+}
+.fm-body {
+  position: absolute;
+  top: 31px;
+  left: 7px;
+  width: 30px;
+  height: 15px;
+  border-radius: 8px 8px 6px 6px;
+  background: linear-gradient(160deg, var(--accent), var(--accent-2));
+  box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.3), 0 4px 10px -4px rgba(99, 102, 241, 0.6);
+  transition: background 0.9s ease, box-shadow 0.9s ease;
+}
+.fm-arm {
+  position: absolute;
+  top: 32px;
+  right: -3px;
+  width: 11px;
+  height: 3px;
+  border-radius: 2px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  transform-origin: left center;
+  transform: rotate(-8deg);
+}
+.chat-fab.waving .fm-arm { animation: fmWave 0.4s ease-in-out infinite; }
+@keyframes fmWave {
+  0%, 100% { transform: rotate(-8deg); }
+  50% { transform: rotate(-52deg); }
+}
+.fm-legs {
+  position: absolute;
+  top: 45px;
+  left: 12px;
+  width: 20px;
+  height: 8px;
+}
+.fm-legs i {
+  position: absolute;
+  top: 0;
+  width: 5px;
+  height: 8px;
+  border-radius: 3px;
+  background: var(--accent-ink);
+  transition: background 0.9s ease;
+}
+.fm-legs i:first-child { left: 0; animation: mascotDangle 1.4s ease-in-out infinite; }
+.fm-legs i:last-child { right: 0; animation: mascotDangle 1.4s ease-in-out infinite reverse; }
+@keyframes mascotDangle {
+  0%, 100% { transform: rotate(-10deg); }
+  50% { transform: rotate(10deg); }
+}
+
+/* Helicopter rotor: only spins while flying. */
+.fm-rotor {
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  width: 50px;
+  height: 6px;
+  transform: translateX(-50%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.fm-rotor::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--accent-ink) 85%, transparent), transparent 75%);
+  animation: rotorBlur 0.1s linear infinite;
+}
+.fm-rotor::after {
+  content: "";
+  position: absolute;
+  top: 5px;
+  left: 50%;
+  width: 2px;
+  height: 6px;
+  transform: translateX(-50%);
+  background: var(--accent-ink);
+}
+@keyframes rotorBlur {
+  0%, 100% { transform: scaleX(1); opacity: 0.85; }
+  50% { transform: scaleX(0.22); opacity: 0.5; }
+}
+.chat-fab.flying .fm-rotor { opacity: 1; }
+
+/* --- motion states (only one runs at a time, driven by JS) --- */
+.chat-fab.flying {
+  animation: fabFly 13s ease-in-out;
+  z-index: 65;
+}
+@keyframes fabFly {
+  0%   { transform: translate(0, 0) rotate(0deg); }
+  7%   { transform: translate(-8vw, -34vh) rotate(-14deg); }
+  22%  { transform: translate(-55vw, -62vh) rotate(10deg); }
+  38%  { transform: translate(-82vw, -30vh) rotate(-10deg); }
+  54%  { transform: translate(-48vw, -66vh) rotate(12deg); }
+  70%  { transform: translate(-18vw, -40vh) rotate(-8deg); }
+  85%  { transform: translate(-6vw, -14vh) rotate(6deg); }
+  100% { transform: translate(0, 0) rotate(0deg); }
+}
+
+.chat-fab.rolling { animation: fabRoll 1.2s ease-in-out; }
+@keyframes fabRoll {
+  0%   { transform: translateX(0) rotate(0deg); }
+  50%  { transform: translateX(-120px) rotate(-360deg); }
+  100% { transform: translateX(0) rotate(0deg); }
+}
+
+.chat-fab.jumping { animation: fabJump 0.7s ease-out; }
+@keyframes fabJump {
+  0%, 100% { transform: translateY(0); }
+  45% { transform: translateY(-42px); }
+  60% { transform: translateY(-42px); }
+}
+
+.chat-fab.huge {
+  animation: fabHuge 5s cubic-bezier(0.25, 0.6, 0.3, 1);
+  transform-origin: 100% 100%;
+  z-index: 70;
+}
+@keyframes fabHuge {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(5.5); }
+  80%  { transform: scale(5.5); }
+  100% { transform: scale(1); }
+}
+
+/* --- speech bubble: only pops up now and then, short lines --- */
+.fab-bubble {
+  position: absolute;
+  bottom: 66px;
+  right: 0;
+  width: max-content;
+  max-width: 180px;
+  text-align: center;
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  padding: 7px 12px;
+  border-radius: 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  opacity: 0;
+  transform: translateY(6px) scale(0.85);
+  transform-origin: bottom right;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  pointer-events: none;
+}
+.fab-bubble::after {
+  content: "";
+  position: absolute;
+  bottom: -6px;
+  right: 18px;
+  transform: rotate(45deg);
+  width: 12px;
+  height: 12px;
+  background: var(--card);
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.fab-bubble.show {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+/* --- waving stand-in chat button, left in the corner while the mascot flies --- */
+.fab-ghost {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 58px;
+  height: 58px;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: #fff;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 12px 28px -8px rgba(124, 111, 255, 0.6);
+  opacity: 0;
+  transform: scale(0.2);
+  transform-origin: bottom right;
+  transition: opacity 0.35s ease, transform 0.35s ease;
+  pointer-events: none;
+  z-index: 1;
+}
+.fab-ghost.show {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+}
+.fg-icon {
+  grid-area: 1 / 1;
+  font-size: 24px;
+  line-height: 1;
+}
+.fg-hand {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  font-size: 20px;
+  transform-origin: 60% 90%;
+  animation: ghostWave 0.6s ease-in-out infinite;
+}
+@keyframes ghostWave {
+  0%, 100% { transform: rotate(-12deg); }
+  50% { transform: rotate(18deg); }
+}
+
+/* --- mini mascot avatar used in the chat header + typing indicator --- */
+.chat-head-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.mini-bot {
+  position: relative;
+  display: inline-block;
+  width: 30px;
+  height: 26px;
+  border-radius: 9px;
+  background: linear-gradient(160deg, #eef2ff, #c7d2fe);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, #fff);
+  box-shadow: inset 0 -2px 5px rgba(99, 102, 241, 0.25);
+  flex: 0 0 auto;
+}
+.mini-bot .mb-eye {
+  position: absolute;
+  top: 9px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent-ink);
+  animation: mascotBlink 3.4s infinite;
+}
+.mini-bot .mb-eye:first-of-type { left: 8px; }
+.mini-bot .mb-eye:last-of-type { right: 8px; }
+.mini-bot .mb-mouth {
+  position: absolute;
+  bottom: 5px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 10px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent-ink);
+}
+.mini-bot.talking .mb-mouth { animation: mbTalk 0.28s ease-in-out infinite; }
+@keyframes mbTalk {
+  0%, 100% { height: 2px; }
+  50% { height: 7px; border-radius: 4px; }
+}
+.mini-bot.thinking { animation: mbBob 1s ease-in-out infinite; }
+@keyframes mbBob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+.chat-avatar { margin-right: 2px; }
+.chat-avatar.talking {
+  box-shadow: inset 0 -2px 5px rgba(99, 102, 241, 0.25),
+    0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+/* typing indicator: the mascot 'types' with bouncing dots */
+.chat-msg.typing .typing-dots { display: inline-flex; gap: 4px; }
+.typing-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.5;
+  animation: typingDot 1s ease-in-out infinite;
+}
+.typing-dots i:nth-child(2) { animation-delay: 0.15s; }
+.typing-dots i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes typingDot {
+  0%, 100% { transform: translateY(0); opacity: 0.4; }
+  50% { transform: translateY(-4px); opacity: 1; }
+}
+
+/* writing caret: the mascot 'writes' the reply out on the board */
+.type-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 1px;
+  vertical-align: -2px;
+  background: var(--accent);
+  animation: caretBlink 0.7s steps(1) infinite;
+}
+@keyframes caretBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fab-mascot,
+  .fab-ghost,
+  .fab-bubble { display: none; }
+  .chat-fab::before { animation: none; opacity: 0; }
+}
+
+/* Phone: keep everything, just tighten the flight loop so the little bot
+   doesn't skim off the edges. */
+@media (max-width: 560px) {
+  @keyframes fabFly {
+    0%   { transform: translate(0, 0) rotate(0deg); }
+    8%   { transform: translate(-10vw, -26vh) rotate(-12deg); }
+    25%  { transform: translate(-58vw, -52vh) rotate(10deg); }
+    45%  { transform: translate(-70vw, -24vh) rotate(-10deg); }
+    62%  { transform: translate(-40vw, -56vh) rotate(12deg); }
+    80%  { transform: translate(-14vw, -30vh) rotate(-8deg); }
+    100% { transform: translate(0, 0) rotate(0deg); }
+  }
+}
+
+/* -------- Professional polish -------- */
+/* Crisper primary buttons with a subtle top sheen. */
+.btn.primary {
+  background-image: linear-gradient(135deg, var(--accent), var(--accent-2));
+  position: relative;
+}
+.btn.primary::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.22), transparent 45%);
+  pointer-events: none;
+}
+/* Active nav link gets a subtle gradient underline for a refined feel. */
+.nav a.link.active {
+  position: relative;
+}
+.nav a.link.active::after {
+  content: "";
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 3px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+}
+/* Cards lift gently and their border warms on hover for an interactive feel. */
+.card {
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+.container .grid .card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+  box-shadow: var(--shadow);
 }
 
