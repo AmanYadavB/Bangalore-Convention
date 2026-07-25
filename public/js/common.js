@@ -227,10 +227,10 @@ function mountMascot() {
   ["pointerdown", "keydown", "touchstart"].forEach((ev) =>
     window.addEventListener(ev, unlock, { once: true, passive: true })
   );
-  // Ask for the mic on the first interaction so a clap can flip the theme.
-  ["pointerdown", "keydown", "touchstart"].forEach((ev) =>
-    window.addEventListener(ev, initClap, { once: true, passive: true })
-  );
+  // // Ask for the mic on the first interaction so a clap can flip the theme.
+  // ["pointerdown", "keydown", "touchstart"].forEach((ev) =>
+  //   window.addEventListener(ev, initClap, { once: true, passive: true })
+  // );
   const canPlay = () => actx && actx.state === "running" && !document.hidden;
 
   function tone(freq, start, dur, type, peak) {
@@ -420,68 +420,68 @@ function mountMascot() {
 
   // ---- Clap to flip the theme (dark <-> light). Best-effort: uses the mic to
   // hear a sharp clap; if the browser blocks the mic, it simply does nothing.
-  let clapStarted = false;
-  function onClap() {
-    toggleTheme();
-    say("wooooh seriously?! \uD83D\uDE32", 2400);
-    if (canPlay()) boops();
-  }
-  async function initClap() {
-    if (clapStarted) return;
-    clapStarted = true;
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const ac = actx || new (window.AudioContext || window.webkitAudioContext)();
-      actx = ac;
-      const src = ac.createMediaStreamSource(stream);
-      const analyser = ac.createAnalyser();
-      analyser.fftSize = 1024;
-      analyser.smoothingTimeConstant = 0;
-      src.connect(analyser);
-      const time = new Uint8Array(analyser.fftSize);
-      const freq = new Uint8Array(analyser.frequencyBinCount);
-      const hzPerBin = ac.sampleRate / 2 / analyser.frequencyBinCount;
-      let prevPeak = 0;
-      let lastClap = 0;
-      // A hand-clap is special: a very short, LOUD spike (fast attack from near
-      // silence) whose energy is spread BROADBAND and BRIGHT (lots of treble).
-      // Voices, music and the mascot's own beeps are tonal / low-pitched, so we
-      // reject anything that isn't both wide-band and bright \u2014 that way ONLY a
-      // real clap flips the theme, not other sounds.
-      (function listen() {
-        analyser.getByteTimeDomainData(time);
-        analyser.getByteFrequencyData(freq);
-        let peak = 0;
-        for (let i = 0; i < time.length; i++) {
-          const v = Math.abs(time[i] - 128);
-          if (v > peak) peak = v;
-        }
-        let total = 0;
-        let high = 0;
-        let loudBins = 0;
-        for (let i = 0; i < freq.length; i++) {
-          const v = freq[i];
-          total += v;
-          if (i * hzPerBin > 2500) high += v; // treble energy
-          if (v > 96) loudBins++; // how many bands lit up
-        }
-        const highRatio = total > 0 ? high / total : 0; // brightness
-        const spread = loudBins / freq.length; // broadband-ness
-        const now = performance.now();
-        const sharp = peak > 80 && prevPeak < 22; // sudden loud from quiet
-        const clapLike = spread > 0.28 && highRatio > 0.3;
-        if (sharp && clapLike && now - lastClap > 1200) {
-          lastClap = now;
-          onClap();
-        }
-        prevPeak = peak;
-        requestAnimationFrame(listen);
-      })();
-    } catch (e) {
-      /* mic blocked or unavailable \u2014 clap-to-theme just stays off */
-    }
-  }
+  // let clapStarted = false;
+  // function onClap() {
+  //   toggleTheme();
+  //   say("wooooh seriously?! \uD83D\uDE32", 2400);
+  //   if (canPlay()) boops();
+  // }
+  // async function initClap() {
+  //   if (clapStarted) return;
+  //   clapStarted = true;
+  //   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+  //   try {
+  //     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  //     const ac = actx || new (window.AudioContext || window.webkitAudioContext)();
+  //     actx = ac;
+  //     const src = ac.createMediaStreamSource(stream);
+  //     const analyser = ac.createAnalyser();
+  //     analyser.fftSize = 1024;
+  //     analyser.smoothingTimeConstant = 0;
+  //     src.connect(analyser);
+  //     const time = new Uint8Array(analyser.fftSize);
+  //     const freq = new Uint8Array(analyser.frequencyBinCount);
+  //     const hzPerBin = ac.sampleRate / 2 / analyser.frequencyBinCount;
+  //     let prevPeak = 0;
+  //     let lastClap = 0;
+  //     // A hand-clap is special: a very short, LOUD spike (fast attack from near
+  //     // silence) whose energy is spread BROADBAND and BRIGHT (lots of treble).
+  //     // Voices, music and the mascot's own beeps are tonal / low-pitched, so we
+  //     // reject anything that isn't both wide-band and bright \u2014 that way ONLY a
+  //     // real clap flips the theme, not other sounds.
+  //     (function listen() {
+  //       analyser.getByteTimeDomainData(time);
+  //       analyser.getByteFrequencyData(freq);
+  //       let peak = 0;
+  //       for (let i = 0; i < time.length; i++) {
+  //         const v = Math.abs(time[i] - 128);
+  //         if (v > peak) peak = v;
+  //       }
+  //       let total = 0;
+  //       let high = 0;
+  //       let loudBins = 0;
+  //       for (let i = 0; i < freq.length; i++) {
+  //         const v = freq[i];
+  //         total += v;
+  //         if (i * hzPerBin > 2500) high += v; // treble energy
+  //         if (v > 96) loudBins++; // how many bands lit up
+  //       }
+  //       const highRatio = total > 0 ? high / total : 0; // brightness
+  //       const spread = loudBins / freq.length; // broadband-ness
+  //       const now = performance.now();
+  //       const sharp = peak > 80 && prevPeak < 22; // sudden loud from quiet
+  //       const clapLike = spread > 0.28 && highRatio > 0.3;
+  //       if (sharp && clapLike && now - lastClap > 1200) {
+  //         lastClap = now;
+  //         onClap();
+  //       }
+  //       prevPeak = peak;
+  //       requestAnimationFrame(listen);
+  //     })();
+  //   } catch (e) {
+  //     /* mic blocked or unavailable \u2014 clap-to-theme just stays off */
+  //   }
+  // }
 
   // Start life as the chat bubble in the corner, then begin the loop.
   setForm("box");
@@ -630,6 +630,38 @@ function mountChat() {
       : Math.min(38, Math.max(9, Math.round(2200 / len)));
   }
 
+  // Build an assistant reply that has the mascot standing right next to it, so
+  // it feels like the mascot himself is there producing the words.
+  function addAssistantBubble() {
+    const row = document.createElement("div");
+    row.className = "chat-msg assistant bot-row";
+    const bot = document.createElement("span");
+    bot.className = "msg-bot mini-bot";
+    bot.setAttribute("aria-hidden", "true");
+    bot.innerHTML =
+      '<i class="mb-eye"></i><i class="mb-eye"></i><span class="mb-mouth"></span>' +
+      '<span class="mb-pen">\u270F\uFE0F</span>' +
+      '<span class="mb-waves"><i></i><i></i><i></i></span>';
+    const txt = document.createElement("span");
+    txt.className = "msg-text";
+    row.appendChild(bot);
+    row.appendChild(txt);
+    log.appendChild(row);
+    scrollToMsg(row, "assistant");
+    return { row, bot, txt };
+  }
+
+  // Reveal a reply as if the mascot is scribbling it on screen (text) or saying
+  // it out loud (voice) \u2014 the little mascot animates the whole time.
+  function typeReply(shown, voice, done) {
+    const { bot, txt } = addAssistantBubble();
+    bot.classList.add(voice ? "speaking" : "writing");
+    typeOut(txt, shown, writeSpeed(shown, voice), () => {
+      bot.classList.remove("writing", "speaking");
+      if (done) done();
+    });
+  }
+
   const isMobile = () => window.innerWidth <= 720;
 
   // Keep the chat panel fitted inside the *visible* viewport. When the mobile
@@ -670,7 +702,7 @@ function mountChat() {
         : isAdmin()
         ? "Hi! Ask me about registrations, payments collected, pending amounts or expenses \u2014 I have the live numbers."
         : "Hi! I can help with registration, pricing, dates and what's included. What would you like to know?";
-      addMsg("assistant", greeting);
+      typeReply(greeting, false);
     }
     if (window.visualViewport) {
       window.visualViewport.addEventListener("resize", fitPanel);
@@ -837,21 +869,14 @@ function mountChat() {
     const shown = message || "Okay.";
     history.push({ role: "assistant", content: shown });
     if (voice) {
-      // Show the text exactly when the voice starts, then write it out so it
-      // feels like the same mascot is speaking AND writing it on a board.
+      // Start writing the words exactly when the voice starts, so it feels like
+      // the mascot itself is standing there saying AND writing the reply.
       speak(shown, () => {
-        const el = addMsg("assistant", "");
-        typeOut(el, shown, writeSpeed(shown, true));
+        typeReply(shown, true);
         if (action) executeAction(action, html);
       });
     } else {
-      // Type it out character by character, like someone writing on a board.
-      const el = addMsg("assistant", "");
-      const av = document.getElementById("chatAvatar");
-      if (av) av.classList.add("talking");
-      typeOut(el, shown, writeSpeed(shown, false), () => {
-        if (av) av.classList.remove("talking");
-      });
+      typeReply(shown, false);
       if (action) executeAction(action, html);
     }
   }
