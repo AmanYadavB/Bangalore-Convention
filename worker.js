@@ -590,6 +590,7 @@ async function handleApi(request, env) {
         "",
         "If user asks silly and unclear questions: e.g. 'what are you doing', 'what is this', 'what is the meaning of life', 'what is the weather', 'what is 2+2', 'what is the time', 'what is the date', 'what is the capital of France', 'what is the square root of 16', 'what is the answer to life, the universe, and everything', 'what is the airspeed velocity of an unladen swallow':",
         "Answer with a short teasing line, e.g. Bro, are you delulu? I can only help with the Bangalore Convention, not random trivia. Try asking about registration, pricing, or travel to the convention.",
+        "",
         "If the answer is super obvious:",
         "'Easy one ' + answer",
         "'Freebie bro ' + answer",
@@ -788,9 +789,9 @@ async function handleApi(request, env) {
       (typeof body.text === "string" ? body.text : "").replace(/\s+/g, " ").trim().slice(0, 800);
     if (!text) return json({ error: "text required" }, 400);
     try {
-      const res = await env.AI.run("@cf/deepgram/aura-1", {
+      const res = await env.AI.run("@cf/deepgram/aura-2-es", {
         text,
-        voice: "asteria-en",
+        voice: "diana",
       });
       const audio = res && res.audio ? res.audio : null; // base64 mp3
       if (!audio) return json({ error: "no audio produced" }, 502);
