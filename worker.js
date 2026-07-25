@@ -685,7 +685,7 @@ async function handleApi(request, env) {
       content.push(
         "",
         "== VOICE MODE (the user is listening, not reading) ==",
-        "Answer in 1-2 short spoken sentences (about 40 words max). Be warm and natural. No lists, no markdown, no emojis - just plain speech."
+        "Answer in 1 short spoken sentence (about 20 words max). Be warm and natural. No lists, no markdown, no emojis - just plain speech."
       );
     }
 
@@ -773,7 +773,7 @@ async function handleApi(request, env) {
     console.log("chat fallback:", detail);
     return json({
       reply:
-        "I'm taking a short breather right now and couldn't work that out this second \uD83D\uDE4F. Please try again in a moment. Meanwhile you can register or check details on the Register page, or reach the organising committee for anything urgent.",
+        "I'm taking a quick break. Please try again shortly, or contact the organisers if you need urgent help. Thanks for your patience!",
       degraded: true,
       detail,
     });
@@ -788,9 +788,9 @@ async function handleApi(request, env) {
       (typeof body.text === "string" ? body.text : "").replace(/\s+/g, " ").trim().slice(0, 800);
     if (!text) return json({ error: "text required" }, 400);
     try {
-      const res = await env.AI.run("@cf/myshell-ai/melotts", {
-        prompt: text,
-        lang: "en",
+      const res = await env.AI.run("@cf/deepgram/aura-1", {
+        text,
+        voice: "asteria-en",
       });
       const audio = res && res.audio ? res.audio : null; // base64 mp3
       if (!audio) return json({ error: "no audio produced" }, 502);
