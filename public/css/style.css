@@ -1824,6 +1824,13 @@ tbody tr:hover {
   opacity: 1;
   transform: translateY(0) scale(1);
 }
+/* Never show a floating message while the mascot is rolling or huge, even if
+   a bubble timer from the previous scene is still running. */
+.chat-fab.rolling .fab-bubble,
+.chat-fab.huge .fab-bubble {
+  opacity: 0 !important;
+  transform: translateY(6px) scale(0.85) !important;
+}
 
 /* --- waving stand-in chat button, left in the corner while the mascot flies --- */
 .fab-ghost {
