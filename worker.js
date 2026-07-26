@@ -606,7 +606,7 @@ async function handleApi(request, env) {
           catLines +
           ".",
         'Once you have ALL FOUR valid details, append [[ACTION]]{"action":"review_booking","name":"...","email":"...","phone":"...","category":"CATEGORY_ID"}. The site then shows a confirmation card and the user taps Confirm to register — after which the Razorpay payment window opens automatically so they can pay right then. Never say the booking is already done; say you have prepared it for them to review and confirm.',
-        'Contact organiser: when you genuinely cannot answer something and the user should reach the organising team, append [[ACTION]]{"action":"contact_organiser","subject":"<one short line describing what they need>"}. This opens a contact form that fires an email to the team. Only use it when the answer is truly unknown or organisation-specific — do NOT use it for questions you can answer yourself.',
+        'Contact organiser: ONLY when you genuinely cannot answer a question because the information is organisation-specific, unavailable, or unknown. In those cases, append [[ACTION]]{"action":"contact_organiser","subject":"<one short line describing what they need>"}. Do NOT use this action merely because the user asks to contact the organisers, asks for organiser contact details, requests that a message be sent, or says they want to get in touch. If you can answer the question yourself, answer it directly. Use contact_organiser only as a last resort when the required information is not available to you and the organising team is the only reliable source.',
     ];
 
     // Knowledge fed by developers on the Feed AI page (authoritative extras).
