@@ -882,6 +882,7 @@ function mountChat() {
           status.hidden = false;
           status.className = "cc-status cc-err";
           status.textContent = "Couldn\u2019t send \u2014 please try again.";
+          console.error("[chat] contact send failed", res.status, data);
         }
       } catch (e) {
         sendBtn.disabled = false;
