@@ -804,6 +804,96 @@ function mountChat() {
       .addEventListener("click", () => (window.location.href = target));
   }
 
+  // --- Contact-organiser card ---------------------------------------------------
+  // Shown when the bot genuinely can't answer; fires an email to the team.
+  function showContactCard(prefillSubject) {
+    const CATEGORIES = ["Registration", "Payment", "Schedule", "Accommodation", "Travel", "General"];
+    const catOpts = CATEGORIES.map(
+      (c) => '<option value="' + escapeHtml(c) + '">' + escapeHtml(c) + "</option>"
+    ).join("");
+
+    const card = document.createElement("div");
+    card.className = "chat-msg assistant chat-contact";
+    card.innerHTML =
+      '<div class="cc-head">\uD83D\uDCE7 Drop the team a message</div>' +
+      '<div class="cc-fields">' +
+        '<input class="cc-input" id="ccName"  type="text"  placeholder="Your name"  autocomplete="name" />' +
+        '<input class="cc-input" id="ccEmail" type="email" placeholder="Your email" autocomplete="email" />' +
+        '<select class="cc-input" id="ccCat"><option value="" disabled selected>Category&hellip;</option>' + catOpts + '</select>' +
+        '<input class="cc-input" id="ccSubj" type="text" placeholder="Subject" value="' + escapeHtml(prefillSubject) + '" />' +
+        '<textarea class="cc-input cc-desc" id="ccDesc" rows="3" placeholder="Describe your question or issue\u2026"></textarea>' +
+      '</div>' +
+      '<div class="cc-actions">' +
+        '<button type="button" class="btn ghost small cc-cancel">Cancel</button>' +
+        '<button type="button" class="btn primary small cc-send">Send \uD83D\uDE80</button>' +
+      '</div>' +
+      '<div class="cc-status" hidden></div>';
+
+    log.appendChild(card);
+    log.scrollTop = log.scrollHeight;
+
+    card.querySelector(".cc-cancel").addEventListener("click", () => card.remove());
+
+    card.querySelector(".cc-send").addEventListener("click", async () => {
+      const nameVal  = card.querySelector("#ccName").value.trim();
+      const emailVal = card.querySelector("#ccEmail").value.trim();
+      const catVal   = card.querySelector("#ccCat").value;
+      const subjVal  = card.querySelector("#ccSubj").value.trim();
+      const descVal  = card.querySelector("#ccDesc").value.trim();
+      const status   = card.querySelector(".cc-status");
+
+      if (!nameVal || !emailVal || !catVal || !subjVal || !descVal) {
+        status.hidden = false;
+        status.className = "cc-status cc-err";
+        status.textContent = "Please fill in all fields.";
+        return;
+      }
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(emailVal)) {
+        status.hidden = false;
+        status.className = "cc-status cc-err";
+        status.textContent = "Please enter a valid email address.";
+        return;
+      }
+
+      const sendBtn = card.querySelector(".cc-send");
+      sendBtn.disabled = true;
+      sendBtn.textContent = "Sending\u2026";
+      status.hidden = true;
+
+      try {
+        const res = await fetch("/api/contact", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: nameVal, email: emailVal,
+            category: catVal, subject: subjVal, description: descVal,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.ok) {
+          card.querySelector(".cc-fields").remove();
+          card.querySelector(".cc-actions").remove();
+          status.hidden = false;
+          status.className = "cc-status cc-ok";
+          status.textContent = "\u2705 Sent! The team will reply to " + emailVal + " soon.";
+        } else {
+          sendBtn.disabled = false;
+          sendBtn.textContent = "Send \uD83D\uDE80";
+          status.hidden = false;
+          status.className = "cc-status cc-err";
+          status.textContent = "Couldn\u2019t send \u2014 please try again.";
+        }
+      } catch (e) {
+        sendBtn.disabled = false;
+        sendBtn.textContent = "Send \uD83D\uDE80";
+        status.hidden = false;
+        status.className = "cc-status cc-err";
+        status.textContent = "Network error \u2014 please check your connection.";
+      }
+    });
+  }
+  // ---------------------------------------------------------------------------
+
   // Render an embedded Google Maps route card (no API key needed) for travel to
   // the convention. Only ever called for convention-related travel.
   function showMapCard(from, to) {
@@ -922,6 +1012,8 @@ function mountChat() {
       showPageDelete(action);
     } else if (action.action === "show_map") {
       showMapCard(action.from, action.to);
+    } else if (action.action === "contact_organiser") {
+      showContactCard(action.subject || "");
     }
   }
 
