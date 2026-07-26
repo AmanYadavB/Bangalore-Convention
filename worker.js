@@ -606,6 +606,7 @@ async function handleApi(request, env) {
           catLines +
           ".",
         'Once you have ALL FOUR valid details, append [[ACTION]]{"action":"review_booking","name":"...","email":"...","phone":"...","category":"CATEGORY_ID"}. The site then shows a confirmation card and the user taps Confirm to actually register - so never say the booking is already done; say you have prepared it for them to review and confirm.',
+        'Contact organiser: when you genuinely cannot answer something and the user should reach the organising team, append [[ACTION]]{"action":"contact_organiser","subject":"<one short line describing what they need>"}. This opens a contact form that fires an email to the team. Only use it when the answer is truly unknown or organisation-specific — do NOT use it for questions you can answer yourself.',
     ];
 
     // Knowledge fed by developers on the Feed AI page (authoritative extras).
@@ -764,6 +765,43 @@ async function handleApi(request, env) {
       degraded: true,
       detail,
     });
+  }
+
+  // ---- Contact / email forwarding to support@biaac.com ----
+  if (resource === "contact" && method === "POST") {
+    const { name, email, subject, category, description } = body;
+    if (!name || !email || !subject || !description) {
+      return json({ error: "name, email, subject and description are required." }, 400);
+    }
+    const emailBody = [
+      "New message from the Convention Helper contact form",
+      "",
+      "From    : " + name + " <" + email + ">",
+      "Category: " + (category || "General"),
+      "Subject : " + subject,
+      "",
+      description,
+    ].join("\n");
+    try {
+      const mcRes = await fetch("https://api.mailchannels.net/tx/v1/send", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          personalizations: [{
+            to: [{ email: "support@biaac.com", name: "Convention Organising Committee" }],
+            reply_to: { email: String(email).slice(0, 254), name: String(name).slice(0, 100) },
+          }],
+          from: { email: "noreply@biaac.com", name: "Convention Helper" },
+          subject: "[" + (category || "General") + "] " + subject,
+          content: [{ type: "text/plain", value: emailBody }],
+        }),
+      });
+      if (mcRes.ok || mcRes.status === 202) return json({ ok: true });
+      const errText = await mcRes.text().catch(() => "");
+      return json({ error: "Email service error: " + mcRes.status, detail: errText }, 502);
+    } catch (err) {
+      return json({ error: "Failed to send: " + (err && err.message ? err.message : err) }, 502);
+    }
   }
 
   // ---- Neural text-to-speech (Workers AI MeloTTS; no extra key needed) ----
