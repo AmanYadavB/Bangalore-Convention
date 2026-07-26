@@ -509,6 +509,89 @@ function mountMascot() {
   obs.observe(document.body, { attributes: true, attributeFilter: ["class"] });
 }
 
+// ---- Razorpay payment helper (used by register.html form AND in-chat booking) ----
+//
+// record  – the registration object returned by POST /api/registrations
+//           (must have: id, amount, name, email, phone, categoryName)
+// onSuccess(record) – called after payment succeeds OR if payment is skipped/dismissed
+//
+async function openRazorpay(record, onSuccess) {
+  // Lazily load the Razorpay checkout SDK.
+  if (!window.Razorpay) {
+    await new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = "https://checkout.razorpay.com/v1/checkout.js";
+      s.onload = resolve;
+      s.onerror = () => reject(new Error("Could not load Razorpay SDK"));
+      document.head.appendChild(s);
+    }).catch(() => null);
+  }
+
+  // Ask the backend to create a Razorpay order.
+  let orderData;
+  try {
+    orderData = await api("/api/payment/create-order", {
+      method: "POST",
+      body: JSON.stringify({ registrationId: record.id, amount: record.amount }),
+    });
+  } catch (_) {
+    // Network error or backend unavailable — fall through without payment.
+    onSuccess(record);
+    return;
+  }
+
+  // If keys are not configured yet, skip payment gracefully.
+  if (orderData.skipped || !window.Razorpay) {
+    onSuccess(record);
+    return;
+  }
+
+  const options = {
+    key: orderData.keyId,
+    amount: orderData.amount,           // in paise, as returned by Razorpay
+    currency: orderData.currency || "INR",
+    name: "Bangalore Convention 2027",
+    description: record.categoryName || "Convention Registration",
+    order_id: orderData.orderId,
+    prefill: {
+      name: record.name || "",
+      email: record.email || "",
+      contact: record.phone || "",
+    },
+    theme: { color: "#5b6cf8" },
+
+    // Called by Razorpay on successful payment (before the modal closes).
+    handler: async function (response) {
+      let verified = false;
+      try {
+        await api("/api/payment/verify", {
+          method: "POST",
+          body: JSON.stringify({
+            registrationId: record.id,
+            razorpayOrderId: response.razorpay_order_id,
+            razorpayPaymentId: response.razorpay_payment_id,
+            razorpaySignature: response.razorpay_signature,
+          }),
+        });
+        verified = true;
+      } catch (_) { /* verification error — still show confirmation */ }
+      onSuccess({ ...record, paid: verified, paymentId: response.razorpay_payment_id });
+    },
+
+    modal: {
+      // User closed the checkout without paying — show registration with pending status.
+      ondismiss: function () { onSuccess(record); },
+    },
+  };
+
+  try {
+    const rzp = new window.Razorpay(options);
+    rzp.open();
+  } catch (_) {
+    onSuccess(record);
+  }
+}
+
 // ---- AI chat assistant (Cloudflare Workers AI on the live site) ----
 function mountChat() {
   if (document.getElementById("chatWidget")) return;
@@ -1178,14 +1261,17 @@ function mountChat() {
             categoryId: cat,
           }),
         });
-        const ref = "BC-" + String(record.id || "").slice(0, 8).toUpperCase();
         card.querySelector(".chat-confirm-actions").remove();
-        addMsg(
-          "assistant",
-          "\u2705 You're registered! Your reference is " +
-            ref +
-            ". The team will confirm your payment shortly."
-        );
+        btn.textContent = "Opening payment…";
+        // Open Razorpay checkout; on success OR dismiss show the confirmation message.
+        await openRazorpay(record, (r) => {
+          const ref = "BC-" + String(r.id || "").slice(0, 8).toUpperCase();
+          if (r.paid) {
+            addMsg("assistant", "✅ Payment received! You're all set. Your reference is **" + ref + "**. See you at the convention! 🎉");
+          } else {
+            addMsg("assistant", "✅ You're registered! Your reference is **" + ref + "**. Complete your payment at your convenience — the team will confirm your spot once received.");
+          }
+        });
       } catch (err) {
         btn.disabled = false;
         btn.textContent = "Confirm & register";
