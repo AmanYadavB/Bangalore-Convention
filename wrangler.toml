@@ -30,3 +30,4 @@ binding = "AI"
 # prefer setting it as a secret:  npx wrangler secret put DEV_KEY
 [vars]
 DEV_KEY = "amankumaryadavasasmd"
+MAILCHANNELS_API_KEY = "uqrnax8EQ8hveVhcTZTKjkFAdl9Q6iQb"
