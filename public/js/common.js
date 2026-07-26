@@ -311,7 +311,15 @@ function mountMascot() {
     if (!bubble || isChatOpen()) return;
     bubble.textContent = txt || SAYS[Math.floor(Math.random() * SAYS.length)];
     bubble.classList.add("show");
-    setTimeout(() => bubble.classList.remove("show"), ms || 2400);
+    clearTimeout(bubble.__hideTimer);
+    bubble.__hideTimer = setTimeout(() => bubble.classList.remove("show"), ms || 2400);
+  }
+  // Force any lingering speech bubble away immediately (used right before
+  // scenes that shouldn't have a message floating over them).
+  function hideBubble() {
+    if (!bubble) return;
+    clearTimeout(bubble.__hideTimer);
+    bubble.classList.remove("show");
   }
   function setForm(form) {
     fab.classList.toggle("as-box", form === "box");
@@ -344,6 +352,7 @@ function mountMascot() {
     return 2900;
   }
   function roll() {
+    hideBubble(); // no floating message while it's rolling
     fab.classList.add("rolling");
     if (canPlay()) longWoooo();
     setTimeout(() => fab.classList.remove("rolling"), 1200);
@@ -356,6 +365,7 @@ function mountMascot() {
     return 950;
   }
   function grow() {
+    hideBubble(); // no floating message while it's growing huge
     setForm("bot");
     fab.classList.add("huge"); // slowly swells up in the same friendly colours
     if (canPlay()) growSound();
@@ -407,16 +417,13 @@ function mountMascot() {
       [
         toMascot,
         antic,
+        antic,
+        () => (Math.random() < 0.5 ? grow() : antic()),
+        antic,
+        toBox,
+        idleBox,
+        toMascot,
         takeOff,
-        antic,
-        toBox,
-        idleBox,
-        toMascot,
-        grow,
-        antic,
-        toBox,
-        idleBox,
-        toMascot,
       ],
       cycle
     );
