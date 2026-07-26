@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Register · Bangalore Convention</title>
     <link rel="stylesheet" href="css/style.css" />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
   </head>
   <body>
     <div id="nav"></div>
@@ -126,11 +127,11 @@
             method: "POST",
             body: JSON.stringify(payload),
           });
-          toast("Registration confirmed! 🎉", "success");
-          showConfirmation(record);
+          btn.textContent = "Opening payment…";
+          // Open Razorpay checkout; showConfirmation is called after payment or on dismiss.
+          await openRazorpay(record, showConfirmation);
         } catch (err) {
           toast(err.message, "error");
-        } finally {
           btn.disabled = false;
           btn.textContent = "Confirm Registration";
         }
@@ -138,16 +139,17 @@
 
       function showConfirmation(r) {
         const ref = "BC-" + String(r.id || "").slice(0, 8).toUpperCase();
+        const isPaid = !!r.paid;
         const layout = document.getElementById("reg-layout");
         layout.style.gridTemplateColumns = "1fr";
         layout.innerHTML = `
           <div class="card" style="max-width:560px;margin:0 auto;text-align:center">
             <div style="width:64px;height:64px;border-radius:50%;margin:6px auto 14px;
                         display:grid;place-items:center;font-size:32px;
-                        background:rgba(63,208,127,0.15);color:var(--green)">✓</div>
-            <h2 style="margin:0 0 6px">You're registered!</h2>
+                        background:rgba(63,208,127,0.15);color:var(--green)">${isPaid ? "💳" : "✓"}</div>
+            <h2 style="margin:0 0 6px">${isPaid ? "Payment received!" : "You're registered!"}</h2>
             <p class="muted" style="margin:0 0 20px">
-              Thanks, ${escapeHtml(r.name)}. We've saved your spot for the convention.
+              Thanks, ${escapeHtml(r.name)}. ${isPaid ? "Your payment is confirmed and your spot is reserved." : "We've saved your spot for the convention."}
             </p>
             <div style="text-align:left;border:1px solid var(--border);border-radius:12px;padding:16px">
               <div class="bar-row" style="grid-template-columns:1fr auto;margin-bottom:8px">
@@ -157,16 +159,17 @@
                 <span class="muted">Category</span><b>${escapeHtml(r.categoryName)}</b>
               </div>
               <div class="bar-row" style="grid-template-columns:1fr auto;margin-bottom:8px">
-                <span class="muted">Amount payable</span><b>${money(r.amount)}</b>
+                <span class="muted">Amount</span><b>${money(r.amount)}</b>
               </div>
               <div class="bar-row" style="grid-template-columns:1fr auto;margin:0">
                 <span class="muted">Payment status</span>
-                <span class="pill pending">Pending</span>
+                <span class="pill ${isPaid ? "paid" : "pending"}">${isPaid ? "Paid ✓" : "Pending"}</span>
               </div>
             </div>
             <p class="muted" style="font-size:13px;margin:16px 0 20px">
-              The organising team will mark your payment as received. Keep your
-              booking reference handy.
+              ${isPaid
+                ? "Your payment has been received. The team will be in touch shortly."
+                : "You can pay online now or hand it to the team at the venue. Keep your booking reference handy."}
             </p>
             <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
               <button class="btn primary" type="button" onclick="location.reload()">Register another</button>
