@@ -605,7 +605,7 @@ async function handleApi(request, env) {
         "Booking: gather the person's full name, email, phone and chosen category across the conversation. Ask for just ONE detail at a time - each question a single short, friendly line (1-2 lines max). Never list all the fields at once. The category id must be one of: " +
           catLines +
           ".",
-        'Once you have ALL FOUR valid details, append [[ACTION]]{"action":"review_booking","name":"...","email":"...","phone":"...","category":"CATEGORY_ID"}. The site then shows a confirmation card and the user taps Confirm to actually register - so never say the booking is already done; say you have prepared it for them to review and confirm.',
+        'Once you have ALL FOUR valid details, append [[ACTION]]{"action":"review_booking","name":"...","email":"...","phone":"...","category":"CATEGORY_ID"}. The site then shows a confirmation card and the user taps Confirm to register — after which the Razorpay payment window opens automatically so they can pay right then. Never say the booking is already done; say you have prepared it for them to review and confirm.',
         'Contact organiser: when you genuinely cannot answer something and the user should reach the organising team, append [[ACTION]]{"action":"contact_organiser","subject":"<one short line describing what they need>"}. This opens a contact form that fires an email to the team. Only use it when the answer is truly unknown or organisation-specific — do NOT use it for questions you can answer yourself.',
     ];
 
@@ -767,6 +767,68 @@ async function handleApi(request, env) {
     });
   }
 
+  // ---- Razorpay payment: create order ----
+  if (resource === "payment" && parts[2] === "create-order" && method === "POST") {
+    if (!env.RAZORPAY_KEY_ID || !env.RAZORPAY_KEY_SECRET) {
+      // Keys not configured yet — return a sentinel so the frontend can skip payment.
+      return json({ skipped: true, reason: "Razorpay not configured" });
+    }
+    const { registrationId, amount } = body;
+    if (!registrationId || !amount) return json({ error: "registrationId and amount required" }, 400);
+    const auth = btoa(env.RAZORPAY_KEY_ID + ":" + env.RAZORPAY_KEY_SECRET);
+    const rzpRes = await fetch("https://api.razorpay.com/v1/orders", {
+      method: "POST",
+      headers: { "Authorization": "Basic " + auth, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        amount: Math.round(Number(amount) * 100), // paise
+        currency: "INR",
+        receipt: String(registrationId).slice(0, 40),
+        notes: { registrationId: String(registrationId) },
+      }),
+    });
+    const rzpOrder = await rzpRes.json().catch(() => ({}));
+    if (!rzpRes.ok) {
+      return json({ error: rzpOrder.error?.description || "Razorpay order creation failed" }, 502);
+    }
+    return json({
+      orderId: rzpOrder.id,
+      keyId: env.RAZORPAY_KEY_ID,
+      amount: rzpOrder.amount,
+      currency: rzpOrder.currency,
+    });
+  }
+
+  // ---- Razorpay payment: verify signature and mark paid ----
+  if (resource === "payment" && parts[2] === "verify" && method === "POST") {
+    const { registrationId, razorpayOrderId, razorpayPaymentId, razorpaySignature } = body;
+    if (!registrationId || !razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
+      return json({ error: "All payment fields required" }, 400);
+    }
+    if (!env.RAZORPAY_KEY_SECRET) return json({ error: "Razorpay not configured" }, 503);
+
+    // Verify HMAC-SHA256 signature using the Web Crypto API (available in Workers).
+    const enc = new TextEncoder();
+    const cryptoKey = await crypto.subtle.importKey(
+      "raw", enc.encode(env.RAZORPAY_KEY_SECRET),
+      { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+    );
+    const sigBuf = await crypto.subtle.sign("HMAC", cryptoKey, enc.encode(razorpayOrderId + "|" + razorpayPaymentId));
+    const expected = Array.from(new Uint8Array(sigBuf)).map(b => b.toString(16).padStart(2, "0")).join("");
+    if (expected !== razorpaySignature) {
+      return json({ error: "Payment signature mismatch — payment not verified." }, 400);
+    }
+
+    // Mark the registration as paid.
+    const list = await loadList(env, "registrations");
+    const idx = list.findIndex((r) => r.id === registrationId);
+    if (idx === -1) return json({ error: "Registration not found" }, 404);
+    list[idx].paid = true;
+    list[idx].paymentId = razorpayPaymentId;
+    list[idx].paidAt = new Date().toISOString();
+    await saveList(env, "registrations", list);
+    return json({ ok: true, registration: list[idx] });
+  }
+
   // ---- Contact / email forwarding to support@biaac.com ----
   if (resource === "contact" && method === "POST") {
     const { name, email, subject, category, description } = body;
@@ -785,7 +847,7 @@ async function handleApi(request, env) {
     try {
       const mcRes = await fetch("https://api.mailchannels.net/tx/v1/send", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", "x-api-key": env.MAILCHANNELS_API_KEY || "" },
         body: JSON.stringify({
           personalizations: [{
             to: [{ email: "support@biaac.com", name: "Convention Organising Committee" }],
