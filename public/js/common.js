@@ -1506,23 +1506,36 @@ function mountChat() {
     const mySpeakId = ++speakId;
     const typingEl = addMsg("assistant typing", "\u2026");
     let bubble = null;
-    let fullText = "", sentenceBuf = "";
+    let fullText = "", sentenceBuf = "", spokenText = "";
     const ttsQueue = [];
-    let draining = false;
+    let draining = false, anyQueued = false;
 
     if (voice) { speaking = true; pauseListening(); setVoiceStatus("thinking"); }
 
-    const queueTts = (sentence) => {
-      if (!sentence.trim() || !voice) return;
-      ttsQueue.push(fetchTts(sentence));
+    // Voice mode: text must never appear before the words are actually spoken,
+    // so each chunk's text is revealed only once its audio starts playing.
+    const revealChunk = (chunk) => {
+      if (typingEl.parentNode) typingEl.remove();
+      if (!bubble) bubble = addMsg("assistant", "");
+      spokenText += (spokenText ? " " : "") + chunk;
+      bubble.innerHTML = escapeHtml(spokenText).replace(/\n/g, "<br>");
+      log.scrollTop = log.scrollHeight;
+    };
+    const queueTts = (chunk) => {
+      const trimmed = chunk.trim();
+      if (!trimmed || !voice) return;
+      anyQueued = true;
+      ttsQueue.push({ text: trimmed, audioP: fetchTts(trimmed) });
       if (!draining) drainTts();
     };
     const drainTts = async () => {
       draining = true;
       setVoiceStatus("speaking");
       while (ttsQueue.length) {
-        const audio64 = await ttsQueue.shift();
+        const item = ttsQueue.shift();
+        const audio64 = await item.audioP;
         if (mySpeakId !== speakId) { draining = false; return; }
+        revealChunk(item.text); // show it right as it's about to be spoken
         if (audio64) await playClip(audio64, null, mySpeakId);
       }
       draining = false;
@@ -1560,17 +1573,27 @@ function mountChat() {
           try { data = JSON.parse(msg.slice(5).trim()); } catch { continue; }
 
           if (data.t) {
-            if (typingEl.parentNode) typingEl.remove();
-            if (!bubble) bubble = addMsg("assistant", "");
             fullText += data.t;
             sentenceBuf += data.t;
-            bubble.innerHTML = escapeHtml(fullText).replace(/\n/g, "<br>");
-            log.scrollTop = log.scrollHeight;
-            // Fire TTS for each completed sentence in parallel with AI generation.
-            if (voice) {
-              let m;
-              while ((m = sentenceBuf.match(/^(.{15,}?[.!?])\s+([\s\S]*)$/))) {
-                queueTts(m[1]); sentenceBuf = m[2];
+            if (!voice) {
+              if (typingEl.parentNode) typingEl.remove();
+              if (!bubble) bubble = addMsg("assistant", "");
+              bubble.innerHTML = escapeHtml(fullText).replace(/\n/g, "<br>");
+              log.scrollTop = log.scrollHeight;
+            } else {
+              // Speak+reveal one chunk at a time as generation continues.
+              // Full sentences first; a long clause with no terminator yet
+              // is flushed at a word boundary so audio doesn't wait for the
+              // whole sentence to finish streaming in.
+              for (;;) {
+                const m = sentenceBuf.match(/^(.{15,}?[.!?])\s+([\s\S]*)$/);
+                if (m) { queueTts(m[1]); sentenceBuf = m[2]; continue; }
+                if (sentenceBuf.length > 90) {
+                  const comma = sentenceBuf.lastIndexOf(", ", 90);
+                  const cut = comma > 20 ? comma + 1 : sentenceBuf.lastIndexOf(" ", 90);
+                  if (cut > 20) { queueTts(sentenceBuf.slice(0, cut)); sentenceBuf = sentenceBuf.slice(cut).trimStart(); continue; }
+                }
+                break;
               }
             }
           }
@@ -1600,20 +1623,24 @@ function mountChat() {
       }
 
       if (voice && sentenceBuf.trim()) queueTts(sentenceBuf.trim());
-      typingEl.remove();
+      if (!voice) typingEl.remove(); // voice mode: cleared by revealChunk() in sync with speech
 
       const replyText = finalReply || fullText;
       if (replyText) {
-        if (!bubble) {
-          // No tokens were shown (e.g. entire reply was inside <think> blocks and
-          // got filtered out before reaching the client). Nothing was displayed or
-          // spoken yet, so route through the normal handler which does both and
-          // crucially calls afterSpeak() to unlock voice mode.
-          handleAssistantReply(replyText, voice);
-        } else {
+        // In voice mode the speech pipeline (drainTts) may still be mid-flight —
+        // `anyQueued`/`draining` is the real signal, not `bubble` (which only
+        // gets set once the first chunk's audio actually starts).
+        if (voice ? anyQueued || draining : bubble) {
           history.push({ role: "assistant", content: replyText });
           const { action, html } = parseReply(replyText);
           if (action) executeAction(action, html);
+        } else {
+          // Nothing was queued/shown/spoken yet (e.g. entire reply was inside
+          // <think> blocks and got filtered out before reaching the client).
+          // Route through the normal handler which does both and crucially
+          // calls afterSpeak() to unlock voice mode.
+          if (typingEl.parentNode) typingEl.remove();
+          handleAssistantReply(replyText, voice);
         }
       } else if (buf.trim()) {
         // Plain-JSON response (local dev server doesn't send SSE) — parse and display it.
