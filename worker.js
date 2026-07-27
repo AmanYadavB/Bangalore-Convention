@@ -798,6 +798,10 @@ async function handleApi(request, env) {
             attempts.push(
               `gemini: http ${geminiRes.status} | raw=${rawText}`
             );
+            attempts.push(
+              "gemini-url: " +
+              `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${String(env.GEMINI_API_KEY).slice(0,8)}...`
+            );
           }
         } catch (err) {
           attempts.push(
