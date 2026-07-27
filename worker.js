@@ -769,10 +769,10 @@ async function handleApi(request, env) {
           parts: [{ text: m.content }],
         }));
         const geminiRes = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_API_KEY}`,
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent`,
           {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY },
             body: JSON.stringify({
               system_instruction: { parts: [{ text: leanSystem.content }] },
               contents: geminiMessages,
