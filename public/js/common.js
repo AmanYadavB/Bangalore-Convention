@@ -1596,9 +1596,17 @@ function mountChat() {
 
       const replyText = finalReply || fullText;
       if (replyText) {
-        history.push({ role: "assistant", content: replyText });
-        const { action, html } = parseReply(replyText);
-        if (action) executeAction(action, html);
+        if (!bubble) {
+          // No tokens were shown (e.g. entire reply was inside <think> blocks and
+          // got filtered out before reaching the client). Nothing was displayed or
+          // spoken yet, so route through the normal handler which does both and
+          // crucially calls afterSpeak() to unlock voice mode.
+          handleAssistantReply(replyText, voice);
+        } else {
+          history.push({ role: "assistant", content: replyText });
+          const { action, html } = parseReply(replyText);
+          if (action) executeAction(action, html);
+        }
       } else if (buf.trim()) {
         // Plain-JSON response (local dev server doesn't send SSE) — parse and display it.
         try {
