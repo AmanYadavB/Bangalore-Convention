@@ -772,6 +772,10 @@ async function handleApi(request, env) {
       };
 
       (async () => {
+        // Same idea as the non-streaming path's `attempts[]` — never let a
+        // failure vanish silently, so "always resting in voice mode" is
+        // debuggable instead of a mystery.
+        const attempts = [];
         for (const model of models) {
           try {
             const aiStream = await env.AI.run(model, {
@@ -779,8 +783,19 @@ async function handleApi(request, env) {
               max_tokens: maxTokens,
               stream: true,
             });
-            if (!aiStream || typeof aiStream.getReader !== "function") continue;
-            const reader = aiStream.getReader();
+            // Workers AI normally returns a ReadableStream directly, but guard
+            // against a Response-shaped return (has .body instead) too.
+            const stream =
+              aiStream && typeof aiStream.getReader === "function"
+                ? aiStream
+                : aiStream && aiStream.body && typeof aiStream.body.getReader === "function"
+                ? aiStream.body
+                : null;
+            if (!stream) {
+              attempts.push(model + ": stream not readable (" + typeof aiStream + ")");
+              continue;
+            }
+            const reader = stream.getReader();
             const dec = new TextDecoder();
             let lineBuf = "", full = "";
             const stripThink = makeThinkFilter();
@@ -809,7 +824,10 @@ async function handleApi(request, env) {
               sse({ done: true, reply: full.replace(/<think>[\s\S]*?<\/think>/gi, "").trim() });
               writer.close(); return;
             }
-          } catch {}
+            attempts.push(model + ": empty stream reply");
+          } catch (err) {
+            attempts.push(model + ": " + (err && err.message ? err.message : String(err)));
+          }
         }
         // Gemini streaming fallback
         if (env.GEMINI_API_KEY) {
@@ -850,8 +868,13 @@ async function handleApi(request, env) {
                 }
               }
               if (full) { sse({ done: true, reply: full.trim() }); writer.close(); return; }
+              attempts.push("gemini-stream: empty reply");
+            } else {
+              attempts.push("gemini-stream: http " + gRes.status);
             }
-          } catch {}
+          } catch (err) {
+            attempts.push("gemini-stream: " + (err && err.message ? err.message : String(err)));
+          }
         }
         // Streaming failed for all models; try one plain (non-streaming) call before giving up.
         try {
@@ -862,8 +885,49 @@ async function handleApi(request, env) {
           const fb = ((fallback && (fallback.response || fallback.result)) || "")
             .replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
           if (fb) { sse({ done: true, reply: fb }); writer.close(); return; }
-        } catch {}
-        sse({ done: true, reply: "The assistant is resting for a moment \uD83D\uDE34. Please try again shortly \u2014 meanwhile you can sign up on the Register page or reach the organising committee." });
+          attempts.push("plain-fallback: empty reply");
+        } catch (err) {
+          attempts.push("plain-fallback: " + (err && err.message ? err.message : String(err)));
+        }
+        // Groq fallback (same provider the non-streaming path uses) — the client's
+        // chat mode often only succeeds because of this fallback, so voice mode
+        // needs it too or it always ends up at the "resting" message below.
+        if (env.GROQ_API_KEY) {
+          try {
+            const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${env.GROQ_API_KEY}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                model: "llama-3.3-70b-versatile",
+                messages: [{ role: "system", content: leanSystem.content }, ...cleaned],
+                max_tokens: maxTokens,
+                temperature: 0.7,
+              }),
+            });
+            const rawText = await groqRes.text().catch(() => "");
+            if (groqRes.ok) {
+              const gd = JSON.parse(rawText || "{}");
+              const reply = gd?.choices?.[0]?.message?.content?.trim();
+              if (reply) { sse({ done: true, reply }); writer.close(); return; }
+              attempts.push("groq: empty reply | raw=" + rawText.slice(0, 500));
+            } else {
+              attempts.push(`groq: http ${groqRes.status} | raw=${rawText}`);
+            }
+          } catch (err) {
+            attempts.push("groq: " + (err && err.message ? err.message : String(err)));
+          }
+        }
+        const detail = attempts.join(" | ");
+        console.log("voice/stream chat fallback:", detail);
+        sse({
+          done: true,
+          reply: "The assistant is taking a quick break \uD83D\uDE34. Please try again shortly \u2014 meanwhile you can sign up on the Register page or reach the organising committee.",
+          degraded: true,
+          detail,
+        });
         writer.close();
       })();
 
