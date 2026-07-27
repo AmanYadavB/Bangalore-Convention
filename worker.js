@@ -881,25 +881,28 @@ async function handleApi(request, env) {
     const text =
       (typeof body.text === "string" ? body.text : "").replace(/\s+/g, " ").trim().slice(0, 800);
     if (!text) return json({ error: "text required" }, 400);
+    // /* Aura-2-en (Deepgram Partner — costs $0.03/1k chars) — uncomment to re-enable:
+    // try {
+    //   const resp = await env.AI.run(
+    //     "@cf/deepgram/aura-2-en",
+    //     { text, speaker: "asteria", encoding: "mp3" },
+    //     { returnRawResponse: true }
+    //   );
+    //   if (!resp || !resp.ok) return json({ error: "tts failed: no audio returned" }, 502);
+    //   const buf = await resp.arrayBuffer();
+    //   const bytes = new Uint8Array(buf);
+    //   const CHUNK = 8192;
+    //   let binary = "";
+    //   for (let i = 0; i < bytes.length; i += CHUNK)
+    //     binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+    //   return json({ audio: btoa(binary) });
+    // } catch (err) {
+    //   return json({ error: "tts failed: " + (err && err.message ? err.message : "unknown") }, 502);
+    // } */
     try {
-      // Aura-2 returns a raw audio stream (not JSON), so we use returnRawResponse.
-      // Female voices: luna (default), asteria, aurora, iris, athena, hera, phoebe, thalia
-      const resp = await env.AI.run(
-        "@cf/deepgram/aura-2-en",
-        { text, speaker: "asteria", encoding: "mp3" },
-        { returnRawResponse: true }
-      );
-      if (!resp || !resp.ok) return json({ error: "tts failed: no audio returned" }, 502);
-      // Convert the binary stream to base64 so the frontend can play it unchanged.
-      // Process in 8 KB chunks with apply() — far faster than char-by-char concat.
-      const buf = await resp.arrayBuffer();
-      const bytes = new Uint8Array(buf);
-      const CHUNK = 8192;
-      let binary = "";
-      for (let i = 0; i < bytes.length; i += CHUNK) {
-        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
-      }
-      const audio = btoa(binary);
+      const res = await env.AI.run("@cf/myshell-ai/melotts", { prompt: text, lang: "en" });
+      const audio = res && res.audio ? res.audio : null;
+      if (!audio) return json({ error: "no audio produced" }, 502);
       return json({ audio });
     } catch (err) {
       return json(
