@@ -786,7 +786,8 @@ async function handleApi(request, env) {
           if (reply) return json({ reply });
           attempts.push("gemini: empty reply");
         } else {
-          attempts.push("gemini: http " + geminiRes.status + " " + geminiRes.statusText);
+          const errText = await geminiRes.text().catch(() => "");
+          attempts.push("gemini: http " + geminiRes.status + " " + errText);
         }
       } catch (err) {
         attempts.push("gemini: " + (err && err.message ? err.message : String(err)));
