@@ -837,10 +837,10 @@ function mountChat() {
   // Pre-warm: pick a greeting and start fetching its TTS audio immediately so
   // the very first chat open plays instantly with no perceptible delay.
   const VISITOR_GREETINGS = [
-    "ayo Bangalore Convention, July 9-11! you thinking of coming?",
-    "hey convention's July 9-11 in Bangalore — three days, all meals, great vibes. first time?",
-    "yo spots are going fast for July 9-11. pricing, registration — what do you need?",
-    "okk you're here! July 9-11, Bangalore. what's on your mind?",
+    "ayo, Bangalore Convention, July 9-11! you thinking of coming?",
+    "hey, convention's July 9-11 in Bangalore — three days, all meals, great vibes. first time?",
+    "yo, spots are going fast for July 9-11. pricing, registration — what do you need?",
+    "okk, you're here! July 9-11, Bangalore. what's on your mind?",
   ];
   const prewarmGreetingText = VISITOR_GREETINGS[Math.floor(Math.random() * VISITOR_GREETINGS.length)];
   let prewarmAudioP = null; // Promise<base64|null>, resolved once TTS is ready
@@ -1865,12 +1865,45 @@ function mountChat() {
     return rest ? [first, rest] : [first];
   }
 
+  // Prepare text for neural TTS: strip emojis and normalise informal spellings
+  // that TTS engines either skip or mispronounce badly.
+  function sanitizeForTts(raw) {
+    return String(raw || "")
+      // Strip markdown bold / italic / inline-code
+      .replace(/\*\*(.+?)\*\*/g, "$1")
+      .replace(/\*(.+?)\*/g, "$1")
+      .replace(/`(.+?)`/g, "$1")
+      // Drop all emoji (covers BMP misc-symbols + supplementary emoji planes)
+      .replace(/[\u{1F000}-\u{1FFFF}]/gu, "")
+      .replace(/[\u{2600}-\u{27FF}]/gu, "")
+      .replace(/\uFE0F/gu, "")   // variation selector
+      .replace(/\u20E3/gu, "")   // combining enclosing keycap
+      // Normalise informal words → pronounceable equivalents
+      .replace(/\bayyo\b/gi, "ayo")
+      .replace(/\bokk+\b/gi, "okay")
+      .replace(/\byoo+\b/gi, "yo")
+      .replace(/\bngl\b/gi, "")
+      .replace(/\bfr\b/gi, "")
+      .replace(/\brn\b/gi, "right now")
+      .replace(/\bidk\b/gi, "I don't know")
+      .replace(/\btbh\b/gi, "to be honest")
+      .replace(/\blmao\b/gi, "")
+      .replace(/\blol\b/gi, "")
+      .replace(/\bomg\b/gi, "oh my god")
+      .replace(/\bbro\b/gi, "bro")   // kept — Deepgram handles it fine
+      // Tidy up whitespace left behind by removed tokens
+      .replace(/\s{2,}/g, " ")
+      .trim();
+  }
+
   async function fetchTts(textPart) {
+    const clean = sanitizeForTts(textPart);
+    if (!clean) return null;
     try {
       const res = await fetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: textPart }),
+        body: JSON.stringify({ text: clean }),
       });
       if (!res.ok) return null;
       const data = await res.json().catch(() => ({}));
