@@ -727,6 +727,96 @@ async function handleApi(request, env) {
       maxTokens = voice ? 170 : staff ? 340 : 280;
     }
 
+    // ---- Streaming path: return SSE so the client gets tokens as they arrive ---
+    if (body.stream === true && !wantsPage) {
+      const { readable, writable } = new TransformStream();
+      const writer = writable.getWriter();
+      const enc = new TextEncoder();
+      const sse = (obj) => { try { writer.write(enc.encode("data: " + JSON.stringify(obj) + "\n\n")); } catch {} };
+
+      (async () => {
+        for (const model of models) {
+          try {
+            const aiStream = await env.AI.run(model, {
+              messages: [fullSystem, ...cleaned],
+              max_tokens: maxTokens,
+              stream: true,
+            });
+            if (!aiStream || typeof aiStream.getReader !== "function") continue;
+            const reader = aiStream.getReader();
+            const dec = new TextDecoder();
+            let lineBuf = "", full = "";
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              lineBuf += dec.decode(value, { stream: true });
+              let nl;
+              while ((nl = lineBuf.indexOf("\n")) !== -1) {
+                const line = lineBuf.slice(0, nl).trim();
+                lineBuf = lineBuf.slice(nl + 1);
+                if (!line.startsWith("data:")) continue;
+                const payload = line.slice(5).trim();
+                if (payload === "[DONE]") continue;
+                try { const t = JSON.parse(payload).response || ""; if (t) { full += t; sse({ t }); } } catch {}
+              }
+            }
+            if (full) {
+              sse({ done: true, reply: full.replace(/<think>[\s\S]*?<\/think>/gi, "").trim() });
+              writer.close(); return;
+            }
+          } catch {}
+        }
+        // Gemini streaming fallback
+        if (env.GEMINI_API_KEY) {
+          try {
+            const gRes = await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?key=${env.GEMINI_API_KEY}&alt=sse`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  system_instruction: { parts: [{ text: leanSystem.content }] },
+                  contents: cleaned.map((m) => ({
+                    role: m.role === "assistant" ? "model" : "user",
+                    parts: [{ text: m.content }],
+                  })),
+                  generationConfig: { maxOutputTokens: maxTokens },
+                }),
+              }
+            );
+            if (gRes.ok && gRes.body) {
+              const reader = gRes.body.getReader();
+              const dec = new TextDecoder();
+              let buf = "", full = "";
+              while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buf += dec.decode(value, { stream: true });
+                let nl;
+                while ((nl = buf.indexOf("\n")) !== -1) {
+                  const line = buf.slice(0, nl).trim();
+                  buf = buf.slice(nl + 1);
+                  if (!line.startsWith("data:")) continue;
+                  try {
+                    const gd = JSON.parse(line.slice(5).trim());
+                    const t = gd?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+                    if (t) { full += t; sse({ t }); }
+                  } catch {}
+                }
+              }
+              if (full) { sse({ done: true, reply: full.trim() }); writer.close(); return; }
+            }
+          } catch {}
+        }
+        sse({ error: "All models unavailable. Please try again." });
+        writer.close();
+      })();
+
+      return new Response(readable, {
+        headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" },
+      });
+    }
+
     const runModel = async (sys, model, tokens) => {
       const result = await env.AI.run(model, {
         messages: [sys, ...cleaned],
@@ -1003,14 +1093,13 @@ async function handleApi(request, env) {
             body: JSON.stringify({ text }),
           }
         );
-        if (response.ok) {
-          const audioBuffer = await response.arrayBuffer();
-          const bytes = new Uint8Array(audioBuffer);
-          const CHUNK = 8192;
-          let binary = "";
-          for (let i = 0; i < bytes.length; i += CHUNK)
-            binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
-          return json({ audio: btoa(binary) });
+        if (response.ok) {        
+          return new Response(response.body, {
+            headers: {
+              "Content-Type": "audio/mpeg",
+              "Transfer-Encoding": "chunked",
+            },
+          });
         }
         // Non-OK response falls through to MeloTTS fallback below.
       } catch (_) {
