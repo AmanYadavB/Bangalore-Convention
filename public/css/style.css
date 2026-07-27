@@ -979,6 +979,11 @@ tbody tr:hover {
   color: var(--green);
 }
 
+.toast.info {
+  border-color: var(--amber);
+  color: var(--amber);
+}
+
 /* ---------- Misc ---------- */
 .section-head {
   display: flex;
