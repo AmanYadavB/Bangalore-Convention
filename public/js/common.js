@@ -1546,9 +1546,9 @@ function mountChat() {
 
       const reader = res.body.getReader();
       const dec = new TextDecoder();
-      let buf = "", finalReply = null;
+      let buf = "", finalReply = null, sseError = null;
 
-      while (true) {
+      outer: while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         buf += dec.decode(value, { stream: true });
@@ -1576,8 +1576,20 @@ function mountChat() {
             }
           }
           if (data.done) finalReply = data.reply;
-          if (data.error) throw new Error(data.error);
+          if (data.error) { sseError = data.error; break outer; }
         }
+      }
+
+      // SSE sent an error event (AI models unavailable) — show friendly message, not "network error".
+      if (sseError) {
+        if (typingEl.parentNode) typingEl.remove();
+        if (bubble) bubble.remove();
+        if (voice) { speaking = false; afterSpeak(); }
+        handleAssistantReply(
+          "The assistant is resting for a moment \uD83D\uDE34. Please try again shortly \u2014 meanwhile you can sign up on the Register page or reach the organising committee.",
+          false
+        );
+        return;
       }
 
       if (voice && sentenceBuf.trim()) queueTts(sentenceBuf.trim());
@@ -1588,6 +1600,15 @@ function mountChat() {
         history.push({ role: "assistant", content: replyText });
         const { action, html } = parseReply(replyText);
         if (action) executeAction(action, html);
+      } else if (buf.trim()) {
+        // Plain-JSON response (local dev server doesn't send SSE) — parse and display it.
+        try {
+          const plain = JSON.parse(buf.trim());
+          if (plain.reply) {
+            history.push({ role: "assistant", content: plain.reply });
+            handleAssistantReply(plain.reply, voice);
+          }
+        } catch {}
       }
     } catch (err) {
       console.error("[stream]", err);
