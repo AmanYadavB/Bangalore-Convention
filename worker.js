@@ -890,9 +890,9 @@ async function handleApi(request, env) {
       (typeof body.text === "string" ? body.text : "").replace(/\s+/g, " ").trim().slice(0, 800);
     if (!text) return json({ error: "text required" }, 400);
     try {
-      const res = await env.AI.run("@cf/myshell-ai/melotts", {
+      const res = await env.AI.run("@cf/jaaari/kokoro-82m", {
         prompt: text,
-        lang: "en",
+        voice: "af_sky",  // upbeat American female — change to af_heart/af_bella/bf_emma etc.
       });
       const audio = res && res.audio ? res.audio : null; // base64 mp3
       if (!audio) return json({ error: "no audio produced" }, 502);
