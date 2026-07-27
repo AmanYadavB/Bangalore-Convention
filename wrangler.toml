@@ -31,3 +31,5 @@ binding = "AI"
 [vars]
 DEV_KEY = "amankumaryadavasasmd"
 MAILCHANNELS_API_KEY = "uqrnax8EQ8hveVhcTZTKjkFAdl9Q6iQb"
+RAZORPAY_KEY_ID = "rzp_test_TIK9lJop7jGPPi"
+RAZORPAY_KEY_SECRET = "0aYSxQjaJf95wOOczK5k1fLm"
