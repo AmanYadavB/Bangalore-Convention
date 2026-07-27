@@ -1103,13 +1103,13 @@ async function handleApi(request, env) {
             body: JSON.stringify({ text }),
           }
         );
-        if (response.ok) {        
-          return new Response(response.body, {
-            headers: {
-              "Content-Type": "audio/mpeg",
-              "Transfer-Encoding": "chunked",
-            },
-          });
+        if (response.ok) {
+          // Convert to base64 so the client gets the same {audio} JSON format as MeloTTS.
+          const buf = await response.arrayBuffer();
+          const bytes = new Uint8Array(buf);
+          let binary = "";
+          for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+          return json({ audio: btoa(binary) });
         }
         // Non-OK response falls through to MeloTTS fallback below.
       } catch (_) {
