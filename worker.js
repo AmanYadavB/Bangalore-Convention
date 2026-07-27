@@ -800,7 +800,7 @@ async function handleApi(request, env) {
     console.log("chat fallback:", detail);
     return json({
       reply:
-        "I'm taking a quick break. Please try again shortly, or contact the organisers if you need urgent help. Thanks for your patience!",
+        "I'm taking a quick break. Please try again shortly, or contact the organisers if you need urgent help. (Error: " + detail + ")",
       degraded: true,
       detail,
     });
