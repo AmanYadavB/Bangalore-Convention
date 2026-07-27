@@ -1545,7 +1545,7 @@ function mountChat() {
 
       const reader = res.body.getReader();
       const dec = new TextDecoder();
-      let buf = "", finalReply = null, sseError = null;
+      let buf = "", finalReply = null, sseError = null, replyDetail = null;
 
       outer: while (true) {
         const { done, value } = await reader.read();
@@ -1575,8 +1575,16 @@ function mountChat() {
             }
           }
           if (data.done) finalReply = data.reply;
+          if (data.detail) replyDetail = data.detail;
           if (data.error) { sseError = data.error; break outer; }
         }
+      }
+
+      // Real reason (all models failed) is always logged, and shown inline for
+      // developers (dev key present) so "always resting" is never a mystery.
+      if (replyDetail) {
+        console.error("[chat/voice] server detail:", replyDetail);
+        if (getDevKey()) addMsg("assistant", "\uD83D\uDEE0\ufe0f debug: " + replyDetail);
       }
 
       // SSE sent an error event (AI models unavailable) — show friendly message, not "network error".
