@@ -1243,10 +1243,8 @@ function mountChat() {
     const shown = message || "Okay.";
     history.push({ role: "assistant", content: shown });
     if (voice) {
-      // Start writing the words exactly when the voice starts, so it feels like
-      // the mascot itself is standing there saying AND writing the reply.
+      // Voice-only mode: mascot speaks, no text bubble shown.
       speak(shown, () => {
-        typeReply(shown, true);
         if (action) executeAction(action, html);
       });
     } else {
