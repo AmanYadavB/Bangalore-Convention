@@ -531,7 +531,7 @@ async function handleApi(request, env) {
         "YOUR VOICE IS NON-NEGOTIABLE. It does NOT change based on how the user writes to you. Whether they text formally, use full sentences, or ask a plain boring question — YOU always reply in the same personality: warm, punchy, Gen Z, real. Never slip into formal/corporate mode no matter what.",
         "",
         "== HOW YOU ACTUALLY SOUND (read these examples, this is your tone baseline) ==",
-        "Q: 'What are the dates?' → YOU SAY: 'July 9-11 bro, three full days in Bangalore 🔥 you planning to come?'",
+        "Q: 'What are the dates?' → YOU SAY: 'July 9-11 bro, three full days in Bangalore! you planning to come?'",
         "Q: 'What is included in the registration?' → YOU SAY: 'EVERYTHING — breakfast, lunch, dinner, tea breaks, all sessions. literally just show up and vibe fr'",
         "Q: 'How much does it cost?' → YOU SAY: 'four options: ₹1500 (no stay), ₹3200 triple sharing, ₹4200 double, ₹6000 solo room. meals included in all of them ngl. which one's calling your name?'",
         "Q: 'How do I register?' → YOU SAY: 'two ways — hit the Register page, or just tell me your details and I'll book it for you rn 👀 which works?'",
@@ -723,16 +723,8 @@ async function handleApi(request, env) {
       ];
       maxTokens = 3500;
     } else {
-      // Fast path: use the latest Cloudflare-pinned Llama 4 Scout (17B MoE —
-      // activates far fewer params than 70B but matches 70B quality thanks to
-      // mixture-of-experts) for much richer personality and humor than the 8B.
-      // Fall back through increasingly faster models if any aren't available.
-      models = [
-        "@cf/meta/llama-4-scout-17b-16e-instruct",  // Cloudflare pinned, Llama 4 MoE
-        "@cf/meta/llama-3.3-70b-instruct-fp8-fast",  // 70B fallback
-        "@cf/meta/llama-3.1-8b-instruct-fast",       // always-available safety net
-      ];
-      maxTokens = voice ? 170 : staff ? 380 : 320;
+      models = ["@cf/meta/llama-3.1-8b-instruct-fast", "@cf/zai-org/glm-4.7-flash"];
+      maxTokens = voice ? 170 : staff ? 340 : 280;
     }
 
     const runModel = async (sys, model, tokens) => {
@@ -890,12 +882,20 @@ async function handleApi(request, env) {
       (typeof body.text === "string" ? body.text : "").replace(/\s+/g, " ").trim().slice(0, 800);
     if (!text) return json({ error: "text required" }, 400);
     try {
-      const res = await env.AI.run("@cf/jaaari/kokoro-82m", {
-        prompt: text,
-        voice: "af_sky",  // upbeat American female — change to af_heart/af_bella/bf_emma etc.
-      });
-      const audio = res && res.audio ? res.audio : null; // base64 mp3
-      if (!audio) return json({ error: "no audio produced" }, 502);
+      // Aura-2 returns a raw audio stream (not JSON), so we use returnRawResponse.
+      // Female voices: luna (default), asteria, aurora, iris, athena, hera, phoebe, thalia
+      const resp = await env.AI.run(
+        "@cf/deepgram/aura-2-en",
+        { text, speaker: "asteria", encoding: "mp3" },
+        { returnRawResponse: true }
+      );
+      if (!resp || !resp.ok) return json({ error: "tts failed: no audio returned" }, 502);
+      // Convert the binary stream to base64 so the frontend can play it unchanged.
+      const buf = await resp.arrayBuffer();
+      const bytes = new Uint8Array(buf);
+      let binary = "";
+      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+      const audio = btoa(binary);
       return json({ audio });
     } catch (err) {
       return json(
