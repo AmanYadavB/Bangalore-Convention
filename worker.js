@@ -762,56 +762,111 @@ async function handleApi(request, env) {
     }
     // 2b) Gemini fallback via direct API (requires GEMINI_API_KEY secret).
     //     Uses gemini-2.0-flash — fast, generous free tier, great personality.
-    if (env.GEMINI_API_KEY) {
+    // if (env.GEMINI_API_KEY) {
+    //   try {
+    //     const geminiMessages = cleaned.map((m) => ({
+    //       role: m.role === "assistant" ? "model" : "user",
+    //       parts: [{ text: m.content }],
+    //     }));
+    //     const geminiRes = await fetch(
+    //       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent`,
+    //       {
+    //         method: "POST",
+    //         headers: { "Content-Type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY },
+    //         body: JSON.stringify({
+    //           system_instruction: { parts: [{ text: leanSystem.content }] },
+    //           contents: geminiMessages,
+    //           generationConfig: { maxOutputTokens: maxTokens },
+    //         }),
+    //       }
+    //     );
+    //     try {
+    //       const rawText = await geminiRes.clone().text().catch(() => "");
+
+    //       if (geminiRes.ok) {
+    //         const gd = JSON.parse(rawText || "{}");
+
+    //         const reply =
+    //           gd?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+
+    //         if (reply) return json({ reply });
+
+    //         attempts.push(
+    //           "gemini: empty reply | raw=" + rawText.slice(0, 500)
+    //         );
+    //       } else {
+    //         attempts.push(
+    //           `gemini: http ${geminiRes.status} | raw=${rawText}`
+    //         );
+    //         attempts.push(
+    //           "gemini-url: " +
+    //           `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${String(env.GEMINI_API_KEY).slice(0,8)}...`
+    //         );
+    //       }
+    //     } catch (err) {
+    //       attempts.push(
+    //         "gemini: " + (err?.stack || err?.message || String(err))
+    //       );
+    //     }
+    //   } catch (err) {
+    //     attempts.push("gemini: " + (err && err.message ? err.message : String(err)));
+    //   }
+    // }
+    // 2c) GROQ fallback via direct API (requires GROQ_API_KEY secret).
+    if (env.GROQ_API_KEY) {
       try {
-        const geminiMessages = cleaned.map((m) => ({
-          role: m.role === "assistant" ? "model" : "user",
-          parts: [{ text: m.content }],
-        }));
-        const geminiRes = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent`,
+        const groqMessages = [
+          {
+            role: "system",
+            content: leanSystem.content,
+          },
+          ...cleaned.map((m) => ({
+            role: m.role,
+            content: m.content,
+          })),
+        ];
+
+        const groqRes = await fetch(
+          "https://api.groq.com/openai/v1/chat/completions",
           {
             method: "POST",
-            headers: { "Content-Type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY },
+            headers: {
+              "Authorization": `Bearer ${env.GROQ_API_KEY}`,
+              "Content-Type": "application/json",
+            },
             body: JSON.stringify({
-              system_instruction: { parts: [{ text: leanSystem.content }] },
-              contents: geminiMessages,
-              generationConfig: { maxOutputTokens: maxTokens },
+              model: "llama-3.3-70b-versatile",
+              messages: groqMessages,
+              max_tokens: maxTokens,
+              temperature: 0.7,
             }),
           }
         );
-        try {
-          const rawText = await geminiRes.clone().text().catch(() => "");
 
-          if (geminiRes.ok) {
-            const gd = JSON.parse(rawText || "{}");
+        const rawText = await groqRes.clone().text().catch(() => "");
 
-            const reply =
-              gd?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+        if (groqRes.ok) {
+          const gd = JSON.parse(rawText || "{}");
 
-            if (reply) return json({ reply });
+          const reply =
+            gd?.choices?.[0]?.message?.content?.trim();
 
-            attempts.push(
-              "gemini: empty reply | raw=" + rawText.slice(0, 500)
-            );
-          } else {
-            attempts.push(
-              `gemini: http ${geminiRes.status} | raw=${rawText}`
-            );
-            attempts.push(
-              "gemini-url: " +
-              `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${String(env.GEMINI_API_KEY).slice(0,8)}...`
-            );
-          }
-        } catch (err) {
+          if (reply) return json({ reply });
+
           attempts.push(
-            "gemini: " + (err?.stack || err?.message || String(err))
+            "groq: empty reply | raw=" + rawText.slice(0, 500)
+          );
+        } else {
+          attempts.push(
+            `groq: http ${groqRes.status} | raw=${rawText}`
           );
         }
-      } catch (err) {
-        attempts.push("gemini: " + (err && err.message ? err.message : String(err)));
+        } catch (err) {
+          attempts.push(
+            "groq: " + (err?.stack || err?.message || String(err))
+          );
+        }
       }
-    }
     // 3) Everything failed -> a friendly "resting" reply (never a raw error) with
     //    a helpful alternative, returned as a normal message (HTTP 200). The real
     //    reason travels in `detail` so developers can see it in the console /
