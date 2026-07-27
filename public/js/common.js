@@ -986,7 +986,20 @@ function mountChat() {
         ];
         greeting = greetings[Math.floor(Math.random() * greetings.length)];
       }
-      typeReply(greeting, false);
+      // Regular visitors: auto-start voice mode and speak the greeting.
+      // The mic turns on automatically after the greeting finishes (afterSpeak).
+      if (!isDeveloper() && !isAdmin() && canListen && canSpeak) {
+        if (!recognition) initRecognition();
+        voiceMode = true;
+        processing = false;
+        speaking = false;
+        finalBuffer = "";
+        lastInterim = "";
+        if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
+        speak(greeting, null); // afterSpeak() will resume the mic
+      } else {
+        typeReply(greeting, false);
+      }
     }
     if (window.visualViewport) {
       window.visualViewport.addEventListener("resize", fitPanel);
