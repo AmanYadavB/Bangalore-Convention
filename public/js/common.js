@@ -1259,6 +1259,7 @@ function mountChat() {
       speak(shown, () => {
         if (action) executeAction(action, html);
       });
+      typeReply(shown, true); // show text while speaking
     } else {
       typeReply(shown, false);
       if (action) executeAction(action, html);
