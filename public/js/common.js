@@ -1271,11 +1271,11 @@ function mountChat() {
     const shown = message || "Okay.";
     history.push({ role: "assistant", content: shown });
     if (voice) {
-      // Voice-only mode: mascot speaks, no text bubble shown.
+      // Defer text + action until the moment audio actually starts playing.
       speak(shown, () => {
+        typeReply(shown, true);
         if (action) executeAction(action, html);
       });
-      typeReply(shown, true); // show text while speaking
     } else {
       typeReply(shown, false);
       if (action) executeAction(action, html);
@@ -1634,8 +1634,9 @@ function mountChat() {
     history.push({ role: "user", content: q });
     lastUserText = q;
     sendBtn.disabled = true;
-    // Voice mode uses the streaming pipeline (tokens + concurrent TTS).
-    if (opts.voice) return sendToChatStream(q, opts);
+    // Non-voice uses streaming (tokens appear as they arrive). Voice uses the
+    // non-streaming path so typeReply can be deferred to onStart for true sync.
+    if (!opts.voice) return sendToChatStream(q, opts);
     const typing = addMsg("assistant typing", "\u2026");
     console.log("[chat] POST /api/chat", { messages: history });
     try {
