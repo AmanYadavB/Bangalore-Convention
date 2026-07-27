@@ -780,14 +780,29 @@ async function handleApi(request, env) {
             }),
           }
         );
-        if (geminiRes.ok) {
-          const gd = await geminiRes.json().catch(() => ({}));
-          const reply = gd?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-          if (reply) return json({ reply });
-          attempts.push("gemini: empty reply");
-        } else {
-          const errText = await geminiRes.text().catch(() => "");
-          attempts.push("gemini: http " + geminiRes.status + " " + errText);
+        try {
+          const rawText = await geminiRes.clone().text().catch(() => "");
+
+          if (geminiRes.ok) {
+            const gd = JSON.parse(rawText || "{}");
+
+            const reply =
+              gd?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+
+            if (reply) return json({ reply });
+
+            attempts.push(
+              "gemini: empty reply | raw=" + rawText.slice(0, 500)
+            );
+          } else {
+            attempts.push(
+              `gemini: http ${geminiRes.status} | raw=${rawText}`
+            );
+          }
+        } catch (err) {
+          attempts.push(
+            "gemini: " + (err?.stack || err?.message || String(err))
+          );
         }
       } catch (err) {
         attempts.push("gemini: " + (err && err.message ? err.message : String(err)));
