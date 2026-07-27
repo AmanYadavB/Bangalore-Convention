@@ -881,24 +881,37 @@ async function handleApi(request, env) {
     const text =
       (typeof body.text === "string" ? body.text : "").replace(/\s+/g, " ").trim().slice(0, 800);
     if (!text) return json({ error: "text required" }, 400);
-    // /* Aura-2-en (Deepgram Partner — costs $0.03/1k chars) — uncomment to re-enable:
-    // try {
-    //   const resp = await env.AI.run(
-    //     "@cf/deepgram/aura-2-en",
-    //     { text, speaker: "asteria", encoding: "mp3" },
-    //     { returnRawResponse: true }
-    //   );
-    //   if (!resp || !resp.ok) return json({ error: "tts failed: no audio returned" }, 502);
-    //   const buf = await resp.arrayBuffer();
-    //   const bytes = new Uint8Array(buf);
-    //   const CHUNK = 8192;
-    //   let binary = "";
-    //   for (let i = 0; i < bytes.length; i += CHUNK)
-    //     binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
-    //   return json({ audio: btoa(binary) });
-    // } catch (err) {
-    //   return json({ error: "tts failed: " + (err && err.message ? err.message : "unknown") }, 502);
-    // } */
+
+    // Primary: Deepgram Aura-2 via direct API (requires DEEPGRAM_API_KEY secret).
+    if (env.DEEPGRAM_API_KEY) {
+      try {
+        const response = await fetch(
+          "https://api.deepgram.com/v1/speak?model=aura-2-asteria-en",
+          {
+            method: "POST",
+            headers: {
+              "Authorization": `Token ${env.DEEPGRAM_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ text }),
+          }
+        );
+        if (response.ok) {
+          const audioBuffer = await response.arrayBuffer();
+          const bytes = new Uint8Array(audioBuffer);
+          const CHUNK = 8192;
+          let binary = "";
+          for (let i = 0; i < bytes.length; i += CHUNK)
+            binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+          return json({ audio: btoa(binary) });
+        }
+        // Non-OK response falls through to MeloTTS fallback below.
+      } catch (_) {
+        // Network/parse error — fall through to MeloTTS.
+      }
+    }
+
+    // Fallback: Cloudflare Workers AI MeloTTS (free, no key needed).
     try {
       const res = await env.AI.run("@cf/myshell-ai/melotts", { prompt: text, lang: "en" });
       const audio = res && res.audio ? res.audio : null;
