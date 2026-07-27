@@ -991,10 +991,9 @@ function mountChat() {
       } else {
         greeting = prewarmGreetingText; // use the pre-warmed text
       }
-      // Speak the greeting AND show it as text, then auto-start the mic.
+      // Speak the greeting and show it as text. Mic stays off — user taps it to start.
       if (!isDeveloper() && !isAdmin() && canListen && canSpeak) {
         if (!recognition) initRecognition();
-        voiceMode = true;
         processing = false;
         speaking = true; // block mic until greeting finishes
         finalBuffer = "";
@@ -1634,9 +1633,8 @@ function mountChat() {
     history.push({ role: "user", content: q });
     lastUserText = q;
     sendBtn.disabled = true;
-    // Non-voice uses streaming (tokens appear as they arrive). Voice uses the
-    // non-streaming path so typeReply can be deferred to onStart for true sync.
-    if (!opts.voice) return sendToChatStream(q, opts);
+    // Voice uses the streaming pipeline for fast feedback and proper state management.
+    if (opts.voice) return sendToChatStream(q, opts);
     const typing = addMsg("assistant typing", "\u2026");
     console.log("[chat] POST /api/chat", { messages: history });
     try {
