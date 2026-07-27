@@ -1138,7 +1138,7 @@ async function handleApi(request, env) {
     if (env.DEEPGRAM_API_KEY) {
       try {
         const response = await fetch(
-          "https://api.deepgram.com/v1/speak?model=aura-2-amalthea-en",
+          `https://api.deepgram.com/v1/speak?model="${env.DEEPGRAM_MODEL || "aura-2-amalthea-en"}`,
           {
             method: "POST",
             headers: {
