@@ -760,6 +760,38 @@ async function handleApi(request, env) {
     } catch (err) {
       attempts.push("lean-retry: " + (err && err.message ? err.message : String(err)));
     }
+    // 2b) Gemini fallback via direct API (requires GEMINI_API_KEY secret).
+    //     Uses gemini-2.0-flash — fast, generous free tier, great personality.
+    if (env.GEMINI_API_KEY) {
+      try {
+        const geminiMessages = cleaned.map((m) => ({
+          role: m.role === "assistant" ? "model" : "user",
+          parts: [{ text: m.content }],
+        }));
+        const geminiRes = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_API_KEY}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              system_instruction: { parts: [{ text: leanSystem.content }] },
+              contents: geminiMessages,
+              generationConfig: { maxOutputTokens: maxTokens },
+            }),
+          }
+        );
+        if (geminiRes.ok) {
+          const gd = await geminiRes.json().catch(() => ({}));
+          const reply = gd?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+          if (reply) return json({ reply });
+          attempts.push("gemini: empty reply");
+        } else {
+          attempts.push("gemini: http " + geminiRes.status);
+        }
+      } catch (err) {
+        attempts.push("gemini: " + (err && err.message ? err.message : String(err)));
+      }
+    }
     // 3) Everything failed -> a friendly "resting" reply (never a raw error) with
     //    a helpful alternative, returned as a normal message (HTTP 200). The real
     //    reason travels in `detail` so developers can see it in the console /
