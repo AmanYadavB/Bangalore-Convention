@@ -734,6 +734,40 @@ async function handleApi(request, env) {
       const enc = new TextEncoder();
       const sse = (obj) => { try { writer.write(enc.encode("data: " + JSON.stringify(obj) + "\n\n")); } catch {} };
 
+      // Some reasoning models wrap their reasoning in <think>...</think> and stream
+      // it token-by-token like any other text. Without filtering, that raw reasoning
+      // gets shown/spoken live (looks stuck "thinking"). This strips <think> blocks
+      // incrementally, holding back only the few chars that could be a split tag.
+      const makeThinkFilter = () => {
+        let buf = "", inThink = false;
+        return (chunk) => {
+          buf += chunk;
+          let out = "";
+          for (;;) {
+            if (!inThink) {
+              const idx = buf.indexOf("<think>");
+              if (idx === -1) {
+                let hold = 0;
+                for (let i = 1; i <= 7 && i <= buf.length; i++) {
+                  if ("<think>".startsWith(buf.slice(-i))) hold = i;
+                }
+                out += buf.slice(0, buf.length - hold);
+                buf = buf.slice(buf.length - hold);
+                return out;
+              }
+              out += buf.slice(0, idx);
+              buf = buf.slice(idx + 7);
+              inThink = true;
+            } else {
+              const idx = buf.indexOf("</think>");
+              if (idx === -1) { buf = ""; return out; }
+              buf = buf.slice(idx + 8);
+              inThink = false;
+            }
+          }
+        };
+      };
+
       (async () => {
         for (const model of models) {
           try {
@@ -746,6 +780,7 @@ async function handleApi(request, env) {
             const reader = aiStream.getReader();
             const dec = new TextDecoder();
             let lineBuf = "", full = "";
+            const stripThink = makeThinkFilter();
             while (true) {
               const { done, value } = await reader.read();
               if (done) break;
@@ -757,7 +792,14 @@ async function handleApi(request, env) {
                 if (!line.startsWith("data:")) continue;
                 const payload = line.slice(5).trim();
                 if (payload === "[DONE]") continue;
-                try { const t = JSON.parse(payload).response || ""; if (t) { full += t; sse({ t }); } } catch {}
+                try {
+                  const t = JSON.parse(payload).response || "";
+                  if (t) {
+                    full += t;
+                    const visible = stripThink(t);
+                    if (visible) sse({ t: visible });
+                  }
+                } catch {}
               }
             }
             if (full) {
