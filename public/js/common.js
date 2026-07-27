@@ -540,8 +540,10 @@ async function openRazorpay(record, onSuccess) {
     return;
   }
 
-  // If keys are not configured yet, skip payment gracefully.
+  // If keys are not configured yet, show a clear warning instead of silently skipping.
   if (orderData.skipped || !window.Razorpay) {
+    console.warn("[payment] Razorpay not configured — add RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET to your Cloudflare Worker env vars.");
+    toast("⚠️ Payment gateway not configured yet — registration saved, payment pending.", "info");
     onSuccess(record);
     return;
   }
@@ -791,11 +793,20 @@ function mountChat() {
     document.body.classList.add("chat-open");
     if (!greeted) {
       greeted = true;
-      const greeting = isDeveloper()
-        ? "Hi developer! Ask me anything about registrations, money and expenses. Anything you add on the Feed AI page becomes part of what I know."
-        : isAdmin()
-        ? "Hi! Ask me about registrations, payments collected, pending amounts or expenses \u2014 I have the live numbers."
-        : "Hi! I can help with registration, pricing, dates and what's included. What would you like to know?";
+      let greeting;
+      if (isDeveloper()) {
+        greeting = "dev mode activated! ask me anything — registrations, money, expenses. feed me more knowledge on the Feed AI page and I'll use it instantly.";
+      } else if (isAdmin()) {
+        greeting = "hey! got live numbers ready — registrations, payments, pending, expenses. what do you need?";
+      } else {
+        const greetings = [
+          "ayo!! Bangalore Convention 2027 is July 9th to 11th and it's gonna be an absolutely unreal experience! you thinking of coming?",
+          "hey hey! so the convention is July 9th to 11th in Bangalore — three full days, all meals included, amazing fellowship. is this your first time hearing about it?",
+          "okk you're here! the Bangalore Convention 2027 is coming up fast and spots are going. what's on your mind — pricing, registration, what's included?",
+          "yo! convention's July 9th to 11th, Bangalore. fully catered, great vibes, people coming from all over India. you planning to join fr? ",
+        ];
+        greeting = greetings[Math.floor(Math.random() * greetings.length)];
+      }
       typeReply(greeting, false);
     }
     if (window.visualViewport) {
