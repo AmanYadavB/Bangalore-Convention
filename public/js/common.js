@@ -979,9 +979,9 @@ function mountChat() {
         greeting = "hey! got live numbers ready — registrations, payments, pending, expenses. what do you need?";
       } else {
         const greetings = [
-          "ayo! Bangalore Convention, July 9-11! you thinking of coming?",
-          "hey! convention's July 9-11 in Bangalore — three days, all meals, great vibes. first time?",
-          "yo! spots are going fast for July 9-11. pricing, registration — what do you need?",
+          "ayo Bangalore Convention, July 9-11! you thinking of coming?",
+          "hey convention's July 9-11 in Bangalore — three days, all meals, great vibes. first time?",
+          "yo spots are going fast for July 9-11. pricing, registration — what do you need?",
           "okk you're here! July 9-11, Bangalore. what's on your mind?",
         ];
         greeting = greetings[Math.floor(Math.random() * greetings.length)];
