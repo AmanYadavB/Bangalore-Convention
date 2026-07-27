@@ -979,15 +979,14 @@ function mountChat() {
         greeting = "hey! got live numbers ready — registrations, payments, pending, expenses. what do you need?";
       } else {
         const greetings = [
-          "ayo!! Bangalore Convention 2027 is July 9th to 11th and it's gonna be an absolutely unreal experience! you thinking of coming?",
-          "hey hey! so the convention is July 9th to 11th in Bangalore — three full days, all meals included, amazing fellowship. is this your first time hearing about it?",
-          "okk you're here! the Bangalore Convention 2027 is coming up fast and spots are going. what's on your mind — pricing, registration, what's included?",
-          "yo! convention's July 9th to 11th, Bangalore. fully catered, great vibes, people coming from all over India. you planning to join fr? ",
+          "ayo! Bangalore Convention, July 9-11! you thinking of coming?",
+          "hey! convention's July 9-11 in Bangalore — three days, all meals, great vibes. first time?",
+          "yo! spots are going fast for July 9-11. pricing, registration — what do you need?",
+          "okk you're here! July 9-11, Bangalore. what's on your mind?",
         ];
         greeting = greetings[Math.floor(Math.random() * greetings.length)];
       }
-      // Regular visitors: auto-start voice mode and speak the greeting.
-      // The mic turns on automatically after the greeting finishes (afterSpeak).
+      // Speak the greeting AND show it as text, then auto-start the mic.
       if (!isDeveloper() && !isAdmin() && canListen && canSpeak) {
         if (!recognition) initRecognition();
         voiceMode = true;
@@ -996,7 +995,7 @@ function mountChat() {
         finalBuffer = "";
         lastInterim = "";
         if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
-        speak(greeting, null); // afterSpeak() will resume the mic
+        speak(greeting, () => typeReply(greeting, true)); // text appears when audio starts
       } else {
         typeReply(greeting, false);
       }
