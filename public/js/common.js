@@ -326,7 +326,15 @@ function mountMascot() {
     fab.classList.toggle("as-bot", form === "bot");
   }
   function clearMoves() {
-    fab.classList.remove("waving", "rolling", "jumping", "huge", "demonic", "flying");
+    fab.classList.remove(
+      "waving", "rolling", "jumping", "huge", "demonic", "flying",
+      "mf-windup", "mf-arrive", "mf-idle-wait", "mf-throw", "mf-victory", "mf-land"
+    );
+    // // Clear any inline styles set during the minute-flip scene.
+    // fab.style.transform = '';
+    // fab.style.transition = '';
+    // fab.style.removeProperty('--mf-dx');
+    // fab.style.removeProperty('--mf-dy');
   }
 
   // Each "scene" performs an action and returns how long it lasts (ms).
@@ -399,6 +407,10 @@ function mountMascot() {
   }
 
   // Run the scenes one after another, forever. Pause while the chat is open.
+  // minuteFlipBusy is set while the minute-flip overlay scene is running so that
+  // chain() doesn't stomp over it.
+  // let minuteFlipBusy = false;
+
   function chain(steps, done) {
     let i = 0;
     (function step() {
@@ -493,6 +505,173 @@ function mountMascot() {
   //     /* mic blocked or unavailable \u2014 clap-to-theme just stays off */
   //   }
   // }
+
+  // ---- Minute-flip scene --------------------------------------------------
+  // At second :50 THE ACTUAL mascot (chat-widget wrapper translated via CSS
+  // transform) flies to the countdown Mins box.  Sequence:
+  //   :50  → wind-up wobble (0.52s)
+  //   :50  → pop-up launch phase (0.28s) then arc to counter (1.1s)
+  //   :52  → spring-arrival bounce, start gentle hover-bob
+  //   :52  → overlay clone of Mins box appears; violent grab-shake
+  //   :53  → tear: old number spins 3× into dustbin
+  //   :00  → overlay removed, new number slaps in, victory dance
+  //   :01  → fly home, minuteFlipBusy = false
+  //
+  // DOM note: tick() in index.html calls el.innerHTML=… every second, so all
+  // .count-box refs go stale.  The overlay absorbs this.  We re-query at :00.
+  // -------------------------------------------------------------------------
+  // setInterval(() => {
+  //   if (isChatOpen() || minuteFlipBusy) return;
+  //   if (new Date().getSeconds() !== 50) return;
+
+  //   const countdownEl = document.getElementById("countdown");
+  //   if (!countdownEl) return;
+
+  //   const minsBox = Array.from(countdownEl.querySelectorAll(".count-box")).find(
+  //     (b) => /min/i.test((b.querySelector(".cap") || {}).textContent || "")
+  //   );
+  //   if (!minsBox) return;
+
+  //   minuteFlipBusy = true;
+  //   clearMoves();       // stop any current fab CSS animation cleanly
+  //   setForm("bot");     // show mascot face
+
+  //   const widget = fab.parentElement; // .chat-widget (position:fixed wrapper)
+  //   widget.style.transition = "";
+  //   widget.style.transform  = "";    // reset any leftover transform
+
+  //   const _t0 = new Date();
+  //   const msToFlip = (60 - _t0.getSeconds()) * 1000 - _t0.getMilliseconds();
+  //   // Total elapsed by the time the innermost tear callback runs: ~3530ms
+  //   const ELAPSED_AT_TEAR = 500 + 280 + 1100 + 620 + 1030;
+
+  //   // ── Stage 1: Wind-up wobble (0 → 520ms) ───────────────────────────────
+  //   fab.classList.add("mf-windup");
+  //   setTimeout(() => fab.classList.remove("mf-windup"), 520);
+
+  //   // ── Stage 2: Launch (at 500ms) ─────────────────────────────────────────
+  //   setTimeout(() => {
+  //     if (canPlay()) takeoffSound();
+
+  //     const wR = widget.getBoundingClientRect();
+  //     const mR = minsBox.getBoundingClientRect();
+  //     const dx = (mR.left + mR.width  / 2) - (wR.left + wR.width  / 2);
+  //     const dy = (mR.top  - 40) - wR.top;
+
+  //     // Phase A: pop upward first (like a rocket ignition)
+  //     widget.style.transition = "transform 0.28s cubic-bezier(0.4,0,1,1)";
+  //     widget.style.transform  = "translate(0,-32px) scale(1.24) rotate(-8deg)";
+
+  //     // Phase B: arc across to the counter
+  //     setTimeout(() => {
+  //       widget.style.transition = "transform 1.1s cubic-bezier(0.4,0,0.2,1)";
+  //       widget.style.transform  = `translate(${dx}px,${dy}px) scale(1) rotate(0deg)`;
+  //     }, 280);
+  //   }, 500);
+
+  //   // ── Stage 3: Arrive at counter (500+280+1100 = 1880ms) ─────────────────
+  //   setTimeout(() => {
+  //     if (canPlay()) landSound();
+  //     fab.classList.add("mf-arrive");
+  //     setTimeout(() => fab.classList.remove("mf-arrive"), 680);
+
+  //     // ── Stage 4: Idle hover + create overlay + grab (at arrive+620ms) ───
+  //     setTimeout(() => {
+  //       if (canPlay()) boops();
+  //       fab.classList.add("mf-idle-wait");
+
+  //       // Clone Mins box into fixed overlay so tick() DOM rebuilds don't hurt.
+  //       const mR = minsBox.getBoundingClientRect();
+  //       const overlay = document.createElement("div");
+  //       overlay.className = "min-flip-overlay";
+  //       overlay.style.left   = mR.left   + "px";
+  //       overlay.style.top    = mR.top    + "px";
+  //       overlay.style.width  = mR.width  + "px";
+  //       overlay.style.height = mR.height + "px";
+  //       overlay.innerHTML    = minsBox.innerHTML;
+  //       document.body.appendChild(overlay);
+
+  //       const oNum = overlay.querySelector(".num");
+  //       if (oNum) oNum.classList.add("mf-grab");
+
+  //       // ── Stage 5: Tear it off (at +1030ms) ───────────────────────────────
+  //       setTimeout(() => {
+  //         // Switch overlay .num from grab to tear (3 full spins into bin)
+  //         if (oNum) {
+  //           oNum.classList.remove("mf-grab");
+  //           oNum.classList.add("mf-tear");
+  //         }
+
+  //         // Fab stops hovering, does a dramatic throw twitch
+  //         fab.classList.remove("mf-idle-wait");
+  //         fab.classList.add("mf-throw");
+  //         setTimeout(() => {
+  //           fab.classList.remove("mf-throw");
+  //           fab.classList.add("mf-idle-wait"); // hover again while waiting
+  //         }, 400);
+
+  //         // Dustbin pops below the Mins box
+  //         const bin = document.createElement("div");
+  //         bin.className = "min-dustbin-el";
+  //         bin.textContent = "🗑️";
+  //         bin.style.left = mR.left + mR.width  / 2 - 18 + "px";
+  //         bin.style.top  = mR.bottom + 12 + "px";
+  //         document.body.appendChild(bin);
+  //         setTimeout(() => bin.remove(), 2000);
+
+  //         // ── Stage 6: New number slaps in at :00 + 80ms grace ────────────
+  //         const msUntilSlap = msToFlip - ELAPSED_AT_TEAR + 80;
+
+  //         setTimeout(() => {
+  //           fab.classList.remove("mf-idle-wait");
+  //           overlay.remove(); // reveal freshly-updated live counter
+
+  //           // Triumphant 4-note arpeggio
+  //           if (canPlay()) {
+  //             tone(440, 0,    0.07, "square", 0.055);
+  //             tone(554, 0.07, 0.07, "square", 0.055);
+  //             tone(659, 0.14, 0.07, "square", 0.055);
+  //             tone(880, 0.21, 0.2,  "square", 0.07);
+  //           }
+
+  //           // Re-query — tick() has rebuilt all .count-box elements.
+  //           const newMinsBox = Array.from(
+  //             countdownEl.querySelectorAll(".count-box")
+  //           ).find(
+  //             (b) => /min/i.test((b.querySelector(".cap") || {}).textContent || "")
+  //           );
+  //           if (newMinsBox) {
+  //             newMinsBox.classList.add("min-num-slapin");
+  //             setTimeout(() => newMinsBox.classList.remove("min-num-slapin"), 800);
+  //           }
+
+  //           // Victory dance on the fab
+  //           fab.classList.add("mf-victory");
+  //           setTimeout(() => fab.classList.remove("mf-victory"), 730);
+
+  //           // ── Stage 7: Fly home after victory (at +730ms) ─────────────────
+  //           setTimeout(() => {
+  //             if (canPlay()) takeoffSound();
+  //             widget.style.transition =
+  //               "transform 0.92s cubic-bezier(0.34,1.56,0.64,1)";
+  //             widget.style.transform = "";
+
+  //             setTimeout(() => {
+  //               widget.style.transition = "";
+  //               if (canPlay()) landSound();
+  //               // Brief landing bounce reusing mf-arrive
+  //               fab.classList.add("mf-arrive");
+  //               setTimeout(() => fab.classList.remove("mf-arrive"), 680);
+  //               clearMoves();
+  //               setForm("box");
+  //               minuteFlipBusy = false;
+  //             }, 960);
+  //           }, 730);
+  //         }, Math.max(msUntilSlap, 600));
+  //       }, 1030);
+  //     }, 620);
+  //   }, 1880);
+  // }, 500);
 
   // Start life as the chat bubble in the corner, then begin the loop.
   setForm("box");
@@ -1495,8 +1674,9 @@ function mountChat() {
     speakId++; // invalidate any in-flight chunk playback from a previous turn
     pauseListening(); // mic off while we talk
     setVoiceStatus("speaking");
-    // Safety net: never keep the text hidden for long if the audio is slow.
-    const capTimer = setTimeout(startOnce, 2000);
+    // Safety net: reveal text if audio hasn't started yet (Aura-2 is slower
+    // than local TTS, so 4.5 s gives it time to respond before we give up).
+    const capTimer = setTimeout(startOnce, 4500);
     const begin = () => {
       clearTimeout(capTimer);
       startOnce();
@@ -1520,7 +1700,7 @@ function mountChat() {
     if (sentences.length <= 1) return [text.slice(0, 800)];
     // First chunk = just the opening sentence (fast to synthesise); the rest
     // becomes a second chunk so we make at most two TTS calls.
-    const first = sentences[0].slice(0, 320);
+    const first = sentences[0].slice(0, 180); // shorter = faster first TTS response
     const rest = sentences.slice(1).join(" ").slice(0, 700);
     return rest ? [first, rest] : [first];
   }
