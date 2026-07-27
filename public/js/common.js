@@ -834,6 +834,17 @@ function mountChat() {
   let greeted = false;
   let lastUserText = "";
 
+  // Pre-warm: pick a greeting and start fetching its TTS audio immediately so
+  // the very first chat open plays instantly with no perceptible delay.
+  const VISITOR_GREETINGS = [
+    "ayo Bangalore Convention, July 9-11! you thinking of coming?",
+    "hey convention's July 9-11 in Bangalore — three days, all meals, great vibes. first time?",
+    "yo spots are going fast for July 9-11. pricing, registration — what do you need?",
+    "okk you're here! July 9-11, Bangalore. what's on your mind?",
+  ];
+  const prewarmGreetingText = VISITOR_GREETINGS[Math.floor(Math.random() * VISITOR_GREETINGS.length)];
+  let prewarmAudioP = null; // Promise<base64|null>, resolved once TTS is ready
+
   // Pricing/categories, loaded once so the bot can book on the user's behalf.
   let PRICING = [];
   api("/api/pricing")
@@ -978,24 +989,29 @@ function mountChat() {
       } else if (isAdmin()) {
         greeting = "hey! got live numbers ready — registrations, payments, pending, expenses. what do you need?";
       } else {
-        const greetings = [
-          "ayo Bangalore Convention, July 9-11! you thinking of coming?",
-          "hey convention's July 9-11 in Bangalore — three days, all meals, great vibes. first time?",
-          "yo spots are going fast for July 9-11. pricing, registration — what do you need?",
-          "okk you're here! July 9-11, Bangalore. what's on your mind?",
-        ];
-        greeting = greetings[Math.floor(Math.random() * greetings.length)];
+        greeting = prewarmGreetingText; // use the pre-warmed text
       }
       // Speak the greeting AND show it as text, then auto-start the mic.
       if (!isDeveloper() && !isAdmin() && canListen && canSpeak) {
         if (!recognition) initRecognition();
         voiceMode = true;
         processing = false;
-        speaking = false;
+        speaking = true; // block mic until greeting finishes
         finalBuffer = "";
         lastInterim = "";
         if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
-        speak(greeting, () => typeReply(greeting, true)); // text appears when audio starts
+        setVoiceStatus("speaking");
+        const myGreetId = ++speakId;
+        typeReply(greeting, true);
+        // Play the pre-warmed Deepgram audio if ready; fall back to browser TTS.
+        (prewarmAudioP || Promise.resolve(null)).then((audio64) => {
+          if (audio64 && myGreetId === speakId) {
+            playClip(audio64, null, myGreetId).then(() => { if (myGreetId === speakId) afterSpeak(); });
+          } else {
+            speaking = false;
+            browserSpeak(greeting, null);
+          }
+        });
       } else {
         typeReply(greeting, false);
       }
@@ -1485,6 +1501,109 @@ function mountChat() {
   fab.addEventListener("click", () => (panel.hidden ? openChat() : closeChat()));
   document.getElementById("chatClose").addEventListener("click", closeChat);
 
+  // ---- Streaming sendToChat: tokens arrive live, TTS queued per sentence ----
+  async function sendToChatStream(q, opts) {
+    const voice = !!opts.voice;
+    const mySpeakId = ++speakId;
+    const typingEl = addMsg("assistant typing", "\u2026");
+    let bubble = null;
+    let fullText = "", sentenceBuf = "";
+    const ttsQueue = [];
+    let draining = false;
+
+    if (voice) { speaking = true; pauseListening(); setVoiceStatus("thinking"); }
+
+    const queueTts = (sentence) => {
+      if (!sentence.trim() || !voice) return;
+      ttsQueue.push(fetchTts(sentence));
+      if (!draining) drainTts();
+    };
+    const drainTts = async () => {
+      draining = true;
+      setVoiceStatus("speaking");
+      while (ttsQueue.length) {
+        const audio64 = await ttsQueue.shift();
+        if (mySpeakId !== speakId) { draining = false; return; }
+        if (audio64) await playClip(audio64, null, mySpeakId);
+      }
+      draining = false;
+      if (mySpeakId === speakId) afterSpeak();
+    };
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: history,
+          role: localStorage.getItem("role") || "user",
+          devKey: getDevKey(),
+          voice,
+          stream: true,
+        }),
+      });
+      if (!res.ok || !res.body) throw new Error("stream " + res.status);
+
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = "", finalReply = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        let idx;
+        while ((idx = buf.indexOf("\n\n")) !== -1) {
+          const msg = buf.slice(0, idx).trim();
+          buf = buf.slice(idx + 2);
+          if (!msg.startsWith("data:")) continue;
+          let data;
+          try { data = JSON.parse(msg.slice(5).trim()); } catch { continue; }
+
+          if (data.t) {
+            if (typingEl.parentNode) typingEl.remove();
+            if (!bubble) bubble = addMsg("assistant", "");
+            fullText += data.t;
+            sentenceBuf += data.t;
+            bubble.innerHTML = escapeHtml(fullText).replace(/\n/g, "<br>");
+            log.scrollTop = log.scrollHeight;
+            // Fire TTS for each completed sentence in parallel with AI generation.
+            if (voice) {
+              let m;
+              while ((m = sentenceBuf.match(/^(.{15,}?[.!?])\s+([\s\S]*)$/))) {
+                queueTts(m[1]); sentenceBuf = m[2];
+              }
+            }
+          }
+          if (data.done) finalReply = data.reply;
+          if (data.error) throw new Error(data.error);
+        }
+      }
+
+      if (voice && sentenceBuf.trim()) queueTts(sentenceBuf.trim());
+      typingEl.remove();
+
+      const replyText = finalReply || fullText;
+      if (replyText) {
+        history.push({ role: "assistant", content: replyText });
+        const { action, html } = parseReply(replyText);
+        if (action) executeAction(action, html);
+      }
+    } catch (err) {
+      console.error("[stream]", err);
+      typingEl.remove();
+      if (bubble) bubble.remove();
+      if (voice) { speaking = false; afterSpeak(); }
+      handleAssistantReply(
+        "I couldn\u2019t reach the server just now \uD83D\uDCF6. Please check your connection and try again.",
+        false
+      );
+    } finally {
+      sendBtn.disabled = false;
+      if (!isMobile() && !voice) text.focus();
+    }
+  }
+
   // ---- Send a message to the assistant (shared by typing and voice) --------
   async function sendToChat(q, opts) {
     opts = opts || {};
@@ -1494,6 +1613,8 @@ function mountChat() {
     history.push({ role: "user", content: q });
     lastUserText = q;
     sendBtn.disabled = true;
+    // Voice mode uses the streaming pipeline (tokens + concurrent TTS).
+    if (opts.voice) return sendToChatStream(q, opts);
     const typing = addMsg("assistant typing", "\u2026");
     console.log("[chat] POST /api/chat", { messages: history });
     try {
@@ -1730,6 +1851,9 @@ function mountChat() {
       return null;
     }
   }
+
+  // Start pre-warming the greeting TTS now (parallel with page render).
+  if (!isDeveloper() && !isAdmin()) prewarmAudioP = fetchTts(prewarmGreetingText);
 
   function playClip(audio64, onStart, myId) {
     return new Promise((resolve) => {
