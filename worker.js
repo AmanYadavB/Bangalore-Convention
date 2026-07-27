@@ -808,7 +808,17 @@ async function handleApi(request, env) {
             }
           } catch {}
         }
-        sse({ error: "All models unavailable. Please try again." });
+        // Streaming failed for all models; try one plain (non-streaming) call before giving up.
+        try {
+          const fallback = await env.AI.run("@cf/meta/llama-3.1-8b-instruct-fast", {
+            messages: [leanSystem, ...cleaned],
+            max_tokens: maxTokens,
+          });
+          const fb = ((fallback && (fallback.response || fallback.result)) || "")
+            .replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+          if (fb) { sse({ done: true, reply: fb }); writer.close(); return; }
+        } catch {}
+        sse({ done: true, reply: "The assistant is resting for a moment \uD83D\uDE34. Please try again shortly \u2014 meanwhile you can sign up on the Register page or reach the organising committee." });
         writer.close();
       })();
 
