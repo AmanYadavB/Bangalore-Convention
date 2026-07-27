@@ -891,10 +891,14 @@ async function handleApi(request, env) {
       );
       if (!resp || !resp.ok) return json({ error: "tts failed: no audio returned" }, 502);
       // Convert the binary stream to base64 so the frontend can play it unchanged.
+      // Process in 8 KB chunks with apply() — far faster than char-by-char concat.
       const buf = await resp.arrayBuffer();
       const bytes = new Uint8Array(buf);
+      const CHUNK = 8192;
       let binary = "";
-      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+      for (let i = 0; i < bytes.length; i += CHUNK) {
+        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+      }
       const audio = btoa(binary);
       return json({ audio });
     } catch (err) {
