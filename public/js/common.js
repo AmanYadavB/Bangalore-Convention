@@ -837,10 +837,10 @@ function mountChat() {
   // Pre-warm: pick a greeting and start fetching its TTS audio immediately so
   // the very first chat open plays instantly with no perceptible delay.
   const VISITOR_GREETINGS = [
-    "ayo, Bangalore Convention, July 9-11! you thinking of coming?",
-    "hey, convention's July 9-11 in Bangalore — three days, all meals, great vibes. first time?",
-    "yo, spots are going fast for July 9-11. pricing, registration — what do you need?",
-    "okk, you're here! July 9-11, Bangalore. what's on your mind?",
+    "Welcome Bro! THE Convention is happening July 9th to 11th. Three inspiring days filled with sessions, community, great food, and unforgettable experiences. What would you like to know?",
+    "Hey! Glad you're here! Join us from July 9th to 11th for an amazing convention experience. Whether it's your first time or you're returning, I'd be happy to help. What's on your mind?",
+    "Yo! Excited to see your interest in the Convention! this is going to be packed with meaningful connections, engaging activities, and memorable moments. How can I help today?",
+    "Bro! The Convention is just around the corner! From July 9th to 11th, Bangalore will host three incredible days of learning, fellowship, and fun. What information are you looking for?"
   ];
   const prewarmGreetingText = VISITOR_GREETINGS[Math.floor(Math.random() * VISITOR_GREETINGS.length)];
   let prewarmAudioP = null; // Promise<base64|null>, resolved once TTS is ready
