@@ -1505,27 +1505,32 @@ function mountChat() {
     const voice = !!opts.voice;
     const mySpeakId = ++speakId;
     const typingEl = addMsg("assistant typing", "\u2026");
-    let bubble = null;
+    let bubble = null;          // non-voice: plain element
+    let voiceMascot = null;     // voice: { row, bot, txt } from addAssistantBubble
     let fullText = "", sentenceBuf = "", spokenText = "";
     const ttsQueue = [];
     let draining = false, anyQueued = false;
 
     if (voice) { speaking = true; pauseListening(); setVoiceStatus("thinking"); }
 
-    // Voice mode: text must never appear before the words are actually spoken,
-    // so each chunk's text is revealed only once its audio starts playing.
+    // Voice mode: reveal text in sync with audio, using the mascot bubble.
     const revealChunk = (chunk) => {
       if (typingEl.parentNode) typingEl.remove();
-      if (!bubble) bubble = addMsg("assistant", "");
+      if (!voiceMascot) {
+        voiceMascot = addAssistantBubble();
+        voiceMascot.bot.classList.add("speaking");
+      }
       spokenText += (spokenText ? " " : "") + chunk;
-      bubble.innerHTML = escapeHtml(spokenText).replace(/\n/g, "<br>");
-      log.scrollTop = log.scrollHeight;
+      voiceMascot.txt.innerHTML = escapeHtml(spokenText).replace(/\n/g, "<br>");
+      scrollToMsg(voiceMascot.row, "assistant");
     };
     const queueTts = (chunk) => {
-      const trimmed = chunk.trim();
-      if (!trimmed || !voice) return;
+      // Strip [[ACTION]] marker — never feed raw action JSON to TTS.
+      const actionIdx = chunk.indexOf("[[ACTION]]");
+      const text = (actionIdx !== -1 ? chunk.slice(0, actionIdx) : chunk).trim();
+      if (!text || !voice) return;
       anyQueued = true;
-      ttsQueue.push({ text: trimmed, audioP: fetchTts(trimmed) });
+      ttsQueue.push({ text, audioP: fetchTts(text) });
       if (!draining) drainTts();
     };
     const drainTts = async () => {
@@ -1539,6 +1544,7 @@ function mountChat() {
         if (audio64) await playClip(audio64, null, mySpeakId);
       }
       draining = false;
+      if (voiceMascot) voiceMascot.bot.classList.remove("speaking");
       if (mySpeakId === speakId) afterSpeak();
     };
 
@@ -1613,7 +1619,7 @@ function mountChat() {
       // SSE sent an error event (AI models unavailable) — show friendly message, not "network error".
       if (sseError) {
         if (typingEl.parentNode) typingEl.remove();
-        if (bubble) bubble.remove();
+        if (voice) { if (voiceMascot) voiceMascot.row.remove(); } else { if (bubble) bubble.remove(); }
         if (voice) { speaking = false; afterSpeak(); }
         handleAssistantReply(
           "The assistant is resting for a moment \uD83D\uDE34. Please try again shortly \u2014 meanwhile you can sign up on the Register page or reach the organising committee.",
@@ -1655,7 +1661,7 @@ function mountChat() {
     } catch (err) {
       console.error("[stream]", err);
       typingEl.remove();
-      if (bubble) bubble.remove();
+      if (voice) { if (voiceMascot) voiceMascot.row.remove(); } else { if (bubble) bubble.remove(); }
       if (voice) { speaking = false; afterSpeak(); }
       handleAssistantReply(
         "I couldn\u2019t reach the server just now \uD83D\uDCF6. Please check your connection and try again.",
