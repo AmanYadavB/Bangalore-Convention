@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ops · Bangalore Convention</title>
+    <link rel="stylesheet" href="css/style.css" />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  </head>
+  <body>
+    <div id="nav"></div>
+
+    <div class="container">
+      <h1 class="page-title">Ops Control</h1>
+      <p class="page-sub">
+        Dashboard emails: send, test, schedule and inspect — one click each.
+      </p>
+
+      <div id="dev-gate"></div>
+      <div id="dev-body" hidden>
+        <div class="card" style="margin-bottom: 18px">
+          <h2 style="margin-top: 0">Email actions</h2>
+          <div class="section-head" style="justify-content: flex-start; gap: 10px; flex-wrap: wrap">
+            <button class="btn primary" id="btnSend" type="button">📧 Send digest now</button>
+            <button class="btn" id="btnCheck" type="button">🚨 Run critical check</button>
+            <button class="btn" id="btnReset" type="button">♻️ Reset today's sent flag</button>
+            <button class="btn" id="btnPreview" type="button">👁️ Preview digest</button>
+          </div>
+          <p class="muted" style="margin-bottom: 0">
+            <b>Send digest now</b> emails the full dashboard immediately and shows the mail
+            service's verdict below. <b>Reset</b> lets the scheduled digest go out a second
+            time today (after a time change). <b>Preview</b> opens the digest in a new tab
+            without sending anything.
+          </p>
+        </div>
+
+        <div class="card" style="margin-bottom: 18px">
+          <h2 style="margin-top: 0">Daily digest time (IST)</h2>
+          <div class="section-head" style="justify-content: flex-start; gap: 10px; flex-wrap: wrap">
+            <input id="timeInput" type="time" style="max-width: 140px" />
+            <button class="btn primary" id="btnSchedule" type="button">Save time</button>
+            <button class="btn" id="btnClearSchedule" type="button">Use wrangler.toml time</button>
+          </div>
+          <p class="muted" style="margin-bottom: 0">
+            Applies within 10 minutes, no redeploy. "Save time" stores an override; the
+            second button removes it so <code>DIGEST_TIME_IST</code> from wrangler.toml
+            applies again.
+          </p>
+        </div>
+
+        <div class="section-head">
+          <h2>Status</h2>
+          <button class="btn small" id="btnStatus" type="button">Refresh</button>
+        </div>
+        <div class="card">
+          <div id="statusSummary" class="muted">Loading…</div>
+        </div>
+
+        <div class="section-head"><h2>Last action result</h2></div>
+        <div class="card">
+          <pre id="resultBox" style="margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 12.5px">No action run yet.</pre>
+        </div>
+      </div>
+    </div>
+
+    <script src="js/common.js"></script>
+    <script>
+      mountNav("ops");
+
+      const gate = document.getElementById("dev-gate");
+      const bodyEl = document.getElementById("dev-body");
+      const resultBox = document.getElementById("resultBox");
+
+      function showGate() {
+        bodyEl.hidden = true;
+        gate.innerHTML = `
+          <div class="card" style="max-width:460px;margin:30px auto;text-align:center">
+            <h2 style="margin-top:0">Developer access required</h2>
+            <p class="muted">Enter the developer key to open the ops controls.</p>
+            <div class="field" style="text-align:left">
+              <label for="devKeyInput">Developer key</label>
+              <input id="devKeyInput" type="password" autocomplete="off" placeholder="Developer key" />
+            </div>
+            <button class="btn primary" id="devUnlock" type="button">Unlock</button>
+            <p class="muted" id="devErr" style="color:var(--danger,#e5484d);display:none;margin-top:10px"></p>
+          </div>`;
+        const unlock = async () => {
+          const err = document.getElementById("devErr");
+          err.style.display = "none";
+          const ok = await loginDeveloper(document.getElementById("devKeyInput").value);
+          if (ok) location.reload();
+          else {
+            err.textContent = "That key was not accepted.";
+            err.style.display = "block";
+          }
+        };
+        document.getElementById("devUnlock").addEventListener("click", unlock);
+        document
+          .getElementById("devKeyInput")
+          .addEventListener("keydown", (e) => e.key === "Enter" && unlock());
+      }
+
+      // All report endpoints accept the key via the x-dev-key header.
+      async function call(path, method, body) {
+        const res = await fetch(path, {
+          method: method || "GET",
+          headers: { "Content-Type": "application/json", "x-dev-key": getDevKey() },
+          body: body ? JSON.stringify(body) : undefined,
+        });
+        let data;
+        try { data = await res.json(); } catch { data = { error: "Non-JSON response (http " + res.status + ")" }; }
+        return { status: res.status, data };
+      }
+
+      function showResult(label, r) {
+        const ok = r.status < 400 && !r.data.error && r.data.ok !== false;
+        resultBox.textContent =
+          label + " → HTTP " + r.status + (ok ? " ✅" : " ❌") + "\n\n" + JSON.stringify(r.data, null, 2);
+        toast(ok ? label + ": OK" : label + " failed", ok ? undefined : "error");
+      }
+
+      async function refreshStatus() {
+        const box = document.getElementById("statusSummary");
+        const r = await call("/api/report/status");
+        if (r.status >= 400) {
+          box.textContent = "Status failed: HTTP " + r.status;
+          return;
+        }
+        const s = r.data;
+        const last = s.lastDigestAttempt;
+        const lastLine =
+          last && last !== "never"
+            ? (last.ok ? "✅ sent" : "❌ FAILED (" + last.note + ")") + " at " + last.at + " — “" + last.subject + "”"
+            : "never attempted (since this version deployed)";
+        box.innerHTML =
+          "<table style='width:100%'>" +
+          "<tr><td class='muted'>Worker time (IST)</td><td><b>" + escapeHtml(s.workerTimeIst) + "</b></td></tr>" +
+          "<tr><td class='muted'>Digest time (IST)</td><td><b>" + escapeHtml(s.digestTimeIst) + "</b> <span class='muted'>(" + escapeHtml(s.digestTimeSource) + ")</span></td></tr>" +
+          "<tr><td class='muted'>Digest already sent today</td><td><b>" + (s.digestAlreadySentToday ? "yes — use Reset to allow another" : "no") + "</b></td></tr>" +
+          "<tr><td class='muted'>Last digest attempt</td><td>" + escapeHtml(lastLine) + "</td></tr>" +
+          "<tr><td class='muted'>Last critical check</td><td>" + escapeHtml(String(s.lastCriticalCheckAt)) + "</td></tr>" +
+          "<tr><td class='muted'>Emails go to</td><td><b>" + escapeHtml(String(s.dashboardEmail)) + "</b></td></tr>" +
+          "</table>";
+        if (s.digestTimeIst && /^\d\d:\d\d$/.test(s.digestTimeIst)) {
+          document.getElementById("timeInput").value = s.digestTimeIst;
+        }
+      }
+
+      function wire() {
+        document.getElementById("btnSend").addEventListener("click", async (e) => {
+          e.target.disabled = true;
+          showResult("Send digest", await call("/api/report/send", "POST", { devKey: getDevKey() }));
+          e.target.disabled = false;
+          refreshStatus();
+        });
+        document.getElementById("btnCheck").addEventListener("click", async (e) => {
+          e.target.disabled = true;
+          showResult("Critical check", await call("/api/report/check", "POST", { devKey: getDevKey() }));
+          e.target.disabled = false;
+          refreshStatus();
+        });
+        document.getElementById("btnReset").addEventListener("click", async () => {
+          showResult("Reset sent flag", await call("/api/report/reset", "POST", { devKey: getDevKey() }));
+          refreshStatus();
+        });
+        document.getElementById("btnPreview").addEventListener("click", () => {
+          window.open("/api/report/preview?devKey=" + encodeURIComponent(getDevKey()), "_blank");
+        });
+        document.getElementById("btnSchedule").addEventListener("click", async () => {
+          const t = document.getElementById("timeInput").value;
+          if (!t) return toast("Pick a time first", "error");
+          showResult("Set digest time", await call("/api/report/schedule", "POST", { devKey: getDevKey(), time: t }));
+          refreshStatus();
+        });
+        document.getElementById("btnClearSchedule").addEventListener("click", async () => {
+          showResult("Clear time override", await call("/api/report/schedule", "POST", { devKey: getDevKey(), clear: true }));
+          refreshStatus();
+        });
+        document.getElementById("btnStatus").addEventListener("click", refreshStatus);
+      }
+
+      if (isDeveloper()) {
+        gate.innerHTML = "";
+        bodyEl.hidden = false;
+        wire();
+        refreshStatus();
+      } else {
+        showGate();
+      }
+    </script>
+  </body>
+</html>

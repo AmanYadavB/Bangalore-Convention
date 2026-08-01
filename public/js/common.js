@@ -142,6 +142,7 @@ function renderNav(active) {
     { href: "dashboard.html", label: "Dashboard", key: "dashboard", admin: true },
     { href: "expenses.html", label: "Expenses", key: "expenses", admin: true },
     { href: "pages.html", label: "Feed AI", key: "pages", dev: true },
+    { href: "ops.html", label: "Ops", key: "ops", dev: true },
   ].filter((l) => (!l.admin || admin) && (!l.dev || isDeveloper()));
 
   const authBtn = admin
