@@ -345,8 +345,10 @@ async function getCloudflareRequests(env) {
   if (!env.CF_API_TOKEN || !env.CF_ACCOUNT_ID)
     return { ok: false, note: "set CF_ACCOUNT_ID var + CF_API_TOKEN secret to enable" };
   try {
+    // Window = the current UTC day, because that's how the free-plan daily
+    // quota (100k requests) resets.
     const end = new Date();
-    const start = new Date(end.getTime() - 24 * 3600 * 1000);
+    const start = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate()));
     const query =
       "query($tag: String!, $start: Time!, $end: Time!) { viewer { accounts(filter: {accountTag: $tag}) { " +
       "workersInvocationsAdaptive(filter: {datetime_geq: $start, datetime_leq: $end}, limit: 100) { sum { requests errors subrequests } } } } }";
@@ -380,6 +382,43 @@ async function getCloudflareRequests(env) {
   }
 }
 
+// Workers AI neurons used today (free plan: 10,000/day). The GraphQL field
+// name has varied across schema versions, so try the known spellings and
+// degrade gracefully to the self-tracked call count if none works.
+async function getWorkersAiNeurons(env) {
+  if (!env.CF_API_TOKEN || !env.CF_ACCOUNT_ID)
+    return { ok: false, note: "needs CF_API_TOKEN + CF_ACCOUNT_ID" };
+  const end = new Date();
+  const start = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate()));
+  for (const field of ["totalNeurons", "neurons"]) {
+    try {
+      const query =
+        "query($tag: String!, $start: Time!) { viewer { accounts(filter: {accountTag: $tag}) { " +
+        "aiInferenceAdaptiveGroups(filter: {datetime_geq: $start}, limit: 100) { sum { " + field + " } } } } }";
+      const res = await fetch("https://api.cloudflare.com/client/v4/graphql", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + env.CF_API_TOKEN, "Content-Type": "application/json" },
+        body: JSON.stringify({ query, variables: { tag: env.CF_ACCOUNT_ID, start: start.toISOString() } }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data.errors && data.errors.length) continue; // wrong field name — try the next
+      const rows =
+        (data.data &&
+          data.data.viewer &&
+          data.data.viewer.accounts &&
+          data.data.viewer.accounts[0] &&
+          data.data.viewer.accounts[0].aiInferenceAdaptiveGroups) ||
+        [];
+      let neurons = 0;
+      for (const r of rows) neurons += (r.sum && r.sum[field]) || 0;
+      return { ok: true, neurons };
+    } catch (e) {
+      /* try next field */
+    }
+  }
+  return { ok: false, note: "AI analytics not available on this account/token" };
+}
+
 async function sendOpsEmail(env, subject, html) {
   if (!env.DASHBOARD_EMAIL) return { ok: false, note: "DASHBOARD_EMAIL not set" };
   try {
@@ -403,11 +442,12 @@ async function sendOpsEmail(env, subject, html) {
 async function collectDashboardData(env) {
   const today = istDate(0);
   const yesterday = istDate(1);
-  const [usageToday, usageYesterday, dg, cf, registrations, expenses, groqLimits] = await Promise.all([
+  const [usageToday, usageYesterday, dg, cf, ai, registrations, expenses, groqLimits] = await Promise.all([
     getUsage(env, today),
     getUsage(env, yesterday),
     getDeepgramBalance(env),
     getCloudflareRequests(env),
+    getWorkersAiNeurons(env),
     loadList(env, "registrations"),
     loadList(env, "expenses"),
     env.CONVENTION_KV.get("groq:limits", { type: "json" }),
@@ -415,8 +455,8 @@ async function collectDashboardData(env) {
   const paid = registrations.filter((r) => r.paid);
   const collected = paid.reduce((s, r) => s + (r.amount || 0), 0);
   const spent = expenses.reduce((s, e) => s + (e.amount || 0), 0);
-  return {
-    today, yesterday, usageToday, usageYesterday, dg, cf, groqLimits,
+  const d = {
+    today, yesterday, usageToday, usageYesterday, dg, cf, ai, groqLimits,
     regs: {
       count: registrations.length,
       paidCount: paid.length,
@@ -425,6 +465,8 @@ async function collectDashboardData(env) {
       balance: collected - spent,
     },
   };
+  d.allowances = buildAllowances(d, env);
+  return d;
 }
 
 // Critical conditions worth an immediate email. Each has a stable id so the
@@ -466,7 +508,20 @@ function findAlerts(d, env) {
   if (d.cf.ok && d.cf.requests > 90000) {
     alerts.push({
       id: "cf-requests-high",
-      text: `${d.cf.requests.toLocaleString()} Worker requests in the last 24h — the free plan allows 100,000/day. The site may start rejecting requests.`,
+      text: `${d.cf.requests.toLocaleString()} Worker requests today — the free plan allows 100,000/day. The site may start rejecting requests.`,
+    });
+  }
+  if (d.ai.ok && d.ai.neurons >= FREE_LIMITS.aiNeurons * 0.9) {
+    alerts.push({
+      id: "workers-ai-neurons-high",
+      text: `Workers AI has used ${Math.round(d.ai.neurons).toLocaleString()} of 10,000 free neurons today (${Math.round((d.ai.neurons / FREE_LIMITS.aiNeurons) * 100)}%). When it hits the cap, chat replies shift to the Groq/Gemini fallbacks until the daily reset.`,
+    });
+  }
+  const kvEst = (d.usageToday.chatRequests || 0) + (d.usageToday.ttsCalls || 0) + (d.usageToday.groqCalls || 0);
+  if (kvEst >= FREE_LIMITS.kvWrites * 0.9) {
+    alerts.push({
+      id: "kv-writes-high",
+      text: `≈${kvEst} KV writes today of the 1,000/day free allowance — registrations and payment updates may start failing. Consider the $5 Workers Paid plan if this recurs.`,
     });
   }
   return alerts;
@@ -487,6 +542,91 @@ function groqQuotaNote(gl) {
   }
   const when = gl.at ? " (as of " + gl.at.slice(11, 16) + " UTC)" : "";
   return parts.length ? parts.join(" · ") + when : "quota headers unavailable";
+}
+
+// ---- Free-allowance meter: the chart at the top of the digest --------------
+// Every quota that could silently exhaust and force a paid plan, as a percent.
+const FREE_LIMITS = { workersRequests: 100000, aiNeurons: 10000, kvWrites: 1000 };
+
+function buildAllowances(d, env) {
+  const u = d.usageToday;
+  const bars = [];
+  bars.push({
+    label: "Cloudflare Workers requests",
+    pct: d.cf.ok ? (d.cf.requests / FREE_LIMITS.workersRequests) * 100 : null,
+    detail: d.cf.ok
+      ? d.cf.requests.toLocaleString() + " of 100,000 free requests today (UTC day)"
+      : d.cf.note,
+  });
+  bars.push({
+    label: "Workers AI neurons",
+    pct: d.ai.ok ? (d.ai.neurons / FREE_LIMITS.aiNeurons) * 100 : null,
+    detail: d.ai.ok
+      ? Math.round(d.ai.neurons).toLocaleString() + " of 10,000 free neurons today"
+      : d.ai.note + " — " + (u.workersAiWins || 0) + " Workers AI replies self-tracked today",
+  });
+  const gl = d.groqLimits;
+  if (gl && gl.requestsLimit && gl.requestsRemaining !== null) {
+    const used = gl.requestsLimit - gl.requestsRemaining;
+    bars.push({
+      label: "Groq daily requests",
+      pct: (used / gl.requestsLimit) * 100,
+      detail: used.toLocaleString() + " of " + gl.requestsLimit.toLocaleString() + " used (from Groq's own headers)",
+    });
+  } else {
+    bars.push({ label: "Groq daily requests", pct: null, detail: "quota appears after the first Groq call" });
+  }
+  const credit = Number(env.DEEPGRAM_CREDIT_TOTAL || 200);
+  bars.push({
+    label: "Deepgram free credit",
+    pct: d.dg.ok && credit > 0 ? ((credit - d.dg.dollars) / credit) * 100 : null,
+    detail: d.dg.ok
+      ? "$" + d.dg.dollars.toFixed(2) + " left of $" + credit + " (set DEEPGRAM_CREDIT_TOTAL if different)"
+      : d.dg.note,
+  });
+  // Tracked events ≈ 1 KV write each; the free plan allows only 1,000/day and
+  // this dashboard's own telemetry is part of that budget.
+  const kvEst = (u.chatRequests || 0) + (u.ttsCalls || 0) + (u.groqCalls || 0);
+  bars.push({
+    label: "KV writes (estimate)",
+    pct: (kvEst / FREE_LIMITS.kvWrites) * 100,
+    detail: "≈" + kvEst + " of 1,000 free writes today — includes this dashboard's own tracking",
+  });
+  return bars;
+}
+
+function barColor(pct) {
+  if (pct === null) return "#cbd5e1";
+  if (pct >= 90) return "#ef4444";
+  if (pct >= 70) return "#f59e0b";
+  return "#22c55e";
+}
+
+function allowanceChartHtml(bars) {
+  const rows = bars
+    .map((b) => {
+      const pct = b.pct === null ? null : Math.min(100, Math.max(0, b.pct));
+      const col = barColor(pct);
+      const pctLabel =
+        pct === null ? "n/a" : b.pct >= 100 ? "100%+" : pct.toFixed(pct < 10 ? 1 : 0) + "%";
+      return (
+        '<div style="margin:12px 0 0">' +
+        '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px">' +
+        '<span style="color:#333">' + b.label + "</span>" +
+        '<strong style="color:' + (pct !== null && pct >= 90 ? "#ef4444" : "#333") + '">' + pctLabel + "</strong></div>" +
+        '<div style="background:#e2e8f0;border-radius:6px;height:10px;overflow:hidden">' +
+        '<div style="width:' + (pct === null ? 100 : Math.max(2, pct)) + "%;height:10px;border-radius:6px;background:" + col + '"></div></div>' +
+        '<div style="font-size:11px;color:#94a3b8;margin-top:3px">' + b.detail + "</div>" +
+        "</div>"
+      );
+    })
+    .join("");
+  return (
+    '<div style="background:#fff;border:1px solid #eee;border-radius:8px;padding:14px 16px;margin:0 0 18px">' +
+    '<strong style="font-size:14px;color:#333">📈 Free allowance used</strong>' +
+    rows +
+    "</div>"
+  );
 }
 
 function dashRow(label, value, note) {
@@ -526,10 +666,11 @@ function buildDigestHtml(d, alerts) {
     '<div style="font-family:Segoe UI,Arial,sans-serif;max-width:640px;margin:0 auto;padding:20px;background:#f8fafc">' +
     '<h2 style="margin:0 0 4px">📊 Convention dashboard — ' + d.today + "</h2>" +
     '<p style="color:#777;margin:0 0 18px">Daily ops digest for the Bangalore Convention site.</p>' +
+    allowanceChartHtml(d.allowances) +
     alertHtml +
     dashSection("💰 Balances & platform",
       dashRow("Deepgram credit remaining", d.dg.ok ? "$" + d.dg.dollars.toFixed(2) : "unavailable", d.dg.ok ? "TTS voice budget" : d.dg.note) +
-      dashRow("Cloudflare requests (24h)", d.cf.ok ? d.cf.requests.toLocaleString() : "n/a", d.cf.ok ? d.cf.errors + " errors · " + d.cf.subrequests.toLocaleString() + " subrequests" : d.cf.note)
+      dashRow("Cloudflare requests (today, UTC)", d.cf.ok ? d.cf.requests.toLocaleString() : "n/a", d.cf.ok ? d.cf.errors + " errors · " + d.cf.subrequests.toLocaleString() + " subrequests" : d.cf.note)
     ) +
     dashSection("🤖 AI usage today",
       dashRow("Chat requests", cmp(u.chatRequests, y.chatRequests), (u.voiceChats || 0) + " via voice") +

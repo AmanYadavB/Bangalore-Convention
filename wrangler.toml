@@ -45,9 +45,12 @@ DEEPGRAM_API_KEY = "60167b8e4cf80a81095ba76f3e465283b507fd03"
 DASHBOARD_EMAIL = "amankumaryadavasasmd@gmail.com"
 # Daily digest time in IST (24h "HH:MM"). Can also be changed live without a
 # redeploy:  POST /api/report/schedule  {"devKey":"...","time":"18:40"}
-DIGEST_TIME_IST = "22:10"
+DIGEST_TIME_IST = "22:30"
 # Critical alert fires when Deepgram credit drops below this many dollars.
 ALERT_DEEPGRAM_MIN = "2"
+# Deepgram's starting free credit in dollars — used to compute the "credit
+# used %" bar in the digest (new accounts get $200).
+DEEPGRAM_CREDIT_TOTAL = "200"
 # The main DEEPGRAM_API_KEY can speak but may lack permission to read the
 # account balance (403). To show "dollars remaining", create a key with
 # Owner/Administrator scope in the Deepgram console and paste it here:
