@@ -47,17 +47,25 @@ async function saveList(env, key, list) {
 }
 
 // ---- Developer-generated pages (stored in D1) ----------------------------
+// Both tables only need creating once per isolate; skipping the repeat DDL
+// saves a D1 round trip on every chat message and /p/<slug> view.
+let pagesTableReady = false;
 async function ensurePagesTable(env) {
+  if (pagesTableReady) return;
   await env.CONVENTION_DB.exec(
     "CREATE TABLE IF NOT EXISTS pages (slug TEXT PRIMARY KEY, title TEXT NOT NULL, html TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)"
   );
+  pagesTableReady = true;
 }
 
 // ---- Developer-fed knowledge for the AI (stored in D1) -------------------
+let knowledgeTableReady = false;
 async function ensureKnowledgeTable(env) {
+  if (knowledgeTableReady) return;
   await env.CONVENTION_DB.exec(
     "CREATE TABLE IF NOT EXISTS knowledge (id TEXT PRIMARY KEY, title TEXT NOT NULL, content TEXT NOT NULL, created_at TEXT NOT NULL)"
   );
+  knowledgeTableReady = true;
 }
 
 // Compact, length-bounded blob of the fed knowledge that is MOST RELEVANT to
@@ -891,6 +899,8 @@ async function handleApi(request, env) {
         // Groq fallback (same provider the non-streaming path uses) — the client's
         // chat mode often only succeeds because of this fallback, so voice mode
         // needs it too or it always ends up at the "resting" message below.
+        // Streamed, so the first token reaches the user immediately instead of
+        // arriving as one blob after the whole completion finishes.
         if (env.GROQ_API_KEY) {
           try {
             const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -904,19 +914,46 @@ async function handleApi(request, env) {
                 messages: [{ role: "system", content: leanSystem.content }, ...cleaned],
                 max_tokens: maxTokens,
                 temperature: 0.7,
+                stream: true,
               }),
             });
-            const rawText = await groqRes.text().catch(() => "");
-            if (groqRes.ok) {
-              const gd = JSON.parse(rawText || "{}");
-              const reply = gd?.choices?.[0]?.message?.content?.trim();
-              if (reply) { sse({ done: true, reply }); writer.close(); return; }
-              attempts.push("groq: empty reply | raw=" + rawText.slice(0, 500));
+            if (groqRes.ok && groqRes.body) {
+              const reader = groqRes.body.getReader();
+              const dec = new TextDecoder();
+              let lineBuf = "", full = "";
+              const stripThink = makeThinkFilter();
+              while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                lineBuf += dec.decode(value, { stream: true });
+                let nl;
+                while ((nl = lineBuf.indexOf("\n")) !== -1) {
+                  const line = lineBuf.slice(0, nl).trim();
+                  lineBuf = lineBuf.slice(nl + 1);
+                  if (!line.startsWith("data:")) continue;
+                  const payload = line.slice(5).trim();
+                  if (payload === "[DONE]") continue;
+                  try {
+                    const t = JSON.parse(payload)?.choices?.[0]?.delta?.content || "";
+                    if (t) {
+                      full += t;
+                      const visible = stripThink(t);
+                      if (visible) sse({ t: visible });
+                    }
+                  } catch {}
+                }
+              }
+              if (full) {
+                sse({ done: true, reply: full.replace(/<think>[\s\S]*?<\/think>/gi, "").trim() });
+                writer.close(); return;
+              }
+              attempts.push("groq-stream: empty reply");
             } else {
-              attempts.push(`groq: http ${groqRes.status} | raw=${rawText}`);
+              const rawText = await groqRes.text().catch(() => "");
+              attempts.push(`groq-stream: http ${groqRes.status} | raw=${rawText.slice(0, 500)}`);
             }
           } catch (err) {
-            attempts.push("groq: " + (err && err.message ? err.message : String(err)));
+            attempts.push("groq-stream: " + (err && err.message ? err.message : String(err)));
           }
         }
         const detail = attempts.join(" | ");

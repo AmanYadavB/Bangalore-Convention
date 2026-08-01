@@ -978,6 +978,7 @@ function mountChat() {
   }
 
   function openChat() {
+    startPrewarm(); // no-op if the hover listener already kicked it off
     panel.hidden = false;
     fab.classList.add("open");
     document.body.classList.add("chat-open");
@@ -1500,6 +1501,18 @@ function mountChat() {
   fab.addEventListener("click", () => (panel.hidden ? openChat() : closeChat()));
   document.getElementById("chatClose").addEventListener("click", closeChat);
 
+  // While a reply is still streaming in, keep any [[ACTION]] payload (and a
+  // possibly half-received "[[ACT" tail) off the screen — it's a machine
+  // directive, not something the user should ever see.
+  function visibleText(s) {
+    const idx = s.indexOf("[[ACTION]]");
+    if (idx !== -1) return s.slice(0, idx).trimEnd();
+    for (let i = Math.min(9, s.length); i > 0; i--) {
+      if ("[[ACTION]]".startsWith(s.slice(-i))) return s.slice(0, s.length - i);
+    }
+    return s;
+  }
+
   // ---- Streaming sendToChat: tokens arrive live, TTS queued per sentence ----
   async function sendToChatStream(q, opts) {
     const voice = !!opts.voice;
@@ -1584,7 +1597,7 @@ function mountChat() {
             if (!voice) {
               if (typingEl.parentNode) typingEl.remove();
               if (!bubble) bubble = addMsg("assistant", "");
-              bubble.innerHTML = escapeHtml(fullText).replace(/\n/g, "<br>");
+              bubble.innerHTML = escapeHtml(visibleText(fullText)).replace(/\n/g, "<br>");
               log.scrollTop = log.scrollHeight;
             } else {
               // Speak+reveal one chunk at a time as generation continues.
@@ -1637,8 +1650,18 @@ function mountChat() {
         // `anyQueued`/`draining` is the real signal, not `bubble` (which only
         // gets set once the first chunk's audio actually starts).
         if (voice ? anyQueued || draining : bubble) {
-          history.push({ role: "assistant", content: replyText });
-          const { action, html } = parseReply(replyText);
+          const { message, action, html } = parseReply(replyText);
+          if (voice) {
+            history.push({ role: "assistant", content: replyText });
+          } else {
+            // Re-render with the clean message (no action markers) and keep
+            // history consistent with handleAssistantReply, which stores the
+            // shown text rather than the raw reply.
+            const shown = message || "Okay.";
+            history.push({ role: "assistant", content: shown });
+            bubble.innerHTML = escapeHtml(shown).replace(/\n/g, "<br>");
+            log.scrollTop = log.scrollHeight;
+          }
           if (action) executeAction(action, html);
         } else {
           // Nothing was queued/shown/spoken yet (e.g. entire reply was inside
@@ -1653,7 +1676,7 @@ function mountChat() {
         try {
           const plain = JSON.parse(buf.trim());
           if (plain.reply) {
-            history.push({ role: "assistant", content: plain.reply });
+            // handleAssistantReply pushes to history itself — no push here.
             handleAssistantReply(plain.reply, voice);
           }
         } catch {}
@@ -1682,64 +1705,9 @@ function mountChat() {
     history.push({ role: "user", content: q });
     lastUserText = q;
     sendBtn.disabled = true;
-    // Voice uses the streaming pipeline for fast feedback and proper state management.
-    if (opts.voice) return sendToChatStream(q, opts);
-    const typing = addMsg("assistant typing", "\u2026");
-    console.log("[chat] POST /api/chat", { messages: history });
-    try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: history,
-          role: localStorage.getItem("role") || "user",
-          devKey: getDevKey(),
-          voice: !!opts.voice,
-        }),
-      });
-      const raw = await res.text();
-      let data = {};
-      try {
-        data = raw ? JSON.parse(raw) : {};
-      } catch (parseErr) {
-        console.error("[chat] response was not JSON:", raw);
-      }
-      typing.remove();
-
-      // If the server sent a technical reason (degraded reply or hard error),
-      // always log it, and show it inline for developers (dev key present) so
-      // "no response" is never a mystery. End users only see the friendly text.
-      const detail = data.detail || data.error;
-      if (detail) console.error("[chat] server detail:", detail);
-
-      if (!res.ok) {
-        console.error("[chat] request failed", res.status, detail || raw);
-        handleAssistantReply(
-          "The assistant is resting for a moment \uD83D\uDE34. Please try again shortly \u2014 meanwhile you can sign up on the Register page or reach the organising committee.",
-          opts.voice
-        );
-        if (detail && getDevKey()) addMsg("assistant", "\uD83D\uDEE0\ufe0f debug: " + detail);
-        return;
-      }
-
-      const reply =
-        data.reply ||
-        "Sorry, I couldn't answer that just now \u2014 please try again in a moment.";
-      handleAssistantReply(reply, opts.voice);
-      if (data.degraded && detail && getDevKey())
-        addMsg("assistant", "\uD83D\uDEE0\ufe0f debug: " + detail);
-    } catch (err) {
-      console.error("[chat] network/exception error:", err);
-      typing.remove();
-      handleAssistantReply(
-        "I couldn't reach the server just now \uD83D\uDCF6. Please check your connection and try again in a moment.",
-        opts.voice
-      );
-    } finally {
-      sendBtn.disabled = false;
-      // On mobile, don't re-focus after reply — that would re-open the keyboard.
-      if (!isMobile() && !opts.voice) text.focus();
-    }
+    // Typing and voice both use the streaming pipeline so tokens show up live
+    // instead of waiting for the whole reply and then re-animating it.
+    return sendToChatStream(q, opts);
   }
 
   form.addEventListener("submit", (e) => {
@@ -1954,8 +1922,14 @@ function mountChat() {
     }
   }
 
-  // Start pre-warming the greeting TTS now (parallel with page render).
-  if (!isDeveloper() && !isAdmin()) prewarmAudioP = fetchTts(prewarmGreetingText);
+  // Pre-warm the greeting TTS only once the user shows intent to chat (hover
+  // or open) instead of paying a Deepgram synthesis on every page load.
+  function startPrewarm() {
+    if (prewarmAudioP || isDeveloper() || isAdmin()) return;
+    prewarmAudioP = fetchTts(prewarmGreetingText);
+  }
+  fab.addEventListener("pointerenter", startPrewarm, { once: true });
+  fab.addEventListener("touchstart", startPrewarm, { once: true, passive: true });
 
   function playClip(audio64, onStart, myId) {
     return new Promise((resolve) => {
