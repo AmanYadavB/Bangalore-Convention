@@ -775,6 +775,236 @@ async function runCriticalCheck(env) {
   return result;
 }
 
+// ---- WhatsApp Cloud API ----------------------------------------------------
+// Two-way TEXT only. Inbound messages are fed straight into the same /api/chat
+// brain the website uses, so the persona, the D1 knowledge and the provider
+// fallback chain all stay in exactly one place. Deepgram is deliberately not
+// touched here - no voice notes, so the TTS credit is untouched by WhatsApp.
+//
+// Secrets (npx wrangler secret put NAME):
+//   WHATSAPP_TOKEN         permanent system-user token from Business Settings
+//   WHATSAPP_VERIFY_TOKEN  any random string; must match what Meta is given
+//   WHATSAPP_APP_SECRET    app secret, used to reject forged webhook calls
+// Plain var (safe to keep in wrangler.toml):
+//   WHATSAPP_PHONE_ID      the "Phone number ID" from the API Setup page
+
+const WA_GRAPH = "https://graph.facebook.com/v23.0";
+const WA_HISTORY_TURNS = 6; // short on purpose: fewer prompt tokens = fewer neurons
+const WA_DAILY_CAP = 40; // per sender, so nobody can drain the free tiers
+
+// Digits-only E.164 is the only shape the Cloud API accepts:
+// "+91 98765 43210" / "09876543210" / "9876543210" -> "919876543210".
+function waNormalize(raw) {
+  const d = String(raw || "").replace(/\D/g, "");
+  if (!d) return "";
+  if (d.length === 10) return "91" + d;
+  if (d.length === 11 && d[0] === "0") return "91" + d.slice(1);
+  return d; // already carries a country code
+}
+
+async function waPost(env, payload) {
+  if (!env.WHATSAPP_TOKEN || !env.WHATSAPP_PHONE_ID) return null; // not wired up yet
+  const res = await fetch(WA_GRAPH + "/" + env.WHATSAPP_PHONE_ID + "/messages", {
+    method: "POST",
+    headers: {
+      authorization: "Bearer " + env.WHATSAPP_TOKEN,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ messaging_product: "whatsapp", ...payload }),
+  });
+  if (!res.ok) {
+    console.log("whatsapp send failed:", res.status, await res.text().catch(() => ""));
+  }
+  return res;
+}
+
+const waSendText = (env, to, body) =>
+  waPost(env, { to, type: "text", text: { preview_url: false, body: body.slice(0, 4096) } });
+
+// The approved "registration_confirmed" utility template. The header image is
+// served from our own public/ folder, so there is no media ID to keep alive.
+async function waSendConfirmation(env, reg, origin) {
+  const to = waNormalize(reg && reg.phone);
+  if (!to) return null;
+  return waPost(env, {
+    to,
+    type: "template",
+    template: {
+      name: "registration_confirmed",
+      language: { code: env.WHATSAPP_TEMPLATE_LANG || "en" },
+      components: [
+        {
+          type: "header",
+          parameters: [
+            { type: "image", image: { link: origin + "/img/registration-confirmed.png" } },
+          ],
+        },
+        {
+          type: "body",
+          parameters: [
+            { type: "text", text: reg.name || "there" },
+            { type: "text", text: reg.categoryName || "Convention" },
+            { type: "text", text: Number(reg.amount || 0).toLocaleString("en-IN") },
+            { type: "text", text: reg.paymentId || reg.id || "-" },
+          ],
+        },
+      ],
+    },
+  });
+}
+
+// The model writes for the website: [[ACTION]]/[[HTML]] markers drive the DOM
+// and **bold** is markdown. Neither means anything on WhatsApp, where bold is
+// *single asterisks* and a stray marker would arrive as raw JSON.
+function waCleanReply(text) {
+  return String(text || "")
+    .replace(/\[\[(?:ACTION|HTML)\]\][\s\S]*$/i, "")
+    .replace(/\*\*(.+?)\*\*/g, "*$1*")
+    .trim()
+    .slice(0, 4096);
+}
+
+async function waVerifySignature(env, raw, header) {
+  if (!env.WHATSAPP_APP_SECRET) return true; // not configured yet
+  const given = String(header || "").replace(/^sha256=/, "");
+  if (!given) return false;
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw", enc.encode(env.WHATSAPP_APP_SECRET),
+    { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+  );
+  const buf = await crypto.subtle.sign("HMAC", key, enc.encode(raw));
+  const expected = Array.from(new Uint8Array(buf))
+    .map((b) => b.toString(16).padStart(2, "0")).join("");
+  // Compare every byte before deciding, so the timing doesn't leak the prefix.
+  if (expected.length !== given.length) return false;
+  let diff = 0;
+  for (let i = 0; i < expected.length; i++) diff |= expected.charCodeAt(i) ^ given.charCodeAt(i);
+  return diff === 0;
+}
+
+// Answer one inbound message. Kept to a single KV read and a single KV write:
+// history, the daily counter and the day stamp share one record, because the
+// free plan allows only 1,000 writes a day and the site's own telemetry is
+// already spending from that same budget.
+async function waReply(env, ctx, msg, origin) {
+  const from = msg && msg.from;
+  if (!from) return;
+
+  if (msg.type !== "text") {
+    await waSendText(env, from, "i can only read text right now! type it out and i've got you 🙌");
+    return;
+  }
+  const text = ((msg.text && msg.text.body) || "").trim();
+  if (!text) return;
+
+  const key = "wa:" + from;
+  const today = new Date().toISOString().slice(0, 10);
+  const state = (await env.CONVENTION_KV.get(key, { type: "json" })) || {};
+  const count = state.day === today ? state.count || 0 : 0;
+
+  if (count >= WA_DAILY_CAP) {
+    // Say so exactly once, then go quiet - otherwise the cap itself becomes
+    // the thing burning the quota.
+    if (count === WA_DAILY_CAP) {
+      await waSendText(env, from, "we've chatted a LOT today 😅 ping me tomorrow, or mail support@biaac.com if it's urgent 💙");
+      await env.CONVENTION_KV.put(
+        key, JSON.stringify({ ...state, count: count + 1 }), { expirationTtl: 86400 }
+      );
+    }
+    return;
+  }
+
+  const history = Array.isArray(state.msgs) ? state.msgs : [];
+  const messages = [...history, { role: "user", content: text }].slice(-WA_HISTORY_TURNS * 2);
+
+  // Reuse the website's chat brain in-process: same persona, same knowledge,
+  // no duplicated prompt and no second network hop.
+  const chatRes = await handleApi(
+    new Request("https://worker/api/chat", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ messages, channel: "whatsapp", siteOrigin: origin }),
+    }),
+    env, ctx
+  );
+  const data = await chatRes.json().catch(() => ({}));
+  const reply = waCleanReply(data.reply);
+  if (!reply) return;
+
+  await waSendText(env, from, reply);
+  await env.CONVENTION_KV.put(
+    key,
+    JSON.stringify({
+      day: today,
+      count: count + 1,
+      msgs: [...messages, { role: "assistant", content: reply }].slice(-WA_HISTORY_TURNS * 2),
+    }),
+    { expirationTtl: 86400 } // matches WhatsApp's own 24h reply window
+  );
+}
+
+async function waProcess(env, ctx, payload, origin) {
+  for (const entry of payload.entry || []) {
+    for (const change of entry.changes || []) {
+      const msgs = change.value && change.value.messages;
+      if (!Array.isArray(msgs)) continue; // delivered/read status callbacks land here too
+      for (const msg of msgs) {
+        try {
+          await waReply(env, ctx, msg, origin);
+        } catch (err) {
+          console.log("whatsapp reply error:", err && err.message);
+        }
+      }
+    }
+  }
+}
+
+// Routed from fetch() BEFORE handleApi, because the signature check needs the
+// raw request body and handleApi consumes it as JSON.
+async function handleWhatsAppWebhook(request, env, ctx) {
+  const url = new URL(request.url);
+
+  // Meta's one-time subscription handshake. The challenge must come back as
+  // plain text - a JSON body here makes the subscription fail.
+  if (request.method === "GET") {
+    const token = url.searchParams.get("hub.verify_token");
+    if (
+      url.searchParams.get("hub.mode") === "subscribe" &&
+      env.WHATSAPP_VERIFY_TOKEN &&
+      token === env.WHATSAPP_VERIFY_TOKEN
+    ) {
+      return new Response(url.searchParams.get("hub.challenge") || "", {
+        headers: { "content-type": "text/plain" },
+      });
+    }
+    return new Response("Forbidden", { status: 403 });
+  }
+
+  if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
+
+  const raw = await request.text();
+
+  // Without this the endpoint is a public button that spends Workers AI
+  // neurons for anyone who finds the URL.
+  if (!(await waVerifySignature(env, raw, request.headers.get("x-hub-signature-256")))) {
+    return new Response("Bad signature", { status: 403 });
+  }
+
+  let payload = {};
+  try {
+    payload = JSON.parse(raw);
+  } catch {
+    return new Response("ok");
+  }
+
+  // 200 first, slow work after. Meta retries any webhook that doesn't answer
+  // within seconds, and a retry would make the bot reply to the same person
+  // twice - an LLM call always takes longer than that budget.
+  ctx.waitUntil(waProcess(env, ctx, payload, url.origin));
+  return new Response("ok");
+}
+
 async function handleApi(request, env, ctx) {
   if (!env.CONVENTION_KV) {
     return json(
@@ -1320,6 +1550,25 @@ async function handleApi(request, env, ctx) {
       );
     }
 
+    // WhatsApp has no chat button, no page to navigate and no DOM to drive, so
+    // the "trapped in a chat button" framing and the [[ACTION]] markers both
+    // have to go quiet there. waCleanReply strips stray markers as a backstop,
+    // but the model should not be emitting them on this channel at all.
+    if (body.channel === "whatsapp") {
+      const waNote = [
+        "",
+        "== CHANNEL: WHATSAPP ==",
+        "You are texting this person on WhatsApp, NOT from the chat button on the website. Never mention the chat button, never say 'tap me', and never refer to anything on screen.",
+        "NEVER emit [[ACTION]] or [[HTML]] markers here - there is no page to drive." +
+          (body.siteOrigin
+            ? " If someone wants to register, give them this link: " + body.siteOrigin + "/register.html"
+            : ""),
+        "Keep it to 2-4 short lines - this is a text thread, not a web page. WhatsApp bold is *single asterisks*, never **double**.",
+      ];
+      content.push(...waNote);
+      leanContent.push(...waNote);
+    }
+
     const fullSystem = { role: "system", content: content.join("\n") };
     const leanSystem = { role: "system", content: leanContent.join("\n") };
 
@@ -1811,6 +2060,12 @@ async function handleApi(request, env, ctx) {
     list[idx].paymentId = razorpayPaymentId;
     list[idx].paidAt = new Date().toISOString();
     await saveList(env, "registrations", list);
+
+    // Fire-and-forget: a WhatsApp outage (or an unapproved template) must never
+    // turn a successful payment into a failed request. No-ops until the
+    // WHATSAPP_* config is in place.
+    ctx.waitUntil(waSendConfirmation(env, list[idx], url.origin));
+
     return json({ ok: true, registration: list[idx] });
   }
 
@@ -1910,6 +2165,17 @@ async function handleApi(request, env, ctx) {
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+
+    // WhatsApp webhook is handled ahead of handleApi because the signature
+    // check needs the raw body, which handleApi would consume as JSON.
+    if (url.pathname === "/api/whatsapp/webhook") {
+      try {
+        return await handleWhatsAppWebhook(request, env, ctx);
+      } catch (err) {
+        console.log("whatsapp webhook error:", err && err.message, err && err.stack);
+        return new Response("ok"); // never make Meta retry because of our own bug
+      }
+    }
 
     // API requests go to the backend.
     if (url.pathname === "/api" || url.pathname.startsWith("/api/")) {

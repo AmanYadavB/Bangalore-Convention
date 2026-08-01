@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>WhatsApp confirmation card — PNG generator</title>
+<style>
+  /* ---- Page chrome (NOT part of the exported image) ---------------------- */
+  body {
+    margin: 0;
+    padding: 28px;
+    background: #0b0f1a;
+    color: #eef2fb;
+    font: 15px/1.5 "Segoe UI", system-ui, sans-serif;
+  }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  p.hint { margin: 0 0 20px; color: #94a3b8; font-size: 13px; }
+  .stage {
+    width: 1125px;
+    height: 600px;
+    transform: scale(0.62);
+    transform-origin: top left;
+    margin-bottom: -228px; /* claw back the space the scale-down leaves behind */
+  }
+  button {
+    margin-top: 12px;
+    padding: 10px 20px;
+    font: 600 14px "Segoe UI", system-ui, sans-serif;
+    color: #fff;
+    background: linear-gradient(135deg, #818cf8, #a78bfa);
+    border: 0;
+    border-radius: 10px;
+    cursor: pointer;
+  }
+  #status { margin-left: 12px; color: #94a3b8; font-size: 13px; }
+</style>
+
+<!-- Everything below is cloned verbatim into the exported PNG, so this style
+     block must be self-contained: system fonts only, no color-mix(), no
+     external images. Anything the browser can't resolve inside an SVG
+     <foreignObject> silently disappears from the export. -->
+<style id="cardStyle">
+  .card {
+    position: relative;
+    width: 1125px;
+    height: 600px;
+    overflow: hidden;
+    box-sizing: border-box;
+    background:
+      radial-gradient(760px 460px at 85% -10%, rgba(124, 111, 255, 0.30), transparent 60%),
+      radial-gradient(560px 400px at -5% 10%, rgba(56, 189, 248, 0.16), transparent 58%),
+      #0b0f1a;
+    font-family: "Segoe UI", system-ui, sans-serif;
+  }
+  /* Faint dot grid, same texture the site uses behind its panels. */
+  .card-grid {
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(circle at 1px 1px, rgba(238, 242, 251, 0.10) 1px, transparent 0);
+    background-size: 34px 34px;
+  }
+  .card-inner {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    gap: 74px;
+    padding: 0 88px;
+    box-sizing: border-box;
+  }
+
+  /* ---- Mascot: same geometry as .fab-mascot in style.css, scaled up ------ */
+  .mascot-wrap { position: relative; width: 250px; height: 300px; flex: none; }
+  .mascot {
+    position: absolute;
+    top: 42px;
+    left: 22px;
+    width: 44px;
+    height: 53px;
+    transform: scale(3.6) rotate(-7deg);
+    transform-origin: top left;
+  }
+  .fm-head {
+    position: absolute;
+    top: 8px; left: 4px;
+    width: 36px; height: 26px;
+    border-radius: 10px;
+    background: linear-gradient(160deg, #eef2ff, #c7d2fe);
+    border: 1px solid #b9c0f7;
+    box-shadow: inset 0 -3px 6px rgba(99, 102, 241, 0.25), 0 3px 8px -3px rgba(30, 30, 60, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  .fm-eye { width: 7px; height: 7px; border-radius: 50%; background: #6366f1; }
+  .fm-antenna {
+    position: absolute;
+    top: 0; left: 50%;
+    width: 2px; height: 9px;
+    margin-left: -1px;
+    background: #b0b8f7;
+  }
+  .fm-antenna::after {
+    content: "";
+    position: absolute;
+    top: -5px; left: 50%;
+    margin-left: -3.5px;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: #a78bfa;
+    box-shadow: 0 0 8px 1px rgba(167, 139, 250, 0.7);
+  }
+  .fm-body {
+    position: absolute;
+    top: 31px; left: 7px;
+    width: 30px; height: 15px;
+    border-radius: 8px 8px 6px 6px;
+    background: linear-gradient(160deg, #818cf8, #a78bfa);
+    box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.3), 0 4px 10px -4px rgba(99, 102, 241, 0.6);
+  }
+  /* Both arms up — the "cheering" pose, rather than the site's single wave. */
+  .fm-arm {
+    position: absolute;
+    top: 32px;
+    width: 11px; height: 3px;
+    border-radius: 2px;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  }
+  .fm-arm.right { right: -3px; transform-origin: left center; transform: rotate(-58deg); }
+  .fm-arm.left  { left: -3px;  transform-origin: right center; transform: rotate(58deg); }
+  .fm-legs { position: absolute; top: 45px; left: 12px; width: 20px; height: 8px; }
+  .fm-legs i {
+    position: absolute;
+    top: 0;
+    width: 5px; height: 8px;
+    border-radius: 3px;
+    background: #6366f1;
+  }
+  .fm-legs i:first-child { left: 0; transform: rotate(-12deg); }
+  .fm-legs i:last-child  { right: 0; transform: rotate(12deg); }
+
+  /* Glow puddle under the mascot so it reads as airborne. */
+  .mascot-glow {
+    position: absolute;
+    left: 30px; bottom: 22px;
+    width: 190px; height: 40px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(129, 140, 248, 0.38), transparent 68%);
+  }
+
+  /* ---- Text column ------------------------------------------------------ */
+  .copy { flex: 1; }
+  .eyebrow {
+    display: inline-block;
+    padding: 9px 20px;
+    margin-bottom: 26px;
+    font-size: 21px;
+    font-weight: 600;
+    letter-spacing: 2.4px;
+    text-transform: uppercase;
+    color: #c7d2fe;
+    background: rgba(129, 140, 248, 0.14);
+    border: 1px solid rgba(129, 140, 248, 0.34);
+    border-radius: 999px;
+  }
+  .headline {
+    margin: 0;
+    font-size: 76px;
+    line-height: 1.04;
+    font-weight: 800;
+    letter-spacing: -1.6px;
+    background: linear-gradient(120deg, #38bdf8, #818cf8 52%, #a78bfa);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .subline {
+    margin: 22px 0 0;
+    font-size: 27px;
+    font-weight: 500;
+    color: #aab4cc;
+  }
+  .rule {
+    width: 132px; height: 5px;
+    margin-top: 34px;
+    border-radius: 4px;
+    background: linear-gradient(90deg, #38bdf8, #818cf8 52%, #a78bfa);
+  }
+
+  /* ---- Tick badge ------------------------------------------------------- */
+  .tick {
+    position: absolute;
+    top: 46px; right: 76px;
+    width: 96px; height: 96px;
+    border-radius: 50%;
+    background: linear-gradient(140deg, #34d399, #10b981);
+    box-shadow: 0 12px 34px -8px rgba(16, 185, 129, 0.75);
+  }
+  .tick::after {
+    content: "";
+    position: absolute;
+    top: 30px; left: 30px;
+    width: 34px; height: 17px;
+    border-left: 8px solid #fff;
+    border-bottom: 8px solid #fff;
+    border-radius: 2px;
+    transform: rotate(-45deg);
+  }
+
+  /* ---- Confetti — static, since this is a still image -------------------- */
+  .confetti i {
+    position: absolute;
+    border-radius: 2px;
+    opacity: 0.92;
+  }
+</style>
+</head>
+<body>
+
+<h1>WhatsApp confirmation card</h1>
+<p class="hint">1125 &times; 600 &mdash; the aspect ratio WhatsApp crops template image headers to. Preview below is scaled to 62%; the export is full resolution.</p>
+
+<div class="stage">
+  <div class="card" id="card">
+    <div class="card-grid"></div>
+
+    <div class="confetti" id="confetti"></div>
+
+    <div class="tick"></div>
+
+    <div class="card-inner">
+      <div class="mascot-wrap">
+        <div class="mascot-glow"></div>
+        <div class="mascot">
+          <div class="fm-antenna"></div>
+          <div class="fm-head">
+            <span class="fm-eye"></span>
+            <span class="fm-eye"></span>
+          </div>
+          <div class="fm-body"></div>
+          <div class="fm-arm left"></div>
+          <div class="fm-arm right"></div>
+          <div class="fm-legs"><i></i><i></i></div>
+        </div>
+      </div>
+
+      <div class="copy">
+        <span class="eyebrow">You're in</span>
+        <h2 class="headline">Registration<br />Confirmed</h2>
+        <p class="subline">Bangalore Convention 2027</p>
+        <div class="rule"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<button id="dl">Download PNG</button>
+<span id="status"></span>
+
+<script>
+  // ---- Confetti: seeded so every export looks identical -------------------
+  // Math.random() would mean a different scatter each time you re-export and
+  // re-upload the sample, which makes the template review confusing.
+  (function scatter() {
+    const COLORS = ["#38bdf8", "#818cf8", "#a78bfa", "#34d399", "#fbbf24", "#f472b6"];
+    let seed = 20270214;
+    const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+
+    const host = document.getElementById("confetti");
+    for (let i = 0; i < 46; i++) {
+      const p = document.createElement("i");
+      const w = 7 + rnd() * 12;
+      p.style.left = (rnd() * 1125) + "px";
+      p.style.top = (rnd() * 600) + "px";
+      p.style.width = w + "px";
+      p.style.height = (4 + rnd() * 6) + "px";
+      p.style.background = COLORS[Math.floor(rnd() * COLORS.length)];
+      p.style.transform = "rotate(" + Math.floor(rnd() * 360) + "deg)";
+      p.style.opacity = (0.35 + rnd() * 0.55).toFixed(2);
+      host.appendChild(p);
+    }
+  })();
+
+  // ---- Export: DOM -> SVG <foreignObject> -> canvas -> PNG ----------------
+  // The SVG goes in as a data: URL rather than a blob: URL — a data URL keeps
+  // the canvas untainted, so toBlob() is allowed to read the pixels back.
+  document.getElementById("dl").addEventListener("click", async () => {
+    const status = document.getElementById("status");
+    status.textContent = "rendering…";
+
+    const W = 1125, H = 600;
+    const css = document.getElementById("cardStyle").textContent;
+    const clone = document.getElementById("card").cloneNode(true);
+    const markup = new XMLSerializer().serializeToString(clone);
+
+    const svg =
+      '<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H + '">' +
+        '<foreignObject x="0" y="0" width="' + W + '" height="' + H + '">' +
+          '<div xmlns="http://www.w3.org/1999/xhtml">' +
+            "<style>" + css + "</style>" +
+            markup +
+          "</div>" +
+        "</foreignObject>" +
+      "</svg>";
+
+    const img = new Image();
+    img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+
+    try {
+      await img.decode();
+    } catch (e) {
+      status.textContent = "render failed — take a screenshot of the card instead";
+      return;
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext("2d");
+    // JPEG/PNG headers render on both light and dark WhatsApp themes, so the
+    // card paints its own opaque background rather than relying on alpha.
+    ctx.fillStyle = "#0b0f1a";
+    ctx.fillRect(0, 0, W, H);
+    ctx.drawImage(img, 0, 0, W, H);
+
+    canvas.toBlob((blob) => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "registration-confirmed.png";
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      status.textContent = "saved as registration-confirmed.png";
+    }, "image/png");
+  });
+</script>
+</body>
+</html>

@@ -60,3 +60,13 @@ DEEPGRAM_BALANCE_KEY = "c6e0cd2a8d85b8fbe794c8bd7813cc46d04cee38"
 #   CF_API_TOKEN   = create an API token with "Account Analytics: Read", then run
 #                    npx wrangler secret put CF_API_TOKEN
 CF_ACCOUNT_ID = "8d7633c4e9136784b6f1f567c35728ad"
+
+# ---- WhatsApp Cloud API ----
+# The "Phone number ID" from the API Setup page. Not a secret - it is useless
+# without the token, which must NOT go here. Set the three secrets with:
+#   npx wrangler secret put WHATSAPP_TOKEN         (permanent system-user token)
+#   npx wrangler secret put WHATSAPP_VERIFY_TOKEN  (any random string you invent)
+#   npx wrangler secret put WHATSAPP_APP_SECRET    (App Settings -> Basic -> App secret)
+WHATSAPP_PHONE_ID = "1168920729645898"
+# Must match the language you picked when creating the template ("en" vs "en_US").
+WHATSAPP_TEMPLATE_LANG = "en"
