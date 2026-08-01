@@ -2233,3 +2233,87 @@ tbody tr:hover {
   box-shadow: var(--shadow);
 }
 
+/* ===========================================================================
+   MOBILE LAYOUT
+   The existing media queries only covered the nav, the chat widget and the
+   mascot — there was no breakpoint for page content at all. On a phone that
+   left .form-grid and .reg-layout forcing two columns into ~310px, and long
+   words (emails, URLs, pasted reflection text) spilling out of their cards.
+   =========================================================================== */
+
+/* Break long unbroken strings instead of letting them run past the card edge.
+   break-word only kicks in when a word genuinely cannot fit, so normal text
+   wraps exactly as before. */
+p,
+li,
+td,
+h1,
+h2,
+h3,
+.page-sub,
+.empty,
+.card {
+  overflow-wrap: break-word;
+}
+
+/* Anything that can't shrink below its content width blows out a grid cell. */
+.grid > *,
+.form-grid > *,
+.field {
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  .container {
+    padding: 20px 14px 48px;
+  }
+
+  /* One column — this is the main offender on phones. */
+  .form-grid,
+  .reg-layout,
+  .grid.cols-3,
+  .grid.cols-4 {
+    grid-template-columns: 1fr;
+  }
+
+  .card {
+    padding: 16px;
+  }
+
+  .page-title {
+    font-size: 23px;
+  }
+
+  .section-head {
+    margin: 26px 0 12px;
+  }
+
+  .section-head h2 {
+    font-size: 18px;
+  }
+
+  .empty {
+    padding: 26px 14px;
+  }
+
+  /* Full-width buttons stack cleanly and give a bigger tap target. */
+  .card > form button.btn,
+  .card > form .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* Action rows (Copy / Generate / Send / Delete) wrap instead of overflowing. */
+  .refl-actions .btn {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+
+  /* Wide tables scroll inside themselves rather than stretching the page. */
+  .card table {
+    display: block;
+    overflow-x: auto;
+    max-width: 100%;
+  }
+}
+

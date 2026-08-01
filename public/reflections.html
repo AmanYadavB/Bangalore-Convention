@@ -12,11 +12,28 @@
       .follow-note { font-size: 0.86rem; opacity: 0.72; margin-top: 14px; }
       .refl-date { font-size: 0.82rem; opacity: 0.65; letter-spacing: 0.4px; }
       .refl-title { margin: 6px 0 10px; }
-      .refl-body { white-space: pre-wrap; line-height: 1.65; }
+      /* pre-wrap keeps the author's line breaks; break-word stops a long word
+         or pasted URL from running past the card edge on a phone. */
+      .refl-body {
+        white-space: pre-wrap;
+        overflow-wrap: break-word;
+        line-height: 1.65;
+      }
       .refl-actions { margin-top: 14px; display: flex; gap: 8px; flex-wrap: wrap; }
-      /* The card is rendered off-screen, never shown. Kept out of #cardStyle so
-         this positioning does not end up inside the exported PNG. */
-      #cardStage { position: absolute; left: -99999px; top: 0; }
+      /* The card is 1125px wide and rendered off-screen, never shown. A
+         zero-sized clipping wrapper guarantees it can never affect layout or
+         widen the page on mobile. Kept out of #cardStyle so this positioning
+         does not end up inside the exported PNG. */
+      #cardStage {
+        position: fixed;
+        left: 0;
+        top: 0;
+        width: 0;
+        height: 0;
+        overflow: hidden;
+        visibility: hidden;
+        pointer-events: none;
+      }
     </style>
 
     <!-- Card design, cloned verbatim into the exported PNG. System fonts only,
