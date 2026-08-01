@@ -6,6 +6,30 @@
     <title>Ops · Bangalore Convention</title>
     <link rel="stylesheet" href="css/style.css" />
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <style>
+      /* Keep long values (emails, notes, JSON) from widening the page — a
+         horizontally-overflowing page clips the fixed chat mascot. */
+      .ops-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+      #statusSummary table { width: 100%; table-layout: fixed; border-collapse: collapse; }
+      #statusSummary td {
+        padding: 6px 8px 6px 0;
+        vertical-align: top;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+      }
+      #resultBox { overflow-wrap: anywhere; }
+      /* Room at the bottom so the mascot/chat button never sits on the last card. */
+      .container { padding-bottom: 110px; }
+      @media (max-width: 600px) {
+        .ops-actions .btn { flex: 1 1 100%; }
+        #timeInput { flex: 1 1 100%; max-width: none !important; }
+        /* Stack each status row as label-over-value instead of two columns. */
+        #statusSummary td { display: block; width: 100% !important; }
+        #statusSummary tr td:first-child { padding-bottom: 0; font-size: 12px; opacity: 0.75; }
+        #statusSummary tr td:last-child { padding-top: 2px; padding-bottom: 10px; }
+        .section-head { flex-wrap: wrap; gap: 8px; }
+      }
+    </style>
   </head>
   <body>
     <div id="nav"></div>
@@ -20,7 +44,7 @@
       <div id="dev-body" hidden>
         <div class="card" style="margin-bottom: 18px">
           <h2 style="margin-top: 0">Email actions</h2>
-          <div class="section-head" style="justify-content: flex-start; gap: 10px; flex-wrap: wrap">
+          <div class="ops-actions">
             <button class="btn primary" id="btnSend" type="button">📧 Send digest now</button>
             <button class="btn" id="btnCheck" type="button">🚨 Run critical check</button>
             <button class="btn" id="btnReset" type="button">♻️ Reset today's sent flag</button>
@@ -36,7 +60,7 @@
 
         <div class="card" style="margin-bottom: 18px">
           <h2 style="margin-top: 0">Daily digest time (IST)</h2>
-          <div class="section-head" style="justify-content: flex-start; gap: 10px; flex-wrap: wrap">
+          <div class="ops-actions">
             <input id="timeInput" type="time" style="max-width: 140px" />
             <button class="btn primary" id="btnSchedule" type="button">Save time</button>
             <button class="btn" id="btnClearSchedule" type="button">Use wrangler.toml time</button>
