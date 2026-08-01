@@ -92,9 +92,11 @@
 
     <script src="js/common.js"></script>
     <script>
+      // No client-side gate: the Worker refuses to serve this page at all
+      // without a session that has at least the viewer role.
       mountNav("dashboard");
 
-      if (ensureAdmin()) {
+      {
         function statCard(label, value, cls) {
           return `<div class="card stat">
             <div class="label">${label}</div>

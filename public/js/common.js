@@ -22,12 +22,47 @@ applyTheme(currentTheme());
 const money = (n) =>
   "₹" + Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
 
+// Read a cookie by name. Used only for the CSRF token, which is deliberately
+// NOT HttpOnly so it can be echoed back in a header. The session cookie is
+// HttpOnly and is never visible here.
+function readCookie(name) {
+  const match = document.cookie.match(
+    new RegExp("(?:^|; )" + name.replace(/([.*+?^${}()|[\]\\])/g, "\\$1") + "=([^;]*)")
+  );
+  return match ? decodeURIComponent(match[1]) : "";
+}
+
+function csrfToken() {
+  // __Host- prefixed in production; plain over http on localhost, where
+  // browsers reject Secure cookies.
+  return readCookie("__Host-bc_csrf") || readCookie("bc_csrf");
+}
+
 async function api(path, options) {
-  const res = await fetch(path, {
-    headers: { "Content-Type": "application/json" },
-    ...options,
-  });
+  const opts = { credentials: "same-origin", ...options };
+  const headers = { "Content-Type": "application/json", ...(opts.headers || {}) };
+
+  // Mutations carry the session-bound CSRF token. The server compares it
+  // against the session row, not against the cookie, so it cannot be forged.
+  const method = String(opts.method || "GET").toUpperCase();
+  if (method !== "GET" && method !== "HEAD") {
+    const token = csrfToken();
+    if (token) headers["X-CSRF-Token"] = token;
+  }
+  opts.headers = headers;
+
+  const res = await fetch(path, opts);
   const data = await res.json().catch(() => ({}));
+
+  if (res.status === 401) {
+    // Session expired or absent — bounce to login, remembering where we were.
+    clearUserHint();
+    const here = location.pathname + location.search;
+    if (!location.pathname.endsWith("/login.html") && !location.pathname.endsWith("/login")) {
+      location.href = "/login.html?e=session&next=" + encodeURIComponent(here);
+    }
+    throw new Error(data.error || "Please sign in.");
+  }
   if (!res.ok) throw new Error(data.error || "Something went wrong.");
   return data;
 }
@@ -71,87 +106,122 @@ function formatDate(iso) {
   });
 }
 
-// ---- Roles / auth (demo: admin logs in with no credentials) ----
-function isAdmin() {
-  const r = localStorage.getItem("role");
-  return r === "admin" || r === "developer";
-}
+// ---- Roles / auth --------------------------------------------------------
+//
+// Authentication is entirely server-side: an HttpOnly session cookie, verified
+// against the database on every request. NOTHING here is a credential and
+// nothing here is trusted — access is enforced by the Worker, on both /api/*
+// and the protected HTML pages. The values below only decide which nav links
+// to draw.
+//
+// The old model (localStorage.role = "admin", set by a button with no
+// password, plus the raw DEV_KEY in localStorage) is gone. Do not reintroduce
+// any auth state in localStorage: it is readable by any script on the origin.
 
-// Developers are staff who additionally hold the DEV_KEY and can build pages.
-function isDeveloper() {
-  return localStorage.getItem("role") === "developer" && !!localStorage.getItem("devKey");
-}
+const ROLE_ORDER = { viewer: 1, admin: 2, owner: 3 };
 
-function getDevKey() {
-  return localStorage.getItem("devKey") || "";
-}
+// Display-only cache so the nav can render on first paint instead of flashing
+// the signed-out menu. sessionStorage, not localStorage, and reconciled
+// against the server immediately on every page load.
+const USER_HINT_KEY = "bc_user_hint";
 
-// Verify a developer key against the server, then unlock developer mode.
-async function loginDeveloper(key) {
-  const clean = String(key || "").trim();
-  if (!clean) return false;
+let CURRENT_USER = null;
+
+function readUserHint() {
   try {
-    const res = await api("/api/dev/verify", {
-      method: "POST",
-      body: JSON.stringify({ devKey: clean }),
+    const raw = sessionStorage.getItem(USER_HINT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeUserHint(user) {
+  try {
+    if (user) sessionStorage.setItem(USER_HINT_KEY, JSON.stringify(user));
+    else sessionStorage.removeItem(USER_HINT_KEY);
+  } catch {
+    /* private mode — the nav just re-renders after /api/auth/me */
+  }
+}
+
+function clearUserHint() {
+  CURRENT_USER = null;
+  writeUserHint(null);
+}
+
+function currentUser() {
+  return CURRENT_USER;
+}
+
+function isSignedIn() {
+  return Boolean(CURRENT_USER);
+}
+
+function hasRole(needed) {
+  if (!CURRENT_USER) return false;
+  return (ROLE_ORDER[CURRENT_USER.role] || 0) >= (ROLE_ORDER[needed] || 0);
+}
+
+// Staff = anyone signed in. Kept as a name because several pages read well
+// with it, but it is no longer a client-side decision of any consequence.
+function isStaff() {
+  return isSignedIn();
+}
+
+// Ask the server who we are. The only source of truth on the client.
+async function refreshUser() {
+  try {
+    const res = await fetch("/api/auth/me", {
+      credentials: "same-origin",
+      headers: { Accept: "application/json" },
     });
-    if (res && res.ok) {
-      localStorage.setItem("role", "developer");
-      localStorage.setItem("devKey", clean);
-      return true;
-    }
-  } catch (err) {
-    console.warn("[dev] verify failed", err);
+    const data = await res.json().catch(() => ({}));
+    CURRENT_USER = data && data.authenticated ? data.user : null;
+    writeUserHint(CURRENT_USER);
+  } catch {
+    // Network failure: keep whatever we had rather than flapping the nav.
   }
-  return false;
+  return CURRENT_USER;
 }
 
-function login() {
-  localStorage.setItem("role", "admin");
-  location.reload();
-}
-
-function logout() {
-  localStorage.removeItem("role");
-  localStorage.removeItem("devKey");
-  location.href = "index.html";
-}
-
-// Guard an admin-only page: shows a login prompt and returns false for normal users.
-function ensureAdmin() {
-  if (isAdmin()) return true;
-  const c = document.querySelector(".container");
-  if (c) {
-    c.innerHTML = `
-      <div class="card" style="max-width:460px;margin:60px auto;text-align:center">
-        <h2 style="margin-top:0">Admin access required</h2>
-        <p class="muted">This section is for the organising committee. Log in as admin to continue.</p>
-        <button class="btn primary" type="button" onclick="login()">Login as Admin</button>
-      </div>`;
+async function logout() {
+  try {
+    await api("/api/auth/logout", { method: "POST" });
+  } catch {
+    /* log out locally even if the request fails */
   }
-  return false;
+  clearUserHint();
+  location.href = "/index.html";
+}
+
+function goToLogin() {
+  location.href = "/login.html?next=" + encodeURIComponent(location.pathname + location.search);
 }
 
 // Render the shared navigation bar.
-function renderNav(active) {
-  const admin = isAdmin();
-  const links = [
-    { href: "index.html", label: "Home", key: "home" },
-    { href: "register.html", label: "Register", key: "register" },
-    // Not in the anonymous nav (visitors see only Home and Register), but the
-    // page itself stays reachable by URL - it is the public landing page for
-    // the WhatsApp channel link, shared directly on WhatsApp.
-    { href: "reflections.html", label: "Reflections", key: "reflections", admin: true },
-    { href: "registrations.html", label: "Registrations", key: "registrations", admin: true },
-    { href: "dashboard.html", label: "Dashboard", key: "dashboard", admin: true },
-    { href: "expenses.html", label: "Expenses", key: "expenses", admin: true },
-    { href: "pages.html", label: "Feed AI", key: "pages", dev: true },
-    { href: "ops.html", label: "Ops", key: "ops", dev: true },
-  ].filter((l) => (!l.admin || admin) && (!l.dev || isDeveloper()));
+//
+// The `need` field mirrors the server's PROTECTED_PAGES table in
+// shared/auth-core.mjs. Hiding a link is a convenience, not a boundary: the
+// Worker refuses the page itself if the role is insufficient.
+const NAV_LINKS = [
+  { href: "index.html", label: "Home", key: "home" },
+  { href: "register.html", label: "Register", key: "register" },
+  { href: "reflections.html", label: "Reflections", key: "reflections", need: "viewer" },
+  { href: "registrations.html", label: "Registrations", key: "registrations", need: "viewer" },
+  { href: "dashboard.html", label: "Dashboard", key: "dashboard", need: "viewer" },
+  { href: "expenses.html", label: "Expenses", key: "expenses", need: "viewer" },
+  { href: "ops.html", label: "Ops", key: "ops", need: "admin" },
+  { href: "pages.html", label: "Feed AI", key: "pages", need: "owner" },
+  { href: "team.html", label: "Team", key: "team", need: "owner" },
+];
 
-  const authBtn = admin
-    ? `<button class="btn small auth-btn" id="authBtn" type="button">Logout</button>`
-    : `<button class="btn primary small auth-btn" id="authBtn" type="button">Login</button>`;
+function renderNav(active) {
+  const links = NAV_LINKS.filter((l) => !l.need || hasRole(l.need));
+
+  const authBtn = isSignedIn()
+    ? `<button class="btn small auth-btn" id="authBtn" type="button">Sign out</button>`
+    : `<a class="btn primary small auth-btn" id="authBtn" href="login.html">Sign in</a>`;
 
   return `
   <nav class="nav">
@@ -177,16 +247,21 @@ function renderNav(active) {
   </nav>`;
 }
 
-function mountNav(active) {
-  document.documentElement.setAttribute("data-role", isAdmin() ? "admin" : "user");
+// Draw the nav and wire its controls. Safe to call twice — refreshUser()
+// re-renders once the server has confirmed who we are.
+function paintNav(active) {
+  document.documentElement.setAttribute("data-role", isSignedIn() ? CURRENT_USER.role : "guest");
   const holder = document.getElementById("nav");
-  if (holder) holder.innerHTML = renderNav(active);
+  if (!holder) return;
+  holder.innerHTML = renderNav(active);
 
   const themeBtn = document.getElementById("themeToggle");
   if (themeBtn) themeBtn.addEventListener("click", toggleTheme);
 
+  // Signed out, the auth control is a plain <a> to the login page, so there is
+  // nothing to wire. Signed in, it is a button that ends the session.
   const authBtn = document.getElementById("authBtn");
-  if (authBtn) authBtn.addEventListener("click", () => (isAdmin() ? logout() : login()));
+  if (authBtn && authBtn.tagName === "BUTTON") authBtn.addEventListener("click", logout);
 
   const navToggle = document.getElementById("navToggle");
   const navLinks = document.getElementById("navLinks");
@@ -206,7 +281,34 @@ function mountNav(active) {
   }
 
   applyTheme(currentTheme());
-  mountChat();
+}
+
+// opts.chat === false suppresses the chat widget. The login page passes it:
+// a floating mascot that overlaps the password field is not what you want on
+// a sign-in screen.
+function mountNav(active, opts) {
+  const options = opts || {};
+
+  // Paint immediately from the session-scoped hint so the nav does not flash
+  // the signed-out menu, then reconcile with the server.
+  CURRENT_USER = readUserHint();
+  paintNav(active);
+  if (options.chat !== false) mountChat();
+
+  refreshUser().then((user) => {
+    const before = JSON.stringify(readUserHint());
+    if (JSON.stringify(user) !== before || !document.getElementById("authBtn")) {
+      paintNav(active);
+    }
+    document.dispatchEvent(new CustomEvent("bc:user", { detail: user }));
+  });
+}
+
+// Pages that need the real role before rendering await this instead of
+// racing mountNav's background refresh.
+async function requireUser() {
+  if (CURRENT_USER) return CURRENT_USER;
+  return refreshUser();
 }
 
 // ---- Attention mascot: ONE little robot that lives on the chat button. It
@@ -1006,15 +1108,15 @@ function mountChat() {
     if (!greeted) {
       greeted = true;
       let greeting;
-      if (isDeveloper()) {
-        greeting = "dev mode activated! ask me anything — registrations, money, expenses. feed me more knowledge on the Feed AI page and I'll use it instantly.";
-      } else if (isAdmin()) {
+      if (hasRole("owner")) {
+        greeting = "owner mode! ask me anything — registrations, money, expenses. feed me more knowledge on the Feed AI page and I'll use it instantly.";
+      } else if (isSignedIn()) {
         greeting = "hey! got live numbers ready — registrations, payments, pending, expenses. what do you need?";
       } else {
         greeting = prewarmGreetingText; // use the pre-warmed text
       }
       // Speak the greeting and show it as text. Mic stays off — user taps it to start.
-      if (!isDeveloper() && !isAdmin()) {
+      if (!isSignedIn()) {
         if (canListen && !recognition) initRecognition();
         processing = false;
         finalBuffer = "";
@@ -1319,10 +1421,6 @@ function mountChat() {
       }
     } else if (action.action === "review_booking") {
       showBookingConfirm(action);
-    } else if (action.action === "create_page" || action.action === "update_page") {
-      showPageConfirm(action, html);
-    } else if (action.action === "delete_page") {
-      showPageDelete(action);
     } else if (action.action === "show_map") {
       showMapCard(action.from, action.to);
     } else if (action.action === "contact_organiser") {
@@ -1330,112 +1428,11 @@ function mountChat() {
     }
   }
 
-  // Developer: review & publish an AI-generated page (stored in D1).
-  function showPageConfirm(a, html) {
-    if (!isDeveloper()) {
-      addMsg(
-        "assistant",
-        "\u26a0\ufe0f Building pages needs developer access \u2014 unlock it on the Pages screen first."
-      );
-      return;
-    }
-    if (!html || !html.trim()) {
-      addMsg("assistant", "I couldn't produce the page HTML \u2014 please ask me again.");
-      return;
-    }
-    const slug = String(a.slug || "").trim();
-    const title = String(a.title || slug).trim();
-    const verb = a.action === "update_page" ? "Update" : "Publish";
-    const card = document.createElement("div");
-    card.className = "chat-msg assistant chat-confirm";
-    card.innerHTML =
-      "<strong>" +
-      escapeHtml(verb) +
-      " page</strong>" +
-      '<div class="chat-confirm-row"><span>Title</span><b>' +
-      escapeHtml(title) +
-      "</b></div>" +
-      '<div class="chat-confirm-row"><span>URL</span><b>/p/' +
-      escapeHtml(slug) +
-      "</b></div>" +
-      '<div class="chat-confirm-actions">' +
-      '<button type="button" class="btn ghost small" data-act="preview">Preview</button>' +
-      '<button type="button" class="btn ghost small" data-act="cancel">Cancel</button>' +
-      '<button type="button" class="btn primary small" data-act="ok">' +
-      escapeHtml(verb) +
-      "</button>" +
-      "</div>";
-    log.appendChild(card);
-    log.scrollTop = log.scrollHeight;
-
-    card.querySelector('[data-act="preview"]').addEventListener("click", () => {
-      const blob = new Blob([html], { type: "text/html" });
-      window.open(URL.createObjectURL(blob), "_blank");
-    });
-    card.querySelector('[data-act="cancel"]').addEventListener("click", () => {
-      card.remove();
-      addMsg("assistant", "Okay, I won't publish it \u2014 tell me what to change.");
-    });
-    card.querySelector('[data-act="ok"]').addEventListener("click", async (ev) => {
-      const btn = ev.currentTarget;
-      btn.disabled = true;
-      btn.textContent = "Publishing\u2026";
-      try {
-        const res = await api("/api/pages", {
-          method: "POST",
-          body: JSON.stringify({ slug, title, html, devKey: getDevKey() }),
-        });
-        const url = res.url || "/p/" + slug;
-        card.querySelector(".chat-confirm-actions").remove();
-        addMsg("assistant", "\u2705 Published! Opening " + url + " now.");
-        setTimeout(() => window.open(url, "_blank"), 500);
-      } catch (err) {
-        btn.disabled = false;
-        btn.textContent = verb;
-        addMsg("assistant", "\u26a0\ufe0f Couldn't publish: " + (err && err.message ? err.message : err));
-      }
-    });
-  }
-
-  // Developer: confirm deletion of a page.
-  function showPageDelete(a) {
-    if (!isDeveloper()) {
-      addMsg("assistant", "\u26a0\ufe0f Deleting pages needs developer access.");
-      return;
-    }
-    const slug = String(a.slug || "").trim();
-    const card = document.createElement("div");
-    card.className = "chat-msg assistant chat-confirm";
-    card.innerHTML =
-      "<strong>Delete page</strong>" +
-      '<div class="chat-confirm-row"><span>URL</span><b>/p/' +
-      escapeHtml(slug) +
-      "</b></div>" +
-      '<div class="chat-confirm-actions">' +
-      '<button type="button" class="btn ghost small" data-act="cancel">Cancel</button>' +
-      '<button type="button" class="btn danger small" data-act="ok">Delete</button>' +
-      "</div>";
-    log.appendChild(card);
-    log.scrollTop = log.scrollHeight;
-    card.querySelector('[data-act="cancel"]').addEventListener("click", () => card.remove());
-    card.querySelector('[data-act="ok"]').addEventListener("click", async (ev) => {
-      const btn = ev.currentTarget;
-      btn.disabled = true;
-      btn.textContent = "Deleting\u2026";
-      try {
-        await api("/api/pages/" + encodeURIComponent(slug), {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json", "x-dev-key": getDevKey() },
-        });
-        card.querySelector(".chat-confirm-actions").remove();
-        addMsg("assistant", "\u{1F5D1}\uFE0F Deleted /p/" + slug + ".");
-      } catch (err) {
-        btn.disabled = false;
-        btn.textContent = "Delete";
-        addMsg("assistant", "\u26a0\ufe0f Couldn't delete: " + (err && err.message ? err.message : err));
-      }
-    });
-  }
+  // AI page publishing (/p/<slug>) was removed deliberately. It stored
+  // model-generated HTML and served it from this origin, which meant a
+  // published page could read the session's cookies and call the admin API on
+  // the viewer's behalf \u2014 a stored XSS shipped on purpose. The knowledge base
+  // on the Feed AI page replaces it as the way to teach the assistant.
 
   function showBookingConfirm(a) {
     const cat = normalizeCategory(a.category);
@@ -1580,10 +1577,10 @@ function mountChat() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        // No role and no key: the server reads the session cookie. The old
+        // payload let anyone send role:"admin" and read live financials.
         body: JSON.stringify({
           messages: history,
-          role: localStorage.getItem("role") || "user",
-          devKey: getDevKey(),
           voice,
           stream: true,
         }),
@@ -1643,11 +1640,12 @@ function mountChat() {
         }
       }
 
-      // Real reason (all models failed) is always logged, and shown inline for
-      // developers (dev key present) so "always resting" is never a mystery.
+      // Always logged to the console. Shown inline only for owners, so
+      // "the assistant is always resting" is never a mystery to whoever can
+      // actually fix it. The server only sends `detail` to signed-in staff.
       if (replyDetail) {
         console.error("[chat/voice] server detail:", replyDetail);
-        if (getDevKey()) addMsg("assistant", "\uD83D\uDEE0\ufe0f debug: " + replyDetail);
+        if (hasRole("owner")) addMsg("assistant", "\uD83D\uDEE0\ufe0f debug: " + replyDetail);
       }
 
       // SSE sent an error event (AI models unavailable) — show friendly message, not "network error".
@@ -2085,7 +2083,7 @@ function mountChat() {
   // opening the chat again is instant.
   const GREET_AUDIO_KEY = "greetAudio";
   function startPrewarm() {
-    if (prewarmAudioP || isDeveloper() || isAdmin()) return;
+    if (prewarmAudioP || isSignedIn()) return;
     let cached = null;
     try {
       cached = sessionStorage.getItem(GREET_AUDIO_KEY);

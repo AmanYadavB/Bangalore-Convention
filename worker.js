@@ -2,40 +2,53 @@
 // Storage: one KV namespace bound as CONVENTION_KV (configured in wrangler.toml).
 // Static files are served through the ASSETS binding (also in wrangler.toml).
 
-const PRICING = [
-  {
-    id: "without-stay",
-    name: "Without Stay",
-    description: "Full convention access. Accommodation not included.",
-    price: 1500,
-  },
-  {
-    id: "single-sharing",
-    name: "With Stay - Single Sharing",
-    description: "Private room for one. All meals & sessions included.",
-    price: 6000,
-  },
-  {
-    id: "double-sharing",
-    name: "With Stay - Double Sharing",
-    description: "Room shared by two. All meals & sessions included.",
-    price: 4200,
-  },
-  {
-    id: "triple-sharing",
-    name: "With Stay - Triple Sharing",
-    description: "Room shared by three. All meals & sessions included.",
-    price: 3200,
-  },
-];
+// Prices live in one place and are shared with dev-server.js. The chat system
+// prompt's price line is generated from the same array so a price change can
+// never leave the bot quoting stale numbers.
+import { PRICING, findCategory, pricingPhrase } from "./shared/pricing.mjs";
+import {
+  b64urlEncode,
+  randomToken,
+  sha256Hex,
+  hmacHex,
+  timingEqual,
+  timingEqualStr,
+  hashPassword,
+  verifyPassword,
+  passwordPolicyError,
+  isPwnedPassword,
+  normalizeEmail,
+  isValidEmail,
+  ROLE_RANK,
+  ROLES,
+  roleAtLeast,
+  PROTECTED_PAGES,
+  PAGE_ALLOWLIST,
+  canonicalPage,
+  safeNext,
+  cookieName,
+  parseCookies,
+  buildCookie,
+  clearCookie,
+  SESSION_IDLE_MS,
+  SESSION_ABSOLUTE_MS,
+  SESSION_TOUCH_MS,
+  SUDO_MS,
+  MAGIC_TTL_MS,
+  INVITE_TTL_MS,
+  OAUTH_TTL_MS,
+  LOCKOUT_THRESHOLD,
+  LOCKOUT_BASE_MS,
+  LOCKOUT_MAX_MS,
+  checkOrigin,
+  checkJsonContentType,
+} from "./shared/auth-core.mjs";
 
 const json = (obj, status = 200) =>
   new Response(JSON.stringify(obj), {
     status,
     headers: { "content-type": "application/json; charset=utf-8" },
   });
-
-const findCategory = (id) => PRICING.find((c) => c.id === id);
 
 async function loadList(env, key) {
   const data = await env.CONVENTION_KV.get(key, { type: "json" });
@@ -120,6 +133,10 @@ async function ensurePagesTable(env) {
 }
 
 // ---- Developer-fed knowledge for the AI (stored in D1) -------------------
+// Content is capped so one huge paste cannot crowd out the rest of the chat
+// system prompt. The cap is reported back to the client rather than silently
+// truncating.
+const KNOWLEDGE_MAX_CHARS = 20000;
 let knowledgeTableReady = false;
 async function ensureKnowledgeTable(env) {
   if (knowledgeTableReady) return;
@@ -251,13 +268,1518 @@ const slugify = (s) =>
     .replace(/^-+|-+$/g, "")
     .slice(0, 60);
 
-// A request is "developer" only if it carries the exact DEV_KEY secret.
-function isDeveloper(request, env, body) {
+// ===========================================================================
+// AUTH — sessions, staff accounts, rate limiting, audit log
+// ===========================================================================
+//
+// Storage-bound half of the auth system. The pure crypto and policy tables live
+// in shared/auth-core.mjs so dev-server.js runs the exact same code.
+//
+// ALL auth state is in D1, not KV, for two reasons:
+//   1. KV is eventually consistent (~60s), so a revoked session would stay
+//      valid at other edges for up to a minute, and a single-use magic token
+//      could be redeemed twice. D1 is strongly consistent.
+//   2. The KV free tier allows 1,000 writes/day, which sessions and rate-limit
+//      counters would exhaust. D1's free tier is 100k writes/day.
+
+let authTablesReady = false;
+const AUTH_DDL = [
+  `CREATE TABLE IF NOT EXISTS staff (
+     id TEXT PRIMARY KEY,
+     email TEXT NOT NULL UNIQUE,
+     name TEXT NOT NULL DEFAULT '',
+     role TEXT NOT NULL DEFAULT 'viewer',
+     status TEXT NOT NULL DEFAULT 'invited',
+     password_hash TEXT,
+     google_sub TEXT,
+     created_at INTEGER NOT NULL,
+     updated_at INTEGER NOT NULL,
+     last_login_at INTEGER,
+     pwd_changed_at INTEGER,
+     failed_count INTEGER NOT NULL DEFAULT 0,
+     locked_until INTEGER NOT NULL DEFAULT 0
+   )`,
+  // SQLite allows many NULLs in a UNIQUE index, so staff without a linked
+  // Google account do not collide with each other.
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_staff_google ON staff(google_sub)`,
+  `CREATE TABLE IF NOT EXISTS session (
+     id TEXT PRIMARY KEY,
+     staff_id TEXT NOT NULL,
+     csrf TEXT NOT NULL,
+     method TEXT NOT NULL DEFAULT '',
+     created_at INTEGER NOT NULL,
+     last_seen_at INTEGER NOT NULL,
+     absolute_exp INTEGER NOT NULL,
+     sudo_until INTEGER NOT NULL DEFAULT 0,
+     revoked_at INTEGER,
+     ip TEXT NOT NULL DEFAULT '',
+     ua TEXT NOT NULL DEFAULT ''
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_session_staff ON session(staff_id, revoked_at)`,
+  `CREATE TABLE IF NOT EXISTS staff_invite (
+     token_hash TEXT PRIMARY KEY,
+     email TEXT NOT NULL,
+     role TEXT NOT NULL,
+     invited_by TEXT NOT NULL DEFAULT '',
+     created_at INTEGER NOT NULL,
+     expires_at INTEGER NOT NULL,
+     used_at INTEGER
+   )`,
+  // Magic-link and OAuth state live in D1 rather than KV so single-use can be
+  // enforced with a conditional UPDATE (changes === 1), which KV cannot do.
+  `CREATE TABLE IF NOT EXISTS magic_token (
+     token_hash TEXT PRIMARY KEY,
+     email TEXT NOT NULL,
+     purpose TEXT NOT NULL DEFAULT 'login',
+     next TEXT NOT NULL DEFAULT '',
+     csrf TEXT NOT NULL,
+     bind_id TEXT NOT NULL DEFAULT '',
+     created_at INTEGER NOT NULL,
+     expires_at INTEGER NOT NULL,
+     used_at INTEGER
+   )`,
+  `CREATE TABLE IF NOT EXISTS oauth_tx (
+     state TEXT PRIMARY KEY,
+     verifier TEXT NOT NULL,
+     nonce TEXT NOT NULL,
+     next TEXT NOT NULL DEFAULT '',
+     created_at INTEGER NOT NULL,
+     expires_at INTEGER NOT NULL
+   )`,
+  `CREATE TABLE IF NOT EXISTS auth_event (
+     id TEXT PRIMARY KEY,
+     at INTEGER NOT NULL,
+     type TEXT NOT NULL,
+     staff_id TEXT,
+     email TEXT,
+     ip TEXT,
+     ua TEXT,
+     country TEXT,
+     outcome TEXT NOT NULL DEFAULT 'ok',
+     detail TEXT
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_auth_event_at ON auth_event(at)`,
+  `CREATE TABLE IF NOT EXISTS rate_limit (
+     k TEXT PRIMARY KEY,
+     n INTEGER NOT NULL,
+     reset_at INTEGER NOT NULL
+   )`,
+];
+
+async function ensureAuthTables(env) {
+  if (authTablesReady) return;
+  if (!env.CONVENTION_DB) throw new Error("D1 binding CONVENTION_DB is required for authentication.");
+  await env.CONVENTION_DB.batch(AUTH_DDL.map((sql) => env.CONVENTION_DB.prepare(sql)));
+  authTablesReady = true;
+}
+
+const clientIp = (request) => request.headers.get("CF-Connecting-IP") || "";
+const clientUa = (request) => String(request.headers.get("User-Agent") || "").slice(0, 200);
+
+// ---- Audit log ------------------------------------------------------------
+// Fire-and-forget, mirroring track(): auditing must never add latency and must
+// never break a request.
+//
+// PII discipline: for failures on emails that are NOT known staff, the address
+// is hashed. Otherwise anyone could write arbitrary strings into the database
+// by failing logins, turning the audit log into a PII sink.
+async function writeAuthEvent(env, ev) {
+  await ensureAuthTables(env);
+  await env.CONVENTION_DB.prepare(
+    `INSERT INTO auth_event (id, at, type, staff_id, email, ip, ua, country, outcome, detail)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  )
+    .bind(
+      crypto.randomUUID(),
+      Date.now(),
+      String(ev.type || "unknown"),
+      ev.staffId || null,
+      ev.email || null,
+      ev.ip || null,
+      ev.ua || null,
+      ev.country || null,
+      String(ev.outcome || "ok"),
+      ev.detail ? String(ev.detail).slice(0, 500) : null
+    )
+    .run();
+}
+
+function audit(env, ctx, ev) {
+  const p = writeAuthEvent(env, ev).catch((e) => console.log("audit failed:", e && e.message));
+  if (ctx && ctx.waitUntil) ctx.waitUntil(p);
+  return p;
+}
+
+function auditFrom(request, ev) {
+  return {
+    ip: clientIp(request),
+    ua: clientUa(request),
+    country: (request.cf && request.cf.country) || null,
+    ...ev,
+  };
+}
+
+// ---- Rate limiting --------------------------------------------------------
+// Fixed window in D1. Strongly consistent, so a distributed attacker cannot
+// undercount by spreading across edges the way they could with KV.
+async function rateLimit(env, scope, id, limit, windowSec) {
+  try {
+    await ensureAuthTables(env);
+    const now = Date.now();
+    const bucket = Math.floor(now / 1000 / windowSec);
+    const k = `${scope}:${id}:${bucket}`;
+    const resetAt = (bucket + 1) * windowSec * 1000;
+
+    const row = await env.CONVENTION_DB.prepare("SELECT n FROM rate_limit WHERE k = ?").bind(k).first();
+    const n = row ? Number(row.n) : 0;
+    if (n >= limit) {
+      return { allowed: false, remaining: 0, retryAfter: Math.max(1, Math.ceil((resetAt - now) / 1000)) };
+    }
+    await env.CONVENTION_DB.prepare(
+      `INSERT INTO rate_limit (k, n, reset_at) VALUES (?, 1, ?)
+       ON CONFLICT(k) DO UPDATE SET n = n + 1`
+    )
+      .bind(k, resetAt)
+      .run();
+    return { allowed: true, remaining: limit - n - 1, retryAfter: 0 };
+  } catch (e) {
+    // A rate-limiter outage must not take the site down. Fail open, but shout.
+    console.log("rateLimit failed:", e && e.message);
+    return { allowed: true, remaining: limit, retryAfter: 0 };
+  }
+}
+
+function tooManyRequests(retryAfter) {
+  return new Response(JSON.stringify({ error: "Too many requests. Please wait and try again." }), {
+    status: 429,
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "retry-after": String(retryAfter || 60),
+    },
+  });
+}
+
+// ---- Staff accounts -------------------------------------------------------
+
+async function staffByEmail(env, email) {
+  await ensureAuthTables(env);
+  return env.CONVENTION_DB.prepare("SELECT * FROM staff WHERE email = ?")
+    .bind(normalizeEmail(email))
+    .first();
+}
+
+async function staffById(env, id) {
+  await ensureAuthTables(env);
+  return env.CONVENTION_DB.prepare("SELECT * FROM staff WHERE id = ?").bind(id).first();
+}
+
+async function staffCount(env) {
+  await ensureAuthTables(env);
+  const row = await env.CONVENTION_DB.prepare("SELECT COUNT(*) AS n FROM staff").first();
+  return Number((row && row.n) || 0);
+}
+
+async function createStaff(env, { email, name, role, status }) {
+  await ensureAuthTables(env);
+  const now = Date.now();
+  const id = crypto.randomUUID();
+  await env.CONVENTION_DB.prepare(
+    `INSERT INTO staff (id, email, name, role, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  )
+    .bind(id, normalizeEmail(email), String(name || ""), role, status, now, now)
+    .run();
+  return staffById(env, id);
+}
+
+// Zero-state bootstrap. Piggybacks on flows that already prove identity without
+// a pre-existing account (Google validates against Google, a magic link proves
+// mailbox control), so there is no chicken-and-egg. Goes permanently inert once
+// any staff row exists — including a disabled one, so deleting your own account
+// cannot re-open it.
+async function maybeBootstrapOwner(env, ctx, email, request) {
+  const target = normalizeEmail(env.BOOTSTRAP_OWNER_EMAIL);
+  if (!target || normalizeEmail(email) !== target) return null;
+  if ((await staffCount(env)) > 0) return null;
+  const row = await createStaff(env, { email: target, name: "", role: "owner", status: "active" });
+  audit(env, ctx, auditFrom(request, { type: "bootstrap_owner", staffId: row.id, email: target }));
+  console.log("[auth] bootstrapped first owner:", target);
+  return row;
+}
+
+// Account lockout lives in D1 rather than a KV counter because it is
+// correctness-critical: an undercount lets a brute-force through.
+async function registerLoginFailure(env, staff) {
+  const failed = Number(staff.failed_count || 0) + 1;
+  let lockedUntil = Number(staff.locked_until || 0);
+  if (failed >= LOCKOUT_THRESHOLD) {
+    // Doubles each time the threshold is crossed again, capped at 24h.
+    const overshoot = failed - LOCKOUT_THRESHOLD;
+    const span = Math.min(LOCKOUT_BASE_MS * Math.pow(2, overshoot), LOCKOUT_MAX_MS);
+    lockedUntil = Date.now() + span;
+  }
+  await env.CONVENTION_DB.prepare(
+    "UPDATE staff SET failed_count = ?, locked_until = ?, updated_at = ? WHERE id = ?"
+  )
+    .bind(failed, lockedUntil, Date.now(), staff.id)
+    .run();
+  return lockedUntil;
+}
+
+async function clearLoginFailures(env, staffId) {
+  await env.CONVENTION_DB.prepare(
+    "UPDATE staff SET failed_count = 0, locked_until = 0, last_login_at = ?, updated_at = ? WHERE id = ?"
+  )
+    .bind(Date.now(), Date.now(), staffId)
+    .run();
+}
+
+// ---- Sessions -------------------------------------------------------------
+//
+// Opaque random token, server-side record. Not a JWT: revocation must be
+// instant (role changes and disables are privileged operations), session
+// listing must be possible, and a missed session lookup fails CLOSED whereas a
+// missed denylist check on a JWT fails OPEN.
+//
+// The STORED id is sha256(token) — a database dump or a leaked log line can
+// never be replayed as a live session.
+
+// Optional cheap pre-filter so well-formed garbage cannot force a D1 read.
+// Degrades safely: with no SESSION_PEPPER set, the D1 lookup is still the real
+// boundary, so a missing secret costs a little DB load, not security.
+async function sessionTag(env, sid) {
+  if (!env.SESSION_PEPPER) return "";
+  return (await hmacHex(env.SESSION_PEPPER, sid)).slice(0, 32);
+}
+
+async function createSession(env, staff, method, request) {
+  await ensureAuthTables(env);
+  const sid = randomToken(32);
+  const id = await sha256Hex(sid);
+  const csrf = randomToken(24);
+  const now = Date.now();
+  await env.CONVENTION_DB.prepare(
+    `INSERT INTO session (id, staff_id, csrf, method, created_at, last_seen_at, absolute_exp, ip, ua)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  )
+    .bind(id, staff.id, csrf, String(method || ""), now, now, now + SESSION_ABSOLUTE_MS, clientIp(request), clientUa(request))
+    .run();
+
+  const tag = await sessionTag(env, sid);
+  return { sid, id, csrf, cookieValue: tag ? `${sid}.${tag}` : sid, absoluteExp: now + SESSION_ABSOLUTE_MS };
+}
+
+// Returns { session, staff } or null. Never throws.
+async function readSession(request, env) {
+  try {
+    const cookies = parseCookies(request.headers.get("Cookie"));
+    const raw = cookies[cookieName(env, "session")];
+    if (!raw) return null;
+
+    const [sid, tag] = String(raw).split(".");
+    if (!sid || !/^[A-Za-z0-9\-_]{20,64}$/.test(sid)) return null;
+    if (env.SESSION_PEPPER) {
+      const expected = await sessionTag(env, sid);
+      if (!tag || !timingEqualStr(tag, expected)) return null;
+    }
+
+    await ensureAuthTables(env);
+    const id = await sha256Hex(sid);
+    const row = await env.CONVENTION_DB.prepare("SELECT * FROM session WHERE id = ?").bind(id).first();
+    if (!row) return null;
+
+    const now = Date.now();
+    if (row.revoked_at) return null;
+    if (now > Number(row.absolute_exp)) return null;
+    if (now - Number(row.last_seen_at) > SESSION_IDLE_MS) return null;
+
+    const staff = await staffById(env, row.staff_id);
+    if (!staff || staff.status !== "active") return null;
+
+    // Throttled so a busy session does not mean a D1 write per request.
+    if (now - Number(row.last_seen_at) > SESSION_TOUCH_MS) {
+      await env.CONVENTION_DB.prepare("UPDATE session SET last_seen_at = ? WHERE id = ?")
+        .bind(now, id)
+        .run();
+    }
+    return { session: row, staff };
+  } catch (e) {
+    console.log("readSession failed:", e && e.message);
+    return null;
+  }
+}
+
+async function revokeSession(env, id) {
+  await env.CONVENTION_DB.prepare("UPDATE session SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL")
+    .bind(Date.now(), id)
+    .run();
+}
+
+// Revoking every session for a user is part of disabling them and part of any
+// role change. A disable that leaves live sessions is not a disable.
+async function revokeAllSessions(env, staffId, exceptId) {
+  const sql = exceptId
+    ? "UPDATE session SET revoked_at = ? WHERE staff_id = ? AND revoked_at IS NULL AND id != ?"
+    : "UPDATE session SET revoked_at = ? WHERE staff_id = ? AND revoked_at IS NULL";
+  const stmt = env.CONVENTION_DB.prepare(sql);
+  await (exceptId ? stmt.bind(Date.now(), staffId, exceptId) : stmt.bind(Date.now(), staffId)).run();
+}
+
+// New session + old one revoked in a single batch, so there is never a window
+// where both or neither is valid. Called on every login (session fixation),
+// role change, and password change.
+async function rotateSession(env, oldId, staff, method, request) {
+  const created = await createSession(env, staff, method, request);
+  if (oldId) await revokeSession(env, oldId);
+  return created;
+}
+
+function sessionCookieHeaders(env, created) {
+  const maxAge = Math.floor((created.absoluteExp - Date.now()) / 1000);
+  return [
+    buildCookie(env, "session", created.cookieValue, { maxAge, httpOnly: true }),
+    // Deliberately NOT HttpOnly: client JS must read it to echo it in a header.
+    buildCookie(env, "csrf", created.csrf, { maxAge, httpOnly: false }),
+  ];
+}
+
+// The CSRF header is compared against the SESSION ROW, not against the cookie.
+// Plain cookie-vs-header double-submit can be satisfied by an attacker who can
+// set cookies; comparing against server-side state cannot be forged.
+function checkCsrf(request, sessionRow) {
+  const sent = request.headers.get("X-CSRF-Token") || "";
+  if (!sent || !sessionRow || !sessionRow.csrf) return false;
+  return timingEqualStr(sent, sessionRow.csrf);
+}
+
+const hasSudo = (sessionRow) => Number((sessionRow && sessionRow.sudo_until) || 0) > Date.now();
+
+// ---- DEV_KEY, reduced to a machine token ----------------------------------
+// No longer a user-facing credential. It survives only as break-glass account
+// recovery and for curl-triggered ops reports. Constant-time comparison.
+function checkMachineToken(request, env, body) {
   const key =
     (body && typeof body.devKey === "string" && body.devKey) ||
     request.headers.get("x-dev-key") ||
     "";
-  return Boolean(env.DEV_KEY) && key.length > 0 && key === env.DEV_KEY;
+  return Boolean(env.DEV_KEY) && key.length > 0 && timingEqualStr(key, env.DEV_KEY);
+}
+
+// ===========================================================================
+// AUTH ROUTES  —  /api/auth/*
+// ===========================================================================
+
+const esc = (s) =>
+  String(s === null || s === undefined ? "" : s).replace(
+    /[&<>"']/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
+  );
+
+const authOrigin = (env, request) => {
+  if (env.AUTH_ORIGIN) return String(env.AUTH_ORIGIN).replace(/\/+$/, "");
+  // Never derived from the Host header in production (host-header injection);
+  // this fallback only exists so local dev works without configuration.
+  return new URL(request.url).origin;
+};
+
+function redirectTo(url, extraHeaders = []) {
+  const headers = new Headers({ location: url, "cache-control": "no-store" });
+  for (const c of extraHeaders) headers.append("set-cookie", c);
+  return new Response(null, { status: 302, headers });
+}
+
+function jsonWithCookies(obj, cookies, status = 200) {
+  const headers = new Headers({
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "private, no-store",
+  });
+  for (const c of cookies) headers.append("set-cookie", c);
+  return new Response(JSON.stringify(obj), { status, headers });
+}
+
+// Minimal self-contained page for the flows that must not depend on the app
+// shell (magic-link and invite interstitials, which run pre-session).
+function authShellPage(title, bodyHtml, status = 200) {
+  return new Response(
+    `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${esc(title)}</title><link rel="stylesheet" href="/css/style.css">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml"></head>
+<body><div class="container"><div class="card auth-card">${bodyHtml}</div></div></body></html>`,
+    { status, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "private, no-store" } }
+  );
+}
+
+const loginRedirect = (env, request, code, next) =>
+  redirectTo(
+    `${authOrigin(env, request)}/login.html?e=${encodeURIComponent(code)}` +
+      (next ? `&next=${encodeURIComponent(next)}` : "")
+  );
+
+// Shape returned to the client for the signed-in user. Never includes the CSRF
+// token (that travels in its own cookie) or anything password-related.
+const publicStaff = (staff) => ({
+  id: staff.id,
+  email: staff.email,
+  name: staff.name || "",
+  role: staff.role,
+  hasPassword: Boolean(staff.password_hash),
+});
+
+async function handleAuth(request, env, ctx, parts, url) {
+  const action = parts[2] || "";
+  const sub = parts[3] || "";
+  const method = request.method;
+  await ensureAuthTables(env);
+
+  // Parse the body ONCE, branching on content-type. The magic-link and invite
+  // interstitials submit real <form>s (urlencoded), everything else sends JSON;
+  // calling request.json() first would consume the stream and leave formData()
+  // with nothing to read.
+  let body = {};
+  if (method === "POST" || method === "PATCH") {
+    const ct = String(request.headers.get("content-type") || "").toLowerCase();
+    if (ct.includes("application/json")) {
+      body = await request.json().catch(() => ({}));
+    } else if (ct.includes("form-urlencoded") || ct.includes("multipart/form-data")) {
+      const form = await request.formData().catch(() => null);
+      if (form) for (const [k, v] of form.entries()) body[k] = typeof v === "string" ? v : "";
+    }
+  }
+
+  // Login CSRF: every auth mutation must originate from our own origin.
+  if (method !== "GET" && method !== "HEAD" && !checkOrigin(request, env)) {
+    audit(env, ctx, auditFrom(request, { type: "origin_reject", outcome: "deny", detail: "/api/auth/" + action }));
+    return json({ error: "Request blocked: bad origin." }, 403);
+  }
+
+  // ---- Who am I ----------------------------------------------------------
+  if (action === "me" && method === "GET") {
+    const s = await readSession(request, env);
+    if (!s) return json({ authenticated: false });
+    return json({
+      authenticated: true,
+      user: publicStaff(s.staff),
+      sudo: hasSudo(s.session),
+      sessionMethod: s.session.method,
+    });
+  }
+
+  // ---- Logout ------------------------------------------------------------
+  if (action === "logout" && method === "POST") {
+    const s = await readSession(request, env);
+    if (s) {
+      await revokeSession(env, s.session.id);
+      audit(env, ctx, auditFrom(request, { type: "logout", staffId: s.staff.id, email: s.staff.email }));
+    }
+    return jsonWithCookies({ ok: true }, [clearCookie(env, "session"), clearCookie(env, "csrf")]);
+  }
+
+  // ---- Password login ----------------------------------------------------
+  if (action === "login" && sub === "password" && method === "POST") {
+    const ip = clientIp(request) || "unknown";
+
+    // Rate limit BEFORE any hashing. Otherwise this endpoint is a CPU
+    // amplifier: an attacker posting random emails would cost us a PBKDF2
+    // derive each time.
+    const rl = await rateLimit(env, "login:ip", ip, 20, 15 * 60);
+    if (!rl.allowed) {
+      audit(env, ctx, auditFrom(request, { type: "rate_limited", outcome: "deny", detail: "login" }));
+      return tooManyRequests(rl.retryAfter);
+    }
+
+    const email = normalizeEmail(body.email);
+    const password = String(body.password || "");
+    const generic = { error: "That email and password combination didn't work." };
+
+    if (!isValidEmail(email) || !password) return json(generic, 401);
+
+    const staff = await staffByEmail(env, email);
+
+    if (staff && Number(staff.locked_until || 0) > Date.now()) {
+      audit(env, ctx, auditFrom(request, { type: "login_locked", staffId: staff.id, email, outcome: "deny" }));
+      return json(
+        { error: "Too many failed attempts. This account is locked — try again later or use a sign-in link." },
+        423
+      );
+    }
+
+    if (!staff || staff.status !== "active" || !staff.password_hash) {
+      // Uniform wall-clock delay rather than a dummy hash. setTimeout does not
+      // consume CPU quota, so an unknown email cannot be distinguished by
+      // timing AND cannot be used to burn our CPU budget.
+      await new Promise((r) => setTimeout(r, 120));
+      audit(env, ctx, auditFrom(request, {
+        type: "login_fail",
+        outcome: "deny",
+        email: staff ? email : null,
+        detail: staff ? "no password set or inactive" : "unknown email " + (await sha256Hex(email)).slice(0, 16),
+      }));
+      return json(generic, 401);
+    }
+
+    let result;
+    try {
+      result = await verifyPassword(env, password, staff.password_hash);
+    } catch (e) {
+      console.log("verifyPassword failed:", e && e.message);
+      return json({ error: "Password sign-in is not configured on this server." }, 503);
+    }
+
+    if (!result.ok) {
+      const lockedUntil = await registerLoginFailure(env, staff);
+      audit(env, ctx, auditFrom(request, {
+        type: "login_fail",
+        staffId: staff.id,
+        email,
+        outcome: "deny",
+        detail: lockedUntil > Date.now() ? "locked" : "bad password",
+      }));
+      return json(generic, 401);
+    }
+
+    if (result.needsRehash) {
+      const fresh = await hashPassword(env, password);
+      await env.CONVENTION_DB.prepare("UPDATE staff SET password_hash = ?, updated_at = ? WHERE id = ?")
+        .bind(fresh, Date.now(), staff.id)
+        .run();
+    }
+
+    await clearLoginFailures(env, staff.id);
+    const created = await createSession(env, staff, "password", request);
+    audit(env, ctx, auditFrom(request, { type: "login_ok", staffId: staff.id, email, detail: "password" }));
+    return jsonWithCookies(
+      { ok: true, user: publicStaff(staff), next: safeNext(body.next) },
+      sessionCookieHeaders(env, created)
+    );
+  }
+
+  // ---- Magic link: request -----------------------------------------------
+  if (action === "magic" && sub === "start" && method === "POST") {
+    const ip = clientIp(request) || "unknown";
+    const email = normalizeEmail(body.email);
+    const next = safeNext(body.next);
+
+    // ALWAYS the same response — known, unknown, disabled, or rate-limited.
+    // Any variation here is a staff-directory enumeration oracle.
+    const uniform = json({ ok: true });
+
+    if (!isValidEmail(email)) return uniform;
+
+    const emailKey = (await sha256Hex(email)).slice(0, 32);
+    const perEmail = await rateLimit(env, "magic:email", emailKey, 3, 60 * 60);
+    const perIp = await rateLimit(env, "magic:ip", ip, 10, 60 * 60);
+    const global = await rateLimit(env, "magic:day", istDate(0), 100, 24 * 60 * 60);
+    if (!perEmail.allowed || !perIp.allowed || !global.allowed) return uniform;
+
+    // The whole send runs in waitUntil so the response time is identical
+    // whether or not the account exists — a stopwatch is as good an oracle as
+    // a different status code.
+    const work = (async () => {
+      let staff = await staffByEmail(env, email);
+      if (!staff) staff = await maybeBootstrapOwner(env, ctx, email, request);
+      if (!staff || staff.status === "disabled") {
+        await audit(env, ctx, auditFrom(request, {
+          type: "magic_unknown",
+          outcome: "deny",
+          detail: "no active staff for " + (await sha256Hex(email)).slice(0, 16),
+        }));
+        return;
+      }
+
+      const token = randomToken(32);
+      const tokenHash = await sha256Hex(token);
+      const csrf = randomToken(16);
+      const bindId = randomToken(16);
+      const now = Date.now();
+      await env.CONVENTION_DB.prepare(
+        `INSERT INTO magic_token (token_hash, email, purpose, next, csrf, bind_id, created_at, expires_at)
+         VALUES (?, ?, 'login', ?, ?, ?, ?, ?)`
+      )
+        .bind(tokenHash, staff.email, next, csrf, bindId, now, now + MAGIC_TTL_MS)
+        .run();
+
+      // Recipient comes from the DATABASE ROW, never from the request body,
+      // and nothing the caller supplied is echoed into the message. That is
+      // what keeps this from being an open relay.
+      const link = `${authOrigin(env, request)}/api/auth/magic/consume?token=${encodeURIComponent(token)}`;
+      const html = `
+        <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px">
+          <h2 style="margin:0 0 12px">Sign in to Bangalore Convention</h2>
+          <p style="color:#555;line-height:1.6">Click the button below to sign in. This link works once and expires in 15 minutes.</p>
+          <p style="margin:26px 0"><a href="${link}" style="background:#4f46e5;color:#fff;padding:13px 26px;border-radius:10px;text-decoration:none;font-weight:600;display:inline-block">Sign in</a></p>
+          <p style="color:#777;font-size:13px;line-height:1.6">If you didn't ask to sign in, you can ignore this email — nobody can access your account without clicking the link.</p>
+        </div>`;
+      if (env.AUTH_LOG_LINKS === "1" || !env.MAILCHANNELS_API_KEY) {
+        console.log("[auth] magic link for " + staff.email + ": " + link);
+      }
+      const sent = await sendMail(env, staff.email, "Your sign-in link", html, { toName: staff.name || "" });
+      await audit(env, ctx, auditFrom(request, {
+        type: "magic_sent",
+        staffId: staff.id,
+        email: staff.email,
+        outcome: sent.ok ? "ok" : "error",
+        detail: sent.note,
+      }));
+    })();
+
+    if (ctx && ctx.waitUntil) ctx.waitUntil(work);
+    return uniform;
+  }
+
+  // ---- Magic link: interstitial ------------------------------------------
+  // GET must NOT mint a session. Outlook Safe Links, Proofpoint and browser
+  // prefetchers all fetch the URL before a human clicks, which would burn the
+  // single-use token and produce "link expired" for someone who never clicked.
+  if (action === "magic" && sub === "consume" && method === "GET") {
+    const token = url.searchParams.get("token") || "";
+    const row = await env.CONVENTION_DB.prepare(
+      "SELECT * FROM magic_token WHERE token_hash = ?"
+    )
+      .bind(await sha256Hex(token))
+      .first();
+
+    if (!row || row.used_at || Number(row.expires_at) < Date.now()) {
+      return authShellPage(
+        "Link expired",
+        `<h2 style="margin-top:0">This link has expired</h2>
+         <p class="muted">Sign-in links last 15 minutes and work only once.</p>
+         <a class="btn primary" href="/login.html">Request a new link</a>`,
+        410
+      );
+    }
+
+    return authShellPage(
+      "Confirm sign-in",
+      `<h2 style="margin-top:0">Confirm sign-in</h2>
+       <p class="muted">You're signing in as <b>${esc(row.email)}</b>.</p>
+       <form method="POST" action="/api/auth/magic/confirm">
+         <input type="hidden" name="token" value="${esc(token)}">
+         <input type="hidden" name="csrf" value="${esc(row.csrf)}">
+         <button class="btn primary" type="submit" style="width:100%">Confirm sign-in</button>
+       </form>
+       <p class="muted" style="font-size:13px;margin-bottom:0">If you didn't request this, close this page — nothing has happened yet.</p>`
+    );
+  }
+
+  // ---- Magic link: confirm -----------------------------------------------
+  if (action === "magic" && sub === "confirm" && method === "POST") {
+    // The interstitial posts a real form; checkOrigin above is what protects it.
+    const token = body.token;
+    const csrf = body.csrf;
+
+    const tokenHash = await sha256Hex(String(token || ""));
+    const row = await env.CONVENTION_DB.prepare("SELECT * FROM magic_token WHERE token_hash = ?")
+      .bind(tokenHash)
+      .first();
+
+    if (!row || row.used_at || Number(row.expires_at) < Date.now() || !timingEqualStr(String(csrf || ""), row.csrf)) {
+      audit(env, ctx, auditFrom(request, { type: "magic_invalid", outcome: "deny" }));
+      return loginRedirect(env, request, "expired");
+    }
+
+    // Single-use, enforced by D1's strong consistency: exactly one caller can
+    // flip used_at from NULL, and changes tells us whether it was us.
+    const claim = await env.CONVENTION_DB.prepare(
+      "UPDATE magic_token SET used_at = ? WHERE token_hash = ? AND used_at IS NULL"
+    )
+      .bind(Date.now(), tokenHash)
+      .run();
+    if (!claim.meta || claim.meta.changes !== 1) {
+      audit(env, ctx, auditFrom(request, { type: "magic_invalid", outcome: "deny", detail: "already used" }));
+      return loginRedirect(env, request, "expired");
+    }
+
+    let staff = await staffByEmail(env, row.email);
+    if (!staff) staff = await maybeBootstrapOwner(env, ctx, row.email, request);
+    if (!staff || staff.status === "disabled") return loginRedirect(env, request, "not_staff");
+
+    if (staff.status === "invited") {
+      await env.CONVENTION_DB.prepare("UPDATE staff SET status = 'active', updated_at = ? WHERE id = ?")
+        .bind(Date.now(), staff.id)
+        .run();
+      staff = await staffById(env, staff.id);
+    }
+
+    await clearLoginFailures(env, staff.id);
+    const created = await createSession(env, staff, "magic", request);
+    audit(env, ctx, auditFrom(request, { type: "magic_consumed", staffId: staff.id, email: staff.email }));
+    return redirectTo(authOrigin(env, request) + safeNext(row.next), sessionCookieHeaders(env, created));
+  }
+
+  // ---- Google SSO: start -------------------------------------------------
+  if (action === "google" && sub === "start" && method === "GET") {
+    if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) {
+      return loginRedirect(env, request, "google_unconfigured");
+    }
+    const rl = await rateLimit(env, "oauth:ip", clientIp(request) || "unknown", 20, 15 * 60);
+    if (!rl.allowed) return tooManyRequests(rl.retryAfter);
+
+    const verifier = randomToken(32);
+    const challenge = b64urlEncode(
+      new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)))
+    );
+    const state = randomToken(32);
+    const nonce = randomToken(16);
+    const now = Date.now();
+
+    await env.CONVENTION_DB.prepare(
+      `INSERT INTO oauth_tx (state, verifier, nonce, next, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)`
+    )
+      .bind(state, verifier, nonce, safeNext(url.searchParams.get("next")), now, now + OAUTH_TTL_MS)
+      .run();
+
+    const auth = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+    auth.searchParams.set("client_id", env.GOOGLE_CLIENT_ID);
+    auth.searchParams.set("redirect_uri", authOrigin(env, request) + "/api/auth/google/callback");
+    auth.searchParams.set("response_type", "code");
+    auth.searchParams.set("scope", "openid email profile");
+    auth.searchParams.set("state", state);
+    auth.searchParams.set("nonce", nonce);
+    auth.searchParams.set("code_challenge", challenge);
+    auth.searchParams.set("code_challenge_method", "S256");
+    auth.searchParams.set("prompt", "select_account");
+    // No refresh token: one we never use is a liability we'd have to store.
+    auth.searchParams.set("access_type", "online");
+
+    audit(env, ctx, auditFrom(request, { type: "google_start" }));
+    // SameSite=Lax is required — Strict is not sent on the top-level redirect
+    // back from accounts.google.com, so the flow would break every time.
+    return redirectTo(auth.toString(), [buildCookie(env, "oauth", state, { maxAge: 600, httpOnly: true })]);
+  }
+
+  // ---- Google SSO: callback ----------------------------------------------
+  if (action === "google" && sub === "callback" && method === "GET") {
+    if (url.searchParams.get("error")) return loginRedirect(env, request, "cancelled");
+
+    const state = url.searchParams.get("state") || "";
+    const code = url.searchParams.get("code") || "";
+    const cookieState = parseCookies(request.headers.get("Cookie"))[cookieName(env, "oauth")] || "";
+    const clearOauth = [clearCookie(env, "oauth")];
+
+    // The state cookie binds the callback to the browser that started the
+    // flow — this is the anti-login-CSRF control.
+    if (!state || !cookieState || !timingEqualStr(state, cookieState)) {
+      audit(env, ctx, auditFrom(request, { type: "google_state_mismatch", outcome: "deny" }));
+      return redirectTo(`${authOrigin(env, request)}/login.html?e=state`, clearOauth);
+    }
+
+    const tx = await env.CONVENTION_DB.prepare("SELECT * FROM oauth_tx WHERE state = ?").bind(state).first();
+    await env.CONVENTION_DB.prepare("DELETE FROM oauth_tx WHERE state = ?").bind(state).run();
+    if (!tx || Number(tx.expires_at) < Date.now()) {
+      return redirectTo(`${authOrigin(env, request)}/login.html?e=expired`, clearOauth);
+    }
+
+    const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        code,
+        client_id: env.GOOGLE_CLIENT_ID,
+        client_secret: env.GOOGLE_CLIENT_SECRET,
+        redirect_uri: authOrigin(env, request) + "/api/auth/google/callback",
+        grant_type: "authorization_code",
+        code_verifier: tx.verifier,
+      }),
+    });
+    const tokens = await tokenRes.json().catch(() => ({}));
+    if (!tokenRes.ok || !tokens.id_token) {
+      audit(env, ctx, auditFrom(request, { type: "google_token_fail", outcome: "error", detail: "http " + tokenRes.status }));
+      return redirectTo(`${authOrigin(env, request)}/login.html?e=google`, clearOauth);
+    }
+
+    // The ID token came straight from Google's token endpoint over a TLS
+    // channel we authenticated with client_id + client_secret, so per OIDC
+    // Core 3.1.3.7 the signature does not need separate verification. Claims
+    // still do.
+    let claims;
+    try {
+      const payload = String(tokens.id_token).split(".")[1];
+      claims = JSON.parse(new TextDecoder().decode(b64urlDecodeBytes(payload)));
+    } catch {
+      return redirectTo(`${authOrigin(env, request)}/login.html?e=google`, clearOauth);
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+    const issuerOk = claims.iss === "https://accounts.google.com" || claims.iss === "accounts.google.com";
+    if (
+      !issuerOk ||
+      claims.aud !== env.GOOGLE_CLIENT_ID ||
+      Number(claims.exp) <= now ||
+      Number(claims.iat) > now + 300 ||
+      claims.nonce !== tx.nonce ||
+      claims.email_verified !== true // unverified email is an impersonation vector
+    ) {
+      audit(env, ctx, auditFrom(request, { type: "google_claim_reject", outcome: "deny" }));
+      return redirectTo(`${authOrigin(env, request)}/login.html?e=google`, clearOauth);
+    }
+
+    if (env.GOOGLE_HD && claims.hd !== env.GOOGLE_HD) {
+      return redirectTo(`${authOrigin(env, request)}/login.html?e=not_staff`, clearOauth);
+    }
+
+    const email = normalizeEmail(claims.email);
+    const sub_ = String(claims.sub);
+
+    // Match on google_sub first — it is the only stable identifier. A Workspace
+    // admin can reassign an email address to a different human; sub never
+    // changes and never transfers.
+    let staff = await env.CONVENTION_DB.prepare("SELECT * FROM staff WHERE google_sub = ?").bind(sub_).first();
+
+    if (!staff) {
+      staff = await staffByEmail(env, email);
+      if (!staff) staff = await maybeBootstrapOwner(env, ctx, email, request);
+
+      if (staff && staff.google_sub && staff.google_sub !== sub_) {
+        // Someone else's Google account claims this staff email. Never rebind.
+        audit(env, ctx, auditFrom(request, { type: "google_sub_conflict", staffId: staff.id, email, outcome: "deny" }));
+        return redirectTo(`${authOrigin(env, request)}/login.html?e=conflict`, clearOauth);
+      }
+      if (staff) {
+        await env.CONVENTION_DB.prepare(
+          "UPDATE staff SET google_sub = ?, name = CASE WHEN name = '' THEN ? ELSE name END, updated_at = ? WHERE id = ? AND google_sub IS NULL"
+        )
+          .bind(sub_, String(claims.name || ""), Date.now(), staff.id)
+          .run();
+        staff = await staffById(env, staff.id);
+      }
+    }
+
+    if (!staff) {
+      // Do NOT auto-provision. Attendee PII sits behind the viewer role, and
+      // anyone with a Gmail address is not staff.
+      audit(env, ctx, auditFrom(request, { type: "google_unknown", email, outcome: "deny" }));
+      return redirectTo(`${authOrigin(env, request)}/login.html?e=not_staff`, clearOauth);
+    }
+    if (staff.status === "disabled") {
+      return redirectTo(`${authOrigin(env, request)}/login.html?e=disabled`, clearOauth);
+    }
+    if (staff.status === "invited") {
+      await env.CONVENTION_DB.prepare("UPDATE staff SET status = 'active', updated_at = ? WHERE id = ?")
+        .bind(Date.now(), staff.id)
+        .run();
+      staff = await staffById(env, staff.id);
+    }
+
+    await clearLoginFailures(env, staff.id);
+    const created = await createSession(env, staff, "google", request);
+    audit(env, ctx, auditFrom(request, { type: "google_ok", staffId: staff.id, email: staff.email }));
+    return redirectTo(authOrigin(env, request) + safeNext(tx.next), [
+      ...clearOauth,
+      ...sessionCookieHeaders(env, created),
+    ]);
+  }
+
+  // ---- Invite acceptance (the token is the credential) -------------------
+  if (action === "invite" && sub === "accept") {
+    const token = method === "GET" ? url.searchParams.get("token") || "" : String(body.token || "");
+    const tokenHash = await sha256Hex(token);
+    const row = await env.CONVENTION_DB.prepare("SELECT * FROM staff_invite WHERE token_hash = ?")
+      .bind(tokenHash)
+      .first();
+    const dead = !row || row.used_at || Number(row.expires_at) < Date.now();
+
+    if (method === "GET") {
+      if (dead) {
+        return authShellPage(
+          "Invitation expired",
+          `<h2 style="margin-top:0">This invitation has expired</h2>
+           <p class="muted">Invitations last 72 hours. Ask an organiser to send a new one.</p>
+           <a class="btn primary" href="/login.html">Go to sign in</a>`,
+          410
+        );
+      }
+      return authShellPage(
+        "Accept invitation",
+        `<h2 style="margin-top:0">Join the Convention team</h2>
+         <p class="muted">You've been invited as <b>${esc(row.email)}</b> with <b>${esc(row.role)}</b> access.</p>
+         <form method="POST" action="/api/auth/invite/accept">
+           <input type="hidden" name="token" value="${esc(token)}">
+           <button class="btn primary" type="submit" style="width:100%">Accept and sign in</button>
+         </form>
+         <p class="muted" style="font-size:13px;margin-bottom:0">You can set a password afterwards, or keep using Google and sign-in links.</p>`
+      );
+    }
+
+    if (method === "POST") {
+      const h = await sha256Hex(String(body.token || ""));
+      const inv = await env.CONVENTION_DB.prepare("SELECT * FROM staff_invite WHERE token_hash = ?").bind(h).first();
+      if (!inv || inv.used_at || Number(inv.expires_at) < Date.now()) {
+        return loginRedirect(env, request, "expired");
+      }
+      // Invites GRANT PRIVILEGE, so single-use must be airtight: exactly one
+      // caller can flip used_at, and changes tells us whether it was us.
+      const claim = await env.CONVENTION_DB.prepare(
+        "UPDATE staff_invite SET used_at = ? WHERE token_hash = ? AND used_at IS NULL"
+      )
+        .bind(Date.now(), h)
+        .run();
+      if (!claim.meta || claim.meta.changes !== 1) return loginRedirect(env, request, "expired");
+
+      let staff = await staffByEmail(env, inv.email);
+      if (!staff) staff = await createStaff(env, { email: inv.email, name: "", role: inv.role, status: "active" });
+      else {
+        await env.CONVENTION_DB.prepare("UPDATE staff SET status = 'active', updated_at = ? WHERE id = ?")
+          .bind(Date.now(), staff.id)
+          .run();
+        staff = await staffById(env, staff.id);
+      }
+
+      const created = await createSession(env, staff, "invite", request);
+      audit(env, ctx, auditFrom(request, { type: "invite_accepted", staffId: staff.id, email: staff.email }));
+      return redirectTo(authOrigin(env, request) + "/index.html", sessionCookieHeaders(env, created));
+    }
+  }
+
+  // ---- Break-glass account recovery (DEV_KEY) ----------------------------
+  // The recovery path for a locked-out owner, a deleted last owner, or a Google
+  // outage. A break-glass that is used SILENTLY is a backdoor; this one is
+  // capped, always audited, and always emails the ops address.
+  if (action === "bootstrap" && method === "POST") {
+    if (!checkMachineToken(request, env, body)) return json({ error: "Forbidden" }, 403);
+
+    const rl = await rateLimit(env, "bootstrap:day", istDate(0), 3, 24 * 60 * 60);
+    if (!rl.allowed) {
+      audit(env, ctx, auditFrom(request, { type: "devkey_bootstrap", outcome: "deny", detail: "daily cap" }));
+      return tooManyRequests(rl.retryAfter);
+    }
+
+    const email = normalizeEmail(body.email);
+    const role = ROLES.includes(body.role) ? body.role : "owner";
+    if (!isValidEmail(email)) return json({ error: "A valid email is required." }, 400);
+
+    let staff = await staffByEmail(env, email);
+    if (staff) {
+      await env.CONVENTION_DB.prepare(
+        "UPDATE staff SET role = ?, status = 'active', failed_count = 0, locked_until = 0, updated_at = ? WHERE id = ?"
+      )
+        .bind(role, Date.now(), staff.id)
+        .run();
+    } else {
+      staff = await createStaff(env, { email, name: "", role, status: "active" });
+    }
+
+    // Also mint a one-time sign-in link. Without this, break-glass recovery is
+    // useless in exactly the situation it exists for — you'd be an owner who
+    // still can't get in because email or Google is the thing that's broken.
+    // This grants nothing extra: the caller already proved they hold DEV_KEY,
+    // which can make anyone an owner anyway.
+    const token = randomToken(32);
+    const now = Date.now();
+    await env.CONVENTION_DB.prepare(
+      `INSERT INTO magic_token (token_hash, email, purpose, next, csrf, bind_id, created_at, expires_at)
+       VALUES (?, ?, 'login', '/index.html', ?, '', ?, ?)`
+    )
+      .bind(await sha256Hex(token), staff.email, randomToken(16), now, now + MAGIC_TTL_MS)
+      .run();
+    const loginLink = `${authOrigin(env, request)}/api/auth/magic/consume?token=${encodeURIComponent(token)}`;
+
+    audit(env, ctx, auditFrom(request, { type: "devkey_bootstrap", staffId: staff.id, email, detail: "role " + role }));
+    if (ctx && ctx.waitUntil) {
+      ctx.waitUntil(
+        sendOpsEmail(
+          env,
+          "Break-glass account recovery used",
+          `<p>The DEV_KEY break-glass endpoint granted <b>${esc(role)}</b> to <b>${esc(email)}</b>.</p>
+           <p>IP: ${esc(clientIp(request))}</p>
+           <p>If this wasn't you, rotate DEV_KEY immediately.</p>`
+        )
+      );
+    }
+    return json({ ok: true, email, role, loginLink, expiresInMinutes: Math.round(MAGIC_TTL_MS / 60000) });
+  }
+
+  // ---- Everything below requires a session -------------------------------
+  const s = await readSession(request, env);
+  if (!s) return json({ error: "Sign in to continue." }, 401);
+
+  // Mutations additionally need the session-bound CSRF token.
+  if (method !== "GET" && method !== "HEAD" && !checkCsrf(request, s.session)) {
+    audit(env, ctx, auditFrom(request, { type: "csrf_reject", staffId: s.staff.id, outcome: "deny" }));
+    return json({ error: "Request blocked: missing or invalid CSRF token." }, 403);
+  }
+
+  // ---- Set / change own password -----------------------------------------
+  if (action === "password" && sub === "set" && method === "POST") {
+    const rl = await rateLimit(env, "pwset:staff", s.staff.id, 5, 60 * 60);
+    if (!rl.allowed) return tooManyRequests(rl.retryAfter);
+
+    const password = String(body.password || "");
+
+    // Changing an existing password requires the current one, so a stolen
+    // session cannot silently lock the real owner out.
+    if (s.staff.password_hash) {
+      const cur = await verifyPassword(env, String(body.currentPassword || ""), s.staff.password_hash);
+      if (!cur.ok) return json({ error: "Your current password didn't match." }, 401);
+    }
+
+    const policy = passwordPolicyError(password, s.staff.email);
+    if (policy) return json({ error: policy }, 400);
+    if (await isPwnedPassword(password)) {
+      return json({ error: "That password has appeared in a public data breach. Please choose another." }, 400);
+    }
+
+    let hash;
+    try {
+      hash = await hashPassword(env, password);
+    } catch (e) {
+      return json({ error: "Password sign-in is not configured on this server." }, 503);
+    }
+    await env.CONVENTION_DB.prepare(
+      "UPDATE staff SET password_hash = ?, pwd_changed_at = ?, updated_at = ? WHERE id = ?"
+    )
+      .bind(hash, Date.now(), Date.now(), s.staff.id)
+      .run();
+
+    // Every other session for this user dies, and this one rotates.
+    await revokeAllSessions(env, s.staff.id, s.session.id);
+    const created = await rotateSession(env, s.session.id, s.staff, s.session.method, request);
+    audit(env, ctx, auditFrom(request, {
+      type: s.staff.password_hash ? "password_changed" : "password_set",
+      staffId: s.staff.id,
+      email: s.staff.email,
+    }));
+    return jsonWithCookies({ ok: true }, sessionCookieHeaders(env, created));
+  }
+
+  // ---- Step up to sudo ---------------------------------------------------
+  // Owner-level operations require re-authentication within the last 15
+  // minutes. This is what buys the security a short idle timeout would,
+  // without logging staff out mid-shift.
+  if (action === "sudo" && method === "POST") {
+    const rl = await rateLimit(env, "sudo:staff", s.staff.id, 5, 15 * 60);
+    if (!rl.allowed) return tooManyRequests(rl.retryAfter);
+
+    if (!s.staff.password_hash) {
+      return json({ error: "Set a password first — it's required to confirm sensitive changes." }, 400);
+    }
+    const ok = await verifyPassword(env, String(body.password || ""), s.staff.password_hash);
+    if (!ok.ok) {
+      audit(env, ctx, auditFrom(request, { type: "sudo_fail", staffId: s.staff.id, outcome: "deny" }));
+      return json({ error: "That password didn't match." }, 401);
+    }
+    await env.CONVENTION_DB.prepare("UPDATE session SET sudo_until = ? WHERE id = ?")
+      .bind(Date.now() + SUDO_MS, s.session.id)
+      .run();
+    audit(env, ctx, auditFrom(request, { type: "sudo_granted", staffId: s.staff.id, email: s.staff.email }));
+    return json({ ok: true, sudoUntil: Date.now() + SUDO_MS });
+  }
+
+  // ---- Session listing / revocation --------------------------------------
+  if (action === "sessions" && method === "GET") {
+    const { results } = await env.CONVENTION_DB.prepare(
+      `SELECT id, method, created_at, last_seen_at, ip, ua FROM session
+       WHERE staff_id = ? AND revoked_at IS NULL AND absolute_exp > ?
+       ORDER BY last_seen_at DESC`
+    )
+      .bind(s.staff.id, Date.now())
+      .all();
+    return json({
+      sessions: (results || []).map((r) => ({
+        id: r.id, // already a hash — safe to expose
+        method: r.method,
+        createdAt: r.created_at,
+        lastSeenAt: r.last_seen_at,
+        ip: r.ip,
+        ua: r.ua,
+        current: r.id === s.session.id,
+      })),
+    });
+  }
+
+  if (action === "sessions" && method === "DELETE") {
+    if (sub) {
+      const row = await env.CONVENTION_DB.prepare("SELECT staff_id FROM session WHERE id = ?").bind(sub).first();
+      if (!row) return json({ error: "Not found." }, 404);
+      const isOwn = row.staff_id === s.staff.id;
+      if (!isOwn && !(s.staff.role === "owner" && hasSudo(s.session))) {
+        return json({ error: "Confirm your password to revoke someone else's session." }, 403);
+      }
+      await revokeSession(env, sub);
+      audit(env, ctx, auditFrom(request, { type: "session_revoked", staffId: s.staff.id, detail: sub.slice(0, 16) }));
+      return json({ ok: true });
+    }
+    await revokeAllSessions(env, s.staff.id, s.session.id);
+    audit(env, ctx, auditFrom(request, { type: "session_revoked", staffId: s.staff.id, detail: "all others" }));
+    return json({ ok: true });
+  }
+
+  // ---- Staff management (owner) ------------------------------------------
+  if (action === "staff") {
+    if (s.staff.role !== "owner") return json({ error: "Owner access required." }, 403);
+
+    if (method === "GET" && !sub) {
+      const { results } = await env.CONVENTION_DB.prepare(
+        "SELECT id, email, name, role, status, created_at, last_login_at, password_hash, google_sub FROM staff ORDER BY created_at"
+      ).all();
+      return json({
+        staff: (results || []).map((r) => ({
+          id: r.id, email: r.email, name: r.name, role: r.role, status: r.status,
+          createdAt: r.created_at, lastLoginAt: r.last_login_at,
+          hasPassword: Boolean(r.password_hash), hasGoogle: Boolean(r.google_sub),
+          self: r.id === s.staff.id,
+        })),
+      });
+    }
+
+    // Everything that grants or removes access needs a fresh password check.
+    if (method === "POST" && !hasSudo(s.session)) {
+      return json({ error: "Confirm your password first.", needsSudo: true }, 403);
+    }
+
+    if (method === "POST" && sub === "invite") {
+      const email = normalizeEmail(body.email);
+      const role = ROLES.includes(body.role) ? body.role : "viewer";
+      if (!isValidEmail(email)) return json({ error: "That doesn't look like an email address." }, 400);
+
+      let target = await staffByEmail(env, email);
+      if (!target) target = await createStaff(env, { email, name: "", role, status: "invited" });
+
+      const token = randomToken(32);
+      const now = Date.now();
+      await env.CONVENTION_DB.prepare(
+        `INSERT INTO staff_invite (token_hash, email, role, invited_by, created_at, expires_at)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      )
+        .bind(await sha256Hex(token), email, role, s.staff.id, now, now + INVITE_TTL_MS)
+        .run();
+
+      const link = `${authOrigin(env, request)}/api/auth/invite/accept?token=${encodeURIComponent(token)}`;
+      const html = `
+        <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px">
+          <h2 style="margin:0 0 12px">You've been added to the Bangalore Convention team</h2>
+          <p style="color:#555;line-height:1.6">You have been given <b>${esc(role)}</b> access. Click below to activate your account — the link expires in 72 hours.</p>
+          <p style="margin:26px 0"><a href="${link}" style="background:#4f46e5;color:#fff;padding:13px 26px;border-radius:10px;text-decoration:none;font-weight:600;display:inline-block">Accept invitation</a></p>
+        </div>`;
+      if (env.AUTH_LOG_LINKS === "1" || !env.MAILCHANNELS_API_KEY) {
+        console.log("[auth] invite link for " + email + ": " + link);
+      }
+      if (ctx && ctx.waitUntil) {
+        ctx.waitUntil(sendMail(env, email, "You've been invited to the Convention team", html));
+      }
+      audit(env, ctx, auditFrom(request, { type: "staff_invited", staffId: s.staff.id, email, detail: "role " + role }));
+      return json({ ok: true, email, role });
+    }
+
+    if (method === "POST" && sub && parts[4] === "role") {
+      const role = ROLES.includes(body.role) ? body.role : null;
+      if (!role) return json({ error: "Unknown role." }, 400);
+      const target = await staffById(env, sub);
+      if (!target) return json({ error: "Not found." }, 404);
+      if (target.id === s.staff.id && role !== "owner") {
+        return json({ error: "You can't remove your own owner access — ask another owner." }, 400);
+      }
+      await env.CONVENTION_DB.prepare("UPDATE staff SET role = ?, updated_at = ? WHERE id = ?")
+        .bind(role, Date.now(), target.id)
+        .run();
+      // The target's live sessions carry the OLD role, so they must all go.
+      await revokeAllSessions(env, target.id);
+      audit(env, ctx, auditFrom(request, {
+        type: "role_changed", staffId: s.staff.id, email: target.email,
+        detail: `${target.role} -> ${role}`,
+      }));
+      if (ctx && ctx.waitUntil) {
+        ctx.waitUntil(sendOpsEmail(env, "Role changed: " + target.email,
+          `<p><b>${esc(target.email)}</b> changed from <b>${esc(target.role)}</b> to <b>${esc(role)}</b> by ${esc(s.staff.email)}.</p>`));
+      }
+      return json({ ok: true });
+    }
+
+    if (method === "POST" && sub && parts[4] === "disable") {
+      const target = await staffById(env, sub);
+      if (!target) return json({ error: "Not found." }, 404);
+      if (target.id === s.staff.id) return json({ error: "You can't disable your own account." }, 400);
+      await env.CONVENTION_DB.prepare("UPDATE staff SET status = 'disabled', updated_at = ? WHERE id = ?")
+        .bind(Date.now(), target.id)
+        .run();
+      // A disable that leaves live sessions is not a disable.
+      await revokeAllSessions(env, target.id);
+      audit(env, ctx, auditFrom(request, { type: "staff_disabled", staffId: s.staff.id, email: target.email }));
+      return json({ ok: true });
+    }
+
+    if (method === "POST" && sub && parts[4] === "enable") {
+      const target = await staffById(env, sub);
+      if (!target) return json({ error: "Not found." }, 404);
+      await env.CONVENTION_DB.prepare("UPDATE staff SET status = 'active', updated_at = ? WHERE id = ?")
+        .bind(Date.now(), target.id)
+        .run();
+      audit(env, ctx, auditFrom(request, { type: "staff_enabled", staffId: s.staff.id, email: target.email }));
+      return json({ ok: true });
+    }
+
+    return json({ error: "Unsupported staff action." }, 405);
+  }
+
+  // ---- Audit log (owner) --------------------------------------------------
+  if (action === "events" && method === "GET") {
+    if (s.staff.role !== "owner") return json({ error: "Owner access required." }, 403);
+    const limit = Math.min(Number(url.searchParams.get("limit")) || 100, 500);
+    const type = url.searchParams.get("type");
+    const q = type
+      ? env.CONVENTION_DB.prepare("SELECT * FROM auth_event WHERE type = ? ORDER BY at DESC LIMIT ?").bind(type, limit)
+      : env.CONVENTION_DB.prepare("SELECT * FROM auth_event ORDER BY at DESC LIMIT ?").bind(limit);
+    const { results } = await q.all();
+    // Reading the audit log is itself audited.
+    audit(env, ctx, auditFrom(request, { type: "audit_read", staffId: s.staff.id }));
+    return json({ events: results || [] });
+  }
+
+  return json({ error: "Unknown auth route." }, 404);
+}
+
+// ===========================================================================
+// API AUTHORIZATION  —  default deny
+// ===========================================================================
+//
+// Each entry is [method, resource, minimum role, optional sub-path matcher].
+// "*" matches any method. The sub matcher receives the split path parts and
+// returns true when the rule applies.
+//
+// This table is the security boundary. The nav in common.js mirrors it for
+// cosmetics only.
+const API_POLICY = [
+  // Attendee PII and money — every one of these was completely open before.
+  ["GET", "registrations", "viewer"],
+  ["PATCH", "registrations", "admin"],
+  ["DELETE", "registrations", "admin"],
+  ["GET", "expenses", "viewer"],
+  ["POST", "expenses", "admin"],
+  ["DELETE", "expenses", "admin"],
+  ["GET", "dashboard", "viewer"],
+
+  // Reflections: reading is public (below), writing and the paid broadcast
+  // are not.
+  ["POST", "reflections", "admin"],
+  ["DELETE", "reflections", "admin"],
+
+  // The knowledge base is injected into every chat system prompt, so both
+  // reading and writing it are privileged.
+  ["GET", "knowledge", "viewer"],
+  ["POST", "knowledge", "owner"],
+  ["DELETE", "knowledge", "owner"],
+
+  // Ops reports expose Deepgram balances, Cloudflare analytics and full
+  // financials, and can send email.
+  ["*", "report", "admin"],
+  ["*", "whatsapp", "admin"], // /api/whatsapp/status; the webhook is routed earlier
+];
+
+// Routes that must stay reachable without a session, with the reason.
+function isPublicApi(method, resource, parts) {
+  // Public site data.
+  if (resource === "pricing" && method === "GET") return true;
+
+  // Anyone can register — that is the point of the site.
+  if (resource === "registrations" && method === "POST" && !parts[2]) return true;
+
+  // The reflections list is the public WhatsApp-channel landing content, and
+  // Meta itself fetches the card image when sending the daily template, so
+  // that URL can never require a session.
+  if (resource === "reflections" && method === "GET") return true;
+  if (resource === "reflections" && method === "POST" && parts[3] === "image") return false;
+
+  // Payment: create-order now prices server-side from the stored registration,
+  // and verify is authenticated by Razorpay's HMAC signature.
+  if (resource === "payment" && method === "POST") return true;
+
+  // Anonymous visitor features. Rate limits, not sessions, are the control.
+  if (resource === "chat" && method === "POST") return true;
+  if (resource === "tts" && method === "POST") return true;
+  if (resource === "contact" && method === "POST") return true;
+
+  return false;
+}
+
+function policyRoleFor(method, resource, parts) {
+  for (const [m, res, role, matcher] of API_POLICY) {
+    if (res !== resource) continue;
+    if (m !== "*" && m !== method) continue;
+    if (matcher && !matcher(parts)) continue;
+    return role;
+  }
+  return null;
+}
+
+async function authorizeApi(request, env, ctx, { method, resource, parts, body, url }) {
+  // CSRF layer 1: every mutation must come from our own origin. Browsers
+  // always send Origin on non-GET fetches, so rejecting when both Origin and
+  // Referer are missing is the correct fail-closed default.
+  if (!checkOrigin(request, env)) {
+    audit(env, ctx, auditFrom(request, { type: "origin_reject", outcome: "deny", detail: method + " /api/" + resource }));
+    return { response: json({ error: "Request blocked: bad origin." }, 403) };
+  }
+
+  // CSRF layer 3: HTML forms cannot send application/json without a CORS
+  // preflight, which is never granted.
+  if (!checkJsonContentType(request)) {
+    return { response: json({ error: "Expected content-type: application/json." }, 415) };
+  }
+
+  const needed = policyRoleFor(method, resource, parts);
+
+  if (!needed) {
+    if (isPublicApi(method, resource, parts)) return { response: null, session: await readSession(request, env) };
+    // Unknown or unlisted route: deny rather than fall through to a 404, so a
+    // new endpoint cannot ship open by accident.
+    return { response: json({ error: "Not found." }, 404) };
+  }
+
+  // The ops report endpoints stay reachable from curl/monitoring with the
+  // machine token. They are the only place DEV_KEY still authorises anything
+  // besides break-glass recovery, and they expose no attendee PII.
+  if (resource === "report" && checkMachineToken(request, env, body)) {
+    audit(env, ctx, auditFrom(request, { type: "devkey_used", detail: method + " /api/" + resource }));
+    return { response: null, session: null };
+  }
+
+  const s = await readSession(request, env);
+  if (!s) {
+    return { response: json({ error: "Sign in to continue." }, 401) };
+  }
+
+  // CSRF layer 2: the token is compared against the session row in the
+  // database, not against the cookie, so it cannot be forged by anyone who can
+  // merely set cookies.
+  if (method !== "GET" && method !== "HEAD" && !checkCsrf(request, s.session)) {
+    audit(env, ctx, auditFrom(request, { type: "csrf_reject", staffId: s.staff.id, outcome: "deny" }));
+    return { response: json({ error: "Request blocked: missing or invalid CSRF token." }, 403) };
+  }
+
+  if (!roleAtLeast(s.staff.role, needed)) {
+    audit(env, ctx, auditFrom(request, {
+      type: "authz_deny",
+      staffId: s.staff.id,
+      email: s.staff.email,
+      outcome: "deny",
+      detail: `${method} /api/${resource} needs ${needed}, has ${s.staff.role}`,
+    }));
+    return { response: json({ error: `This action needs ${needed} access.` }, 403) };
+  }
+
+  return { response: null, session: s };
+}
+
+// ---- Spend / abuse limits for the expensive public endpoints --------------
+//
+// Signed-in staff get a much higher ceiling than anonymous visitors, since the
+// realistic threat is an unauthenticated loop draining paid credit.
+async function applySpendLimits(env, ctx, request, { method, resource, parts, session }) {
+  if (method !== "POST") return null;
+  const ip = clientIp(request) || "unknown";
+  const staff = Boolean(session);
+  const day = istDate(0);
+
+  const deny = async (label, r) => {
+    audit(env, ctx, auditFrom(request, { type: "rate_limited", outcome: "deny", detail: label }));
+    return tooManyRequests(r.retryAfter);
+  };
+
+  if (resource === "tts") {
+    // Deepgram is billed per character and the digest only warns AFTER the
+    // credit has already been spent.
+    const perIp = await rateLimit(env, "tts:ip", ip, staff ? 120 : 30, 60 * 60);
+    if (!perIp.allowed) return deny("tts:ip", perIp);
+    const global = await rateLimit(env, "tts:day", day, 800, 24 * 60 * 60);
+    if (!global.allowed) return deny("tts:day", global);
+  }
+
+  if (resource === "chat") {
+    const perIp = await rateLimit(env, "chat:ip", ip, staff ? 300 : 60, 60 * 60);
+    if (!perIp.allowed) return deny("chat:ip", perIp);
+    const global = await rateLimit(env, "chat:day", day, 3000, 24 * 60 * 60);
+    if (!global.allowed) return deny("chat:day", global);
+  }
+
+  if (resource === "contact") {
+    // An unauthenticated mail relay sending as noreply@biaac.com — the tightest
+    // limit on the site, because abuse here burns the sending domain.
+    const perIp = await rateLimit(env, "contact:ip", ip, 3, 24 * 60 * 60);
+    if (!perIp.allowed) return deny("contact:ip", perIp);
+    const global = await rateLimit(env, "contact:day", day, 50, 24 * 60 * 60);
+    if (!global.allowed) return deny("contact:day", global);
+  }
+
+  // Each successful registration can fire a PAID WhatsApp confirmation.
+  if (resource === "registrations" && !parts[2]) {
+    const perIp = await rateLimit(env, "reg:ip", ip, 5, 60 * 60);
+    if (!perIp.allowed) return deny("reg:ip", perIp);
+  }
+
+  if (resource === "payment" && parts[2] === "create-order") {
+    const perIp = await rateLimit(env, "order:ip", ip, 10, 60 * 60);
+    if (!perIp.allowed) return deny("order:ip", perIp);
+  }
+
+  return null;
+}
+
+// ===========================================================================
+// SECURITY HEADERS
+// ===========================================================================
+//
+// The site previously sent none of these.
+//
+// script-src still needs 'unsafe-inline' because every page carries a large
+// inline <script> block. That weakens script-src specifically — but the other
+// directives are not weakened by it and are worth having on day one:
+//   base-uri 'none'      blocks <base> hijacking of every relative script URL
+//   object-src 'none'    kills a whole class of plugin-based injection
+//   form-action 'self'   stops a injected form posting credentials off-site
+//   frame-ancestors      stops clickjacking of the admin screens
+const CSP = [
+  "default-src 'self'",
+  // checkout.razorpay.com is injected by common.js at payment time.
+  "script-src 'self' 'unsafe-inline' https://checkout.razorpay.com",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' https://fonts.gstatic.com data:",
+  "img-src 'self' data: https:",
+  // data: is required — greeting audio is played from a base64 data URL.
+  "media-src 'self' data: blob:",
+  "connect-src 'self' https://lumberjack.razorpay.com",
+  "frame-src https://api.razorpay.com https://checkout.razorpay.com",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+].join("; ");
+
+function withSecurityHeaders(res, env, url) {
+  const out = new Response(res.body, res);
+  const h = out.headers;
+
+  h.set("x-content-type-options", "nosniff");
+  h.set("referrer-policy", "strict-origin-when-cross-origin");
+  h.set("x-frame-options", "DENY");
+  h.set("cross-origin-opener-policy", "same-origin");
+  // microphone=(self), NOT () — the chat widget uses getUserMedia for voice
+  // mode, and a blanket deny would silently break it.
+  h.set(
+    "permissions-policy",
+    "geolocation=(), camera=(), payment=(), browsing-topics=(), microphone=(self)"
+  );
+
+  // HSTS only over real HTTPS; sending it from http://localhost would pin the
+  // dev host to https and make local development unreachable.
+  if (url.protocol === "https:") {
+    h.set("strict-transport-security", "max-age=31536000; includeSubDomains");
+  }
+
+  // CSP on documents only. Applying it to JSON/images buys nothing and risks
+  // breaking the media the chat widget plays.
+  const type = h.get("content-type") || "";
+  if (type.includes("text/html")) h.set("content-security-policy", CSP);
+
+  return out;
+}
+
+// Small local helper — b64url -> bytes, for decoding the Google ID token body.
+function b64urlDecodeBytes(str) {
+  const s = String(str).replace(/-/g, "+").replace(/_/g, "/");
+  const bin = atob(s + "=".repeat((4 - (s.length % 4)) % 4));
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
 }
 
 // Compact live snapshot of registrations + expenses for the agent to reason over.
@@ -419,15 +1941,19 @@ async function getWorkersAiNeurons(env) {
   return { ok: false, note: "AI analytics not available on this account/token" };
 }
 
-async function sendOpsEmail(env, subject, html) {
-  if (!env.DASHBOARD_EMAIL) return { ok: false, note: "DASHBOARD_EMAIL not set" };
+// General mail sender. Magic links need to reach an arbitrary staff address,
+// so the recipient is a parameter — but see handleAuth: that address always
+// comes from a database row, never from a request body, which is what stops
+// this becoming the open relay that POST /api/contact currently is.
+async function sendMail(env, to, subject, html, opts = {}) {
+  if (!to) return { ok: false, note: "no recipient" };
   try {
     const res = await fetch("https://api.mailchannels.net/tx/v1/send", {
       method: "POST",
       headers: { "content-type": "application/json", "x-api-key": env.MAILCHANNELS_API_KEY || "" },
       body: JSON.stringify({
-        personalizations: [{ to: [{ email: env.DASHBOARD_EMAIL, name: "Convention Ops" }] }],
-        from: { email: "noreply@biaac.com", name: "Convention Ops Dashboard" },
+        personalizations: [{ to: [{ email: to, name: opts.toName || "" }] }],
+        from: { email: "noreply@biaac.com", name: opts.fromName || "Bangalore Convention" },
         subject,
         content: [{ type: "text/html", value: html }],
       }),
@@ -436,6 +1962,14 @@ async function sendOpsEmail(env, subject, html) {
   } catch (e) {
     return { ok: false, note: e && e.message ? e.message : String(e) };
   }
+}
+
+async function sendOpsEmail(env, subject, html) {
+  if (!env.DASHBOARD_EMAIL) return { ok: false, note: "DASHBOARD_EMAIL not set" };
+  return sendMail(env, env.DASHBOARD_EMAIL, subject, html, {
+    toName: "Convention Ops",
+    fromName: "Convention Ops Dashboard",
+  });
 }
 
 // Everything the dashboard shows, gathered in one place.
@@ -1181,10 +2715,33 @@ async function handleApi(request, env, ctx) {
   const resource = parts[1];
   const id = parts[2];
 
+  // Auth routes are dispatched FIRST, before the JSON body parse below: the
+  // OAuth callback and the magic-link interstitial are GETs, and the two
+  // confirm routes accept form encoding from a real <form> submit.
+  if (resource === "auth") {
+    return handleAuth(request, env, ctx, parts, url);
+  }
+
   let body = {};
   if (method === "POST" || method === "PATCH") {
     body = await request.json().catch(() => ({}));
   }
+
+  // ---- Authorization gate ------------------------------------------------
+  // Default DENY. Every route below is either in PUBLIC_API or requires the
+  // role named in API_POLICY. Previously an unmatched path fell through to a
+  // 404, which meant every new endpoint shipped unauthenticated by default —
+  // inverting that is the single most durable change in this file.
+  const gate = await authorizeApi(request, env, ctx, { method, resource, parts, body, url });
+  if (gate.response) return gate.response;
+  const session = gate.session;
+
+  // ---- Spend and abuse limits -------------------------------------------
+  // These guard things that cost real money or real quota: Deepgram credit,
+  // Workers AI neurons, MailChannels reputation, and paid WhatsApp
+  // confirmations. None of them had any throttle before.
+  const rl = await applySpendLimits(env, ctx, request, { method, resource, parts, session });
+  if (rl) return rl;
 
   // ---- Pricing ----
   if (resource === "pricing" && method === "GET") return json(PRICING);
@@ -1214,7 +2771,12 @@ async function handleApi(request, env, ctx) {
       }
 
       if (method === "POST") {
-        if (!isDeveloper(request, env, body)) return json({ error: "Forbidden" }, 403);
+        // Bound the payload BEFORE decoding: atob() on an unbounded string
+        // allocates the whole thing and would throw an opaque OOM rather than
+        // a useful error. 1.4M base64 chars is ~1MB of PNG, far above a card.
+        if (String(body.dataUrl || "").length > 1_400_000) {
+          return json({ error: "That image is too large (1 MB max)." }, 413);
+        }
         const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(body.dataUrl || "");
         if (!m) return json({ error: "Expected a data:image/png;base64 payload" }, 400);
 
@@ -1245,8 +2807,12 @@ async function handleApi(request, env, ctx) {
       return json({ channelUrl: env.WHATSAPP_CHANNEL_URL || "", items });
     }
 
+    if (method === "GET" && id) {
+      const item = list.find((r) => r.id === id);
+      return item ? json(item) : json({ error: "Not found" }, 404);
+    }
+
     if (method === "POST" && !id) {
-      if (!isDeveloper(request, env, body)) return json({ error: "Forbidden" }, 403);
       const title = (body.title || "").trim();
       const text = (body.body || "").trim();
       if (!text) return json({ error: "Reflection text is required." }, 400);
@@ -1268,12 +2834,10 @@ async function handleApi(request, env, ctx) {
     // Manual trigger, so the 7 AM broadcast can be tested without waiting for
     // 7 AM. Ignores the once-per-day marker on purpose.
     if (method === "POST" && id === "send") {
-      if (!isDeveloper(request, env, body)) return json({ error: "Forbidden" }, 403);
       return json(await runReflectionBroadcast(env));
     }
 
     if (method === "DELETE" && id) {
-      if (!isDeveloper(request, env, body)) return json({ error: "Forbidden" }, 403);
       const next = list.filter((r) => r.id !== id);
       if (next.length === list.length) return json({ error: "Not found" }, 404);
       await saveList(env, "reflections", next);
@@ -1428,20 +2992,16 @@ async function handleApi(request, env, ctx) {
     });
   }
 
-  // ---- Developer key verification ----
-  if (resource === "dev" && parts[2] === "verify" && method === "POST") {
-    return json({ ok: isDeveloper(request, env, body) });
-  }
+  // POST /api/dev/verify was DELETED. It answered {ok:true|false} for any
+  // submitted key, unauthenticated and unthrottled — an online brute-force
+  // oracle for the one secret that still had power. Staff sign in at
+  // /login.html now, and authorizeApi() gates everything below.
 
-  // ---- Ops dashboard: preview in browser / send now (developer-gated) ----
-  // GET  /api/report/preview?devKey=...  → the digest HTML, rendered live
-  // POST /api/report/send                → email the daily digest right now
-  // POST /api/report/check               → run the critical check right now
+  // ---- Ops dashboard ----
+  // Authorised by authorizeApi(): an admin session, or the DEV_KEY machine
+  // token for curl/monitoring. The old ?devKey= query parameter is gone — it
+  // put the secret in browser history, Referer headers and access logs.
   if (resource === "report") {
-    const qKey = url.searchParams.get("devKey") || "";
-    const authed =
-      isDeveloper(request, env, body) || (Boolean(env.DEV_KEY) && qKey === env.DEV_KEY);
-    if (!authed) return json({ error: "Developer key required." }, 403);
     if (parts[2] === "preview" && method === "GET") {
       const d = await collectDashboardData(env);
       return new Response(buildDigestHtml(d, findAlerts(d, env)), {
@@ -1523,86 +3083,44 @@ async function handleApi(request, env, ctx) {
     }
 
     if (method === "POST" && !id) {
-      if (!isDeveloper(request, env, body)) {
-        return json({ error: "Developer key required." }, 403);
-      }
       const title = (body.title || "").trim() || "Untitled note";
       const text = typeof body.content === "string" ? body.content.trim() : "";
       if (!text) return json({ error: "Some text content is required." }, 400);
       const rid = crypto.randomUUID();
       const now = new Date().toISOString();
+      const stored = text.slice(0, KNOWLEDGE_MAX_CHARS);
       await env.CONVENTION_DB.prepare(
         "INSERT INTO knowledge (id, title, content, created_at) VALUES (?, ?, ?, ?)"
       )
-        .bind(rid, title.slice(0, 120), text.slice(0, 20000), now)
+        .bind(rid, title.slice(0, 120), stored, now)
         .run();
-      return json({ ok: true, id: rid }, 201);
+      // Report the truncation instead of silently dropping the tail of a long
+      // paste, which used to happen with no feedback at all.
+      return json(
+        { ok: true, id: rid, truncated: stored.length < text.length, storedChars: stored.length },
+        201
+      );
     }
 
     if (method === "DELETE" && id) {
-      if (!isDeveloper(request, env, body)) {
-        return json({ error: "Developer key required." }, 403);
-      }
       await env.CONVENTION_DB.prepare("DELETE FROM knowledge WHERE id = ?").bind(id).run();
       return json({ ok: true });
     }
   }
 
-  // ---- Pages (developer-generated, stored in D1) ----
-  if (resource === "pages") {
-    if (!env.CONVENTION_DB) {
-      return json(
-        { error: "D1 database 'CONVENTION_DB' is not bound. Add it in wrangler.toml or Worker settings." },
-        500
-      );
-    }
-    await ensurePagesTable(env);
-
-    if (method === "GET" && !id) {
-      const { results } = await env.CONVENTION_DB.prepare(
-        "SELECT slug, title, created_at, updated_at FROM pages ORDER BY updated_at DESC"
-      ).all();
-      return json(results || []);
-    }
-
-    if (method === "GET" && id) {
-      const row = await env.CONVENTION_DB.prepare(
-        "SELECT slug, title, html, created_at, updated_at FROM pages WHERE slug = ?"
-      )
-        .bind(id)
-        .first();
-      if (!row) return json({ error: "Not found." }, 404);
-      return json(row);
-    }
-
-    if (method === "POST" && !id) {
-      if (!isDeveloper(request, env, body)) {
-        return json({ error: "Developer key required." }, 403);
-      }
-      const slug = slugify(body.slug || body.title);
-      const title = (body.title || "").trim() || slug;
-      const html = typeof body.html === "string" ? body.html : "";
-      if (!slug || !html.trim()) {
-        return json({ error: "A slug/title and non-empty html are required." }, 400);
-      }
-      const now = new Date().toISOString();
-      await env.CONVENTION_DB.prepare(
-        "INSERT INTO pages (slug, title, html, created_at, updated_at) VALUES (?, ?, ?, ?, ?) " +
-          "ON CONFLICT(slug) DO UPDATE SET title = excluded.title, html = excluded.html, updated_at = excluded.updated_at"
-      )
-        .bind(slug, title, html, now, now)
-        .run();
-      return json({ ok: true, slug, title, url: "/p/" + slug }, 201);
-    }
-
-    if (method === "DELETE" && id) {
-      if (!isDeveloper(request, env, body)) {
-        return json({ error: "Developer key required." }, 403);
-      }
-      await env.CONVENTION_DB.prepare("DELETE FROM pages WHERE slug = ?").bind(id).run();
-      return json({ ok: true });
-    }
-  }
+  // The /api/pages CRUD and the /p/<slug> renderer were REMOVED.
+  //
+  // They stored model-generated HTML and served it from this origin, which
+  // meant a published page ran with full same-origin privilege: it could read
+  // the signed-in staff member's cookies and call the admin API as them. The
+  // system prompt even instructed the model to fetch /api/registrations from
+  // those pages. Since page content came from chat, and chat is influenced by
+  // the knowledge base and by inbound WhatsApp messages, that was a reachable
+  // prompt-injection path to stored XSS.
+  //
+  // The D1 `pages` table is intentionally left in place so nothing is
+  // destroyed and the feature can be revived behind proper isolation (a
+  // separate origin) if it is ever wanted again.
 
   // ---- AI Chat (Cloudflare Workers AI) ----
   if (resource === "chat" && method === "POST") {
@@ -1626,10 +3144,12 @@ async function handleApi(request, env, ctx) {
 
     if (cleaned.length === 0) return json({ error: "messages required" }, 400);
 
-    // Role is claimed by the client for reading; developer powers additionally
-    // require the DEV_KEY secret (verified by isDeveloper) before any action runs.
-    const dev = isDeveloper(request, env, body);
-    const staff = dev || body.role === "admin";
+    // Privilege comes from the session cookie, never from the request body.
+    // This previously trusted `body.role === "admin"`, so anyone could send
+    // that one field and read live registration and financial figures through
+    // the chatbot without any credential at all.
+    const dev = Boolean(session && session.staff.role === "owner");
+    const staff = Boolean(session);
     // Voice mode: the user is listening, so we keep answers short and snappy so
     // the neural TTS returns quickly and there is far less to wait for.
     const voice = body.voice === true;
@@ -1650,7 +3170,7 @@ async function handleApi(request, env, ctx) {
         "== HOW YOU ACTUALLY SOUND (read these examples, this is your tone baseline) ==",
         "Q: 'What are the dates?' → YOU SAY: 'July 9th to 11th bro, three full days in Bangalore! you planning to come?'",
         "Q: 'What is included in the registration?' → YOU SAY: 'EVERYTHING — breakfast, lunch, dinner, tea breaks, all sessions. literally just show up and vibe fr'",
-        "Q: 'How much does it cost?' → YOU SAY: 'four options: ₹1500 (no stay), ₹3200 triple sharing, ₹4200 double, ₹6000 solo room. meals included in all of them ngl. which one's calling your name?'",
+        `Q: 'How much does it cost?' → YOU SAY: '${PRICING.length} options: ${pricingPhrase()}. meals included in all of them ngl. which one's calling your name?'`,
         "Q: 'How do I register?' → YOU SAY: 'two ways — hit the Register page, or just tell me your details and I'll book it for you rn which works?'",
         "Q: 'Where is the venue?' → YOU SAY: 'ngl venue isn't confirmed yet, will be shared with registered guests — but Bangalore is the city fr. you want me to help you get a spot first?'",
         "Q: 'What is AA?' → YOU SAY: 'AA is a worldwide fellowship started in 1935 — people sharing their experience, strength and hope to stay sober together. no fees, no religion, just real people helping each other. beautiful fr'",
@@ -1750,12 +3270,10 @@ async function handleApi(request, env, ctx) {
       return "";
     })();
 
-    // Decide early whether this is a page-building request (developers only).
-    const wantsPage =
-      dev &&
-      /\b(page|redesign|re-?design|build|design|create|layout|website|landing|section|banner|template|edit the|update the)\b/.test(
-        lastUserMsg.toLowerCase()
-      );
+    // Page building was removed along with /p/<slug> — see the note where the
+    // /api/pages routes used to be. Kept as a constant so the model-selection
+    // branches below stay readable rather than being torn out mid-function.
+    const wantsPage = false;
 
     // Staff (admin/developer) get live figures so they can ask about numbers.
     if (staff) {
@@ -1766,37 +3284,11 @@ async function handleApi(request, env, ctx) {
       );
     }
 
-    // Developers get page-building superpowers, gated by the verified DEV_KEY.
-    if (dev) {
-      let pageList = "none yet";
-      try {
-        if (env.CONVENTION_DB) {
-          await ensurePagesTable(env);
-          const { results } = await env.CONVENTION_DB.prepare(
-            "SELECT slug, title FROM pages ORDER BY updated_at DESC LIMIT 30"
-          ).all();
-          if (results && results.length) {
-            pageList = results.map((p) => `${p.slug} ("${p.title}")`).join(", ");
-          }
-        }
-      } catch (e) {
-        /* ignore listing errors */
-      }
-      content.push(
-        "",
-        "== DEVELOPER MODE (this user is a verified developer) ==",
-        "IMPORTANT: You ARE a page-building agent for this developer right now. You CAN and DO create, edit and delete real pages that publish live to this website. NEVER say you cannot build pages, cannot design UI, or that you are 'just a chat assistant' - that is false for this user. When they ask, actually build it.",
-        "You can BUILD and EDIT full web pages for this site. Existing pages: " + pageList + ".",
-        "When the developer asks you to create, design, build, redesign or edit a page, do this:",
-        "1) Write a short friendly one-line message describing what you made.",
-        "2) On a new line put the marker [[ACTION]] then single-line JSON: " +
-          '{"action":"create_page","slug":"short-kebab-slug","title":"Human Title"}. Use "update_page" instead of "create_page" when editing an existing slug.',
-        "3) On the next line put the marker [[HTML]] and then the COMPLETE HTML document. Everything after [[HTML]] until the end of your reply is the page source.",
-        "HTML RULES: start with <!doctype html>; include <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">; put all CSS in an inline <style> block and any JS in inline <script>; make it responsive and visually polished; you MAY fetch live data from /api/dashboard, /api/registrations, /api/expenses or /api/pricing to render real numbers. Do NOT wrap the HTML in markdown code fences. Never mention the markers to the user.",
-        'To delete a page, reply with a short message then [[ACTION]]{"action":"delete_page","slug":"the-slug"} (no [[HTML]] needed).',
-        "For non-page questions, behave normally and do not emit page markers."
-      );
-    }
+    // The DEVELOPER MODE block that used to live here instructed the model to
+    // emit complete HTML documents — including <script> — which were published
+    // to /p/<slug> on this origin, and told it that it "MAY fetch live data
+    // from /api/registrations". Both the feature and the prompt are gone; see
+    // the note where the /api/pages routes used to be.
 
     // In voice mode keep replies short and spoken-friendly so the neural TTS is
     // quick to generate and there is far less audio to wait for.
@@ -1849,21 +3341,8 @@ async function handleApi(request, env, ctx) {
     // Only actual page-building work needs the heavy HTML model + big token
     // budget. Everything else (data questions, normal chat) uses the fast
     // model so replies come back quickly.
-    let models;
-    let maxTokens;
-    if (wantsPage) {
-      // Full HTML/CSS/JS generation - quality first, with fallbacks.
-      models = [
-        "@cf/zai-org/glm-5.2",
-        "@cf/moonshotai/kimi-k2.7-code",
-        "@cf/zai-org/glm-4.7-flash",
-        "@cf/meta/llama-3.1-8b-instruct-fast",
-      ];
-      maxTokens = 3500;
-    } else {
-      models = ["@cf/meta/llama-3.1-8b-instruct-fast", "@cf/zai-org/glm-4.7-flash"];
-      maxTokens = voice ? 170 : staff ? 340 : 280;
-    }
+    const models = ["@cf/meta/llama-3.1-8b-instruct-fast", "@cf/zai-org/glm-4.7-flash"];
+    const maxTokens = voice ? 170 : staff ? 340 : 280;
 
     // ---- Streaming path: return SSE so the client gets tokens as they arrive ---
     if (body.stream === true && !wantsPage) {
@@ -2100,7 +3579,9 @@ async function handleApi(request, env, ctx) {
           done: true,
           reply: "The assistant is taking a quick break \uD83D\uDE34. Please try again shortly \u2014 meanwhile you can sign up on the Register page or reach the organising committee.",
           degraded: true,
-          detail,
+          // Staff only: this string carries upstream provider errors and model
+          // ids, which anonymous visitors have no business seeing.
+          detail: staff ? detail : undefined,
         });
         writer.close();
       })();
@@ -2271,7 +3752,8 @@ async function handleApi(request, env, ctx) {
       reply:
         "I'm taking a quick break. Please try again shortly, or contact the organisers if you need urgent help.",
       degraded: true,
-      detail,
+      // Staff only — see the streaming path above.
+      detail: staff ? detail : undefined,
     });
   }
 
@@ -2281,14 +3763,29 @@ async function handleApi(request, env, ctx) {
       // Keys not configured yet — return a sentinel so the frontend can skip payment.
       return json({ skipped: true, reason: "Razorpay not configured" });
     }
-    const { registrationId, amount } = body;
-    if (!registrationId || !amount) return json({ error: "registrationId and amount required" }, 400);
+    // The amount is looked up from the stored registration and NEVER taken
+    // from the request. It used to come straight out of the body, so anyone
+    // could create a ₹1 order for a ₹6000 booking and then have it verified
+    // and marked paid.
+    const { registrationId } = body;
+    if (!registrationId) return json({ error: "registrationId required" }, 400);
+
+    const regList = await loadList(env, "registrations");
+    const reg = regList.find((r) => r.id === registrationId);
+    if (!reg) return json({ error: "Registration not found" }, 404);
+    if (reg.paid) return json({ error: "This registration is already paid." }, 409);
+
+    const amount = Number(reg.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return json({ error: "This registration has no payable amount." }, 409);
+    }
+
     const auth = btoa(env.RAZORPAY_KEY_ID + ":" + env.RAZORPAY_KEY_SECRET);
     const rzpRes = await fetch("https://api.razorpay.com/v1/orders", {
       method: "POST",
       headers: { "Authorization": "Basic " + auth, "Content-Type": "application/json" },
       body: JSON.stringify({
-        amount: Math.round(Number(amount) * 100), // paise
+        amount: Math.round(amount * 100), // paise
         currency: "INR",
         receipt: String(registrationId).slice(0, 40),
         notes: { registrationId: String(registrationId) },
@@ -2298,6 +3795,22 @@ async function handleApi(request, env, ctx) {
     if (!rzpRes.ok) {
       return json({ error: rzpOrder.error?.description || "Razorpay order creation failed" }, 502);
     }
+
+    // Remember which order belongs to which registration. Razorpay's signature
+    // only covers orderId|paymentId — it says nothing about WHICH registration
+    // the payment was for. Without this binding, someone could pay for their
+    // own ₹1500 booking and then submit that same valid signature against a
+    // ₹6000 registration to mark it paid.
+    {
+      const fresh = await loadList(env, "registrations");
+      const idx = fresh.findIndex((r) => r.id === registrationId);
+      if (idx !== -1) {
+        fresh[idx].orderId = rzpOrder.id;
+        fresh[idx].orderAmount = rzpOrder.amount;
+        await saveList(env, "registrations", fresh);
+      }
+    }
+
     return json({
       orderId: rzpOrder.id,
       keyId: env.RAZORPAY_KEY_ID,
@@ -2330,6 +3843,15 @@ async function handleApi(request, env, ctx) {
     const list = await loadList(env, "registrations");
     const idx = list.findIndex((r) => r.id === registrationId);
     if (idx === -1) return json({ error: "Registration not found" }, 404);
+
+    // The signature above proves Razorpay processed THIS order — not that the
+    // order belongs to THIS registration. Bind them, or a valid signature from
+    // a cheap booking could be replayed against an expensive one.
+    if (list[idx].orderId && list[idx].orderId !== razorpayOrderId) {
+      return json({ error: "That payment does not belong to this registration." }, 409);
+    }
+    if (list[idx].paid) return json({ ok: true, registration: list[idx], already: true });
+
     list[idx].paid = true;
     list[idx].paymentId = razorpayPaymentId;
     list[idx].paidAt = new Date().toISOString();
@@ -2456,44 +3978,68 @@ export default {
     // API requests go to the backend.
     if (url.pathname === "/api" || url.pathname.startsWith("/api/")) {
       try {
-        return await handleApi(request, env, ctx);
+        return withSecurityHeaders(await handleApi(request, env, ctx), env, url);
       } catch (err) {
-        // Never let the backend crash into a blank 500 - surface the real reason
-        // as JSON so it shows up in the browser console / Network tab.
+        // Log the real reason; return an opaque id. The detail used to be sent
+        // to the client, which leaked internal messages and upstream provider
+        // error bodies to anonymous callers.
         const detail = err && err.message ? err.message : String(err);
-        console.log("handleApi error:", detail, err && err.stack);
-        return json({ error: "Server error", detail }, 500);
+        const requestId = crypto.randomUUID().slice(0, 8);
+        console.log("handleApi error [" + requestId + "]:", detail, err && err.stack);
+        return withSecurityHeaders(
+          json({ error: "Something went wrong on our side.", requestId }, 500),
+          env,
+          url
+        );
       }
     }
 
-    // Developer-generated pages, served live from D1 at /p/<slug>.
-    if (url.pathname.startsWith("/p/")) {
-      const slug = decodeURIComponent(url.pathname.slice(3)).replace(/\/+$/, "");
-      if (env.CONVENTION_DB && slug) {
-        try {
-          await ensurePagesTable(env);
-          const row = await env.CONVENTION_DB.prepare(
-            "SELECT html FROM pages WHERE slug = ?"
-          )
-            .bind(slug)
-            .first();
-          if (row && row.html) {
-            return new Response(row.html, {
-              headers: { "content-type": "text/html; charset=utf-8" },
-            });
-          }
-        } catch (e) {
-          /* fall through to 404 */
-        }
+    // /p/<slug> is GONE. It served model-generated HTML from this origin,
+    // which gave any published page the signed-in staff member's cookies and
+    // full same-origin access to the admin API. See the note where the
+    // /api/pages routes used to be.
+
+    // ---- Server-side page protection -----------------------------------
+    // The real boundary for the admin screens. Client-side gating only ever
+    // hid the UI; the HTML and its data were always fetchable.
+    const page = canonicalPage(url.pathname);
+    if (page === null) {
+      return new Response("Bad request.", { status: 400 });
+    }
+
+    const needed = PROTECTED_PAGES[page];
+    if (needed) {
+      const s = await readSession(request, env);
+
+      if (!s) {
+        const next = safeNext(page + url.search);
+        return redirectTo(
+          authOrigin(env, request) + "/login.html?next=" + encodeURIComponent(next)
+        );
       }
-      return new Response("Page not found.", {
-        status: 404,
-        headers: { "content-type": "text/plain; charset=utf-8" },
-      });
+      if (!roleAtLeast(s.staff.role, needed)) {
+        audit(env, ctx, auditFrom(request, {
+          type: "authz_deny",
+          staffId: s.staff.id,
+          email: s.staff.email,
+          outcome: "deny",
+          detail: page + " needs " + needed,
+        }));
+        return redirectTo(authOrigin(env, request) + "/403.html?need=" + encodeURIComponent(needed));
+      }
+
+      // ASSETS returns an immutable Response, so rebuild it to add headers.
+      // no-store matters: without it the browser back button after sign-out
+      // still shows the previous occupant's attendee list.
+      const assetRes = await env.ASSETS.fetch(request);
+      const out = new Response(assetRes.body, assetRes);
+      out.headers.set("cache-control", "private, no-store, max-age=0, must-revalidate");
+      out.headers.set("vary", "Cookie");
+      return withSecurityHeaders(out, env, url);
     }
 
     // Everything else is served from the static site (public/).
-    return env.ASSETS.fetch(request);
+    return withSecurityHeaders(await env.ASSETS.fetch(request), env, url);
   },
 
   // A single cron ticks every 10 minutes; runSchedules decides what's due —

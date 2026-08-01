@@ -7,6 +7,17 @@ compatibility_date = "2024-11-01"
 directory = "./public"
 binding = "ASSETS"
 
+# REQUIRED FOR THE PAGE GATE TO WORK. By default Cloudflare serves a matching
+# static file directly from the edge and never invokes the Worker — which
+# means the authorization check in fetch() would simply not run for
+# /dashboard, /registrations, /ops and friends. Verified: without this,
+# GET /dashboard returned 200 to an anonymous request.
+#
+# With run_worker_first the Worker sees every request, canonicalises the path
+# once (see canonicalPage) and decides. Public assets still come from
+# env.ASSETS.fetch() at the end of the handler.
+run_worker_first = true
+
 # KV storage for registrations and expenses.
 # Replace PASTE_YOUR_KV_NAMESPACE_ID_HERE with the ID of the KV namespace you create.
 [[kv_namespaces]]
@@ -31,15 +42,64 @@ binding = "AI"
 [triggers]
 crons = ["*/10 * * * *"]
 
-# Developer-role gate. Only requests carrying this exact key may create,
-# edit or delete pages through the agent. CHANGE THIS before deploying, and
-# prefer setting it as a secret:  npx wrangler secret put DEV_KEY
+# ---------------------------------------------------------------------------
+# AUTHENTICATION
+# ---------------------------------------------------------------------------
+# Staff sign in at /login.html with Google, an emailed link, or a password.
+# Roles: viewer < admin < owner. Access is enforced SERVER-SIDE, both on /api/*
+# and on the protected HTML pages.
+#
+# THREE SECRETS MUST BE SET BEFORE DEPLOYING — they must NOT go in this file,
+# which is committed to git:
+#
+#   npx wrangler secret put PASSWORD_PEPPER        # required for password login
+#   npx wrangler secret put SESSION_PEPPER         # optional but recommended
+#   npx wrangler secret put GOOGLE_CLIENT_SECRET   # required for Google SSO
+#
+# PASSWORD_PEPPER is the single most important secret here. Passwords are
+# HMAC'd with it before hashing, so an attacker holding a full database dump
+# but not the pepper cannot crack them offline at any speed. Generate one with:
+#   node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
+#
+# Local development uses .dev.vars (gitignored) instead — see that file.
+
 [vars]
+# Public origin. Used to build redirect URLs and to validate request Origin
+# headers. NEVER derived from the Host header (host-header injection).
+AUTH_ORIGIN = "https://biaac.com"
+
+# The first account that can sign in. On the very first Google sign-in or
+# sign-in-link request matching this address, and ONLY while the staff table is
+# empty, it is created as an owner. The branch goes permanently inert after
+# that. Owners then invite everyone else from the Team page.
+BOOTSTRAP_OWNER_EMAIL = "amankumaryadavasasmd@gmail.com"
+
+# Google OAuth client id (public — the secret is set with `wrangler secret put`).
+# Create at console.cloud.google.com -> APIs & Services -> Credentials ->
+# OAuth client ID -> Web application, and register these redirect URIs:
+#   https://biaac.com/api/auth/google/callback
+#   http://localhost:8787/api/auth/google/callback
+GOOGLE_CLIENT_ID = "174171220198-tlbiujfi2ltpamuobf1nio4doqouu6ck.apps.googleusercontent.com"
+
+# Optional: restrict Google sign-in to one Workspace domain, e.g. "biaac.com".
+# Leave empty to allow any Google account that matches an invited staff email.
+GOOGLE_HD = ""
+
+# PBKDF2 iterations for password hashing. 12000 costs ~4ms of CPU, which fits
+# the Workers FREE plan's 10ms budget. On Workers Paid (30s CPU) raise this to
+# 600000 — the iteration count is stored inside each hash, so existing
+# passwords keep working and upgrade automatically on next sign-in.
+PBKDF2_ITERATIONS = "12000"
+
+# Break-glass machine token. No longer a user-facing credential: it can ONLY
+# recover a locked-out owner (POST /api/auth/bootstrap, capped at 3/day, always
+# audited, always emails DASHBOARD_EMAIL) and trigger ops reports from curl.
+# Prefer setting it as a secret:  npx wrangler secret put DEV_KEY
 DEV_KEY = "amankumaryadavasasmd"
-MAILCHANNELS_API_KEY = "uqrnax8EQ8hveVhcTZTKjkFAdl9Q6iQb"
+# MAILCHANNELS_API_KEY = "uqrnax8EQ8hveVhcTZTKjkFAdl9Q6iQb"
 RAZORPAY_KEY_ID = "rzp_test_TIK9lJop7jGPPi"
-RAZORPAY_KEY_SECRET = "0aYSxQjaJf95wOOczK5k1fLm"
-DEEPGRAM_API_KEY = "60167b8e4cf80a81095ba76f3e465283b507fd03"
+# RAZORPAY_KEY_SECRET = "0aYSxQjaJf95wOOczK5k1fLm"
+# DEEPGRAM_API_KEY = "60167b8e4cf80a81095ba76f3e465283b507fd03"
 
 # Where the ops dashboard emails go. CHANGE THIS to your Gmail address.
 DASHBOARD_EMAIL = "amankumaryadavasasmd@gmail.com"
@@ -54,7 +114,7 @@ DEEPGRAM_CREDIT_TOTAL = "200"
 # The main DEEPGRAM_API_KEY can speak but may lack permission to read the
 # account balance (403). To show "dollars remaining", create a key with
 # Owner/Administrator scope in the Deepgram console and paste it here:
-DEEPGRAM_BALANCE_KEY = "c6e0cd2a8d85b8fbe794c8bd7813cc46d04cee38"
+# DEEPGRAM_BALANCE_KEY = "c6e0cd2a8d85b8fbe794c8bd7813cc46d04cee38"
 # Optional — enables the "Cloudflare requests (24h)" row in the digest:
 #   CF_ACCOUNT_ID  = your account id (dash.cloudflare.com → Workers → right sidebar)
 #   CF_API_TOKEN   = create an API token with "Account Analytics: Read", then run

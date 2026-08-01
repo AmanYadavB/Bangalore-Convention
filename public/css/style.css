@@ -55,6 +55,13 @@
   box-sizing: border-box;
 }
 
+/* The UA stylesheet's [hidden] rule is a bare attribute selector, so ANY class
+   that sets `display` beats it and the element stays visible. Every use of the
+   hidden attribute in this project depends on this rule. */
+[hidden] {
+  display: none !important;
+}
+
 html {
   scroll-behavior: smooth;
 }
@@ -2193,6 +2200,140 @@ tbody tr:hover {
     80%  { transform: translate(-14vw, -30vh) rotate(-8deg); }
     100% { transform: translate(0, 0) rotate(0deg); }
   }
+}
+
+/* ==========================================================================
+   AUTH  —  login.html, 403.html, and the server-rendered interstitials
+   (magic-link confirm, invite accept) which reuse .auth-card.
+   ========================================================================== */
+
+.auth-card {
+  max-width: 430px;
+  margin: 46px auto;
+  padding: 30px 28px 26px;
+}
+
+.auth-title {
+  font-family: var(--font-display);
+  font-size: 26px;
+  margin: 0 0 6px;
+  letter-spacing: -0.02em;
+}
+
+.auth-sub {
+  margin: 0 0 22px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* Feedback lines. --red is the palette token; --danger has never existed. */
+.auth-error,
+.auth-notice {
+  margin: 0 0 18px;
+  padding: 11px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  line-height: 1.5;
+  border: 1px solid transparent;
+}
+.auth-error {
+  color: var(--red);
+  background: color-mix(in srgb, var(--red) 10%, transparent);
+  border-color: color-mix(in srgb, var(--red) 32%, transparent);
+}
+.auth-notice {
+  color: var(--green);
+  background: color-mix(in srgb, var(--green) 10%, transparent);
+  border-color: color-mix(in srgb, var(--green) 32%, transparent);
+}
+
+/* Google button: deliberately NOT a third-party widget — it's an <a> to our
+   own /api/auth/google/start, so the login page loads no external script. */
+.google-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: var(--card-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-weight: 600;
+  min-height: 46px;
+}
+.google-btn:hover {
+  background: var(--card);
+  border-color: var(--border-soft);
+}
+.google-btn svg {
+  flex: 0 0 auto;
+}
+
+.auth-sep {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0;
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.auth-sep::before,
+.auth-sep::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.auth-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 4px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 20px;
+}
+.auth-tab {
+  flex: 1;
+  min-height: 40px;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: calc(var(--radius-sm) - 4px);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.auth-tab:hover {
+  color: var(--text);
+}
+.auth-tab.active {
+  background: var(--card);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.auth-submit {
+  width: 100%;
+  min-height: 46px;
+}
+
+.auth-hint {
+  margin: 2px 0 0;
+  font-size: 13px;
+  line-height: 1.55;
 }
 
 /* -------- Professional polish -------- */

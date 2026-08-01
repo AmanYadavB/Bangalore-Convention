@@ -80,9 +80,11 @@
 
     <script src="js/common.js"></script>
     <script>
+      // No client-side gate: the Worker refuses to serve this page at all
+      // without a session that has at least the viewer role.
       mountNav("expenses");
 
-      if (ensureAdmin()) {
+      {
         async function loadExpenses() {
           const list = (await api("/api/expenses")).sort(
             (a, b) => new Date(b.date) - new Date(a.date)

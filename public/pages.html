@@ -72,37 +72,10 @@
       const gate = document.getElementById("dev-gate");
       const bodyEl = document.getElementById("dev-body");
 
-      function showGate() {
-        bodyEl.hidden = true;
-        gate.innerHTML = `
-          <div class="card" style="max-width:460px;margin:30px auto;text-align:center">
-            <h2 style="margin-top:0">Developer access required</h2>
-            <p class="muted">Enter the developer key to feed knowledge to the assistant.</p>
-            <div class="field" style="text-align:left">
-              <label for="devKeyInput">Developer key</label>
-              <input id="devKeyInput" type="password" autocomplete="off" placeholder="Developer key" />
-            </div>
-            <button class="btn primary" id="devUnlock" type="button">Unlock developer mode</button>
-            <p class="muted" id="devErr" style="color:var(--danger,#e5484d);display:none;margin-top:10px"></p>
-          </div>`;
-        document.getElementById("devUnlock").addEventListener("click", unlock);
-        document
-          .getElementById("devKeyInput")
-          .addEventListener("keydown", (e) => e.key === "Enter" && unlock());
-      }
-
-      async function unlock() {
-        const key = document.getElementById("devKeyInput").value;
-        const err = document.getElementById("devErr");
-        err.style.display = "none";
-        const ok = await loginDeveloper(key);
-        if (ok) {
-          location.reload();
-        } else {
-          err.textContent = "That key was not accepted.";
-          err.style.display = "block";
-        }
-      }
+      // The developer-key prompt is gone. This page is only served to a
+      // signed-in session with the owner role: everything fed here is injected
+      // into the assistant's system prompt on every conversation, so it is a
+      // privileged surface, not a content-editing one.
 
       async function loadFeed() {
         const rows = document.getElementById("feed-rows");
@@ -132,10 +105,7 @@
               if (!confirm("Remove this from the AI's knowledge?")) return;
               btn.disabled = true;
               try {
-                await api("/api/knowledge/" + encodeURIComponent(id), {
-                  method: "DELETE",
-                  headers: { "Content-Type": "application/json", "x-dev-key": getDevKey() },
-                });
+                await api("/api/knowledge/" + encodeURIComponent(id), { method: "DELETE" });
                 toast("Removed");
                 loadFeed();
               } catch (err) {
@@ -196,14 +166,20 @@
           saveBtn.disabled = true;
           saveBtn.textContent = "Feeding\u2026";
           try {
-            await api("/api/knowledge", {
+            const res = await api("/api/knowledge", {
               method: "POST",
-              body: JSON.stringify({ title, content, devKey: getDevKey() }),
+              body: JSON.stringify({ title, content }),
             });
             titleEl.value = "";
             contentEl.value = "";
             fileEl.value = "";
-            toast("Fed to the AI");
+            // The server caps stored content; say so rather than silently
+            // dropping the tail of what was pasted.
+            toast(
+              res && res.truncated
+                ? "Fed to the AI — trimmed to the first " + res.storedChars.toLocaleString() + " characters"
+                : "Fed to the AI"
+            );
             loadFeed();
           } catch (err) {
             errEl.textContent = err.message || "Could not save";
@@ -215,15 +191,11 @@
         });
       }
 
-      if (isDeveloper()) {
-        gate.innerHTML = "";
-        bodyEl.hidden = false;
-        document.getElementById("refreshBtn").addEventListener("click", loadFeed);
-        wireForm();
-        loadFeed();
-      } else {
-        showGate();
-      }
+      gate.innerHTML = "";
+      bodyEl.hidden = false;
+      document.getElementById("refreshBtn").addEventListener("click", loadFeed);
+      wireForm();
+      loadFeed();
     </script>
   </body>
 </html>

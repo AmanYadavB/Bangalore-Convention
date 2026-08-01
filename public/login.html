@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sign in · Bangalore Convention</title>
+    <link rel="stylesheet" href="css/style.css" />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  </head>
+  <body>
+    <div id="nav"></div>
+
+    <main class="container">
+      <div class="card auth-card">
+        <h1 class="auth-title">Sign in</h1>
+        <p class="muted auth-sub">
+          For the organising committee. Registration doesn't need an account —
+          <a href="register.html">register here</a> instead.
+        </p>
+
+        <p id="authError" class="auth-error" hidden></p>
+        <p id="authNotice" class="auth-notice" hidden></p>
+
+        <!-- Google: a plain link, not a third-party script. The whole flow is
+             server-side redirects, so this page loads no external JS at all. -->
+        <a class="btn google-btn" id="googleBtn" href="#">
+          <svg viewBox="0 0 18 18" width="18" height="18" aria-hidden="true">
+            <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z"/>
+            <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.02-3.7H.96v2.34A9 9 0 0 0 9 18z"/>
+            <path fill="#FBBC05" d="M3.98 10.72a5.4 5.4 0 0 1 0-3.44V4.94H.96a9 9 0 0 0 0 8.12l3.02-2.34z"/>
+            <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.454 3.44 1.346l2.58-2.58C13.46.9 11.43 0 9 0A9 9 0 0 0 .96 4.94l3.02 2.34C4.68 5.16 6.66 3.58 9 3.58z"/>
+          </svg>
+          <span>Continue with Google</span>
+        </a>
+
+        <div class="auth-sep"><span>or</span></div>
+
+        <div class="auth-tabs" role="tablist">
+          <button class="auth-tab active" id="tabLink" type="button" role="tab" aria-selected="true">Email me a link</button>
+          <button class="auth-tab" id="tabPassword" type="button" role="tab" aria-selected="false">Use a password</button>
+        </div>
+
+        <!-- Magic link -->
+        <form id="magicForm" class="auth-form">
+          <div class="field full">
+            <label for="magicEmail">Email address</label>
+            <input type="email" id="magicEmail" name="email" required autocomplete="email"
+                   inputmode="email" placeholder="you@example.com" />
+          </div>
+          <button class="btn primary auth-submit" type="submit" id="magicBtn">Send sign-in link</button>
+          <p class="muted auth-hint">We'll email you a link that signs you in. It works once and expires in 15 minutes.</p>
+        </form>
+
+        <!-- Password -->
+        <form id="passwordForm" class="auth-form" hidden>
+          <div class="field full">
+            <label for="pwEmail">Email address</label>
+            <input type="email" id="pwEmail" name="email" required autocomplete="email"
+                   inputmode="email" placeholder="you@example.com" />
+          </div>
+          <div class="field full">
+            <label for="pwPassword">Password</label>
+            <input type="password" id="pwPassword" name="password" required autocomplete="current-password" />
+          </div>
+          <button class="btn primary auth-submit" type="submit" id="pwBtn">Sign in</button>
+          <p class="muted auth-hint">
+            No password yet? Use a sign-in link above — you can set a password
+            once you're in.
+          </p>
+        </form>
+      </div>
+    </main>
+
+    <script src="js/common.js"></script>
+    <script>
+      (function () {
+        // chat:false — the floating mascot overlaps the password field, and a
+        // sign-in screen is not the place for it.
+        mountNav("login", { chat: false });
+
+        var params = new URLSearchParams(location.search);
+        // Validated again server-side on every use; this is only so the form
+        // can carry the intended destination through.
+        var next = params.get("next") || "";
+
+        var errorEl = document.getElementById("authError");
+        var noticeEl = document.getElementById("authNotice");
+
+        var MESSAGES = {
+          state: "That sign-in attempt didn't complete safely. Please try again.",
+          expired: "That link has expired or was already used. Request a new one.",
+          cancelled: "Sign-in was cancelled.",
+          google: "Google sign-in failed. Please try again, or use a sign-in link.",
+          google_unconfigured: "Google sign-in isn't set up on this server yet. Use a sign-in link instead.",
+          not_staff: "That account isn't on the organising committee list. Ask an organiser to invite you.",
+          disabled: "That account has been disabled. Contact an organiser.",
+          conflict: "That email is already linked to a different Google account. Contact an organiser.",
+          session: "Your session expired. Please sign in again."
+        };
+
+        function showError(msg) {
+          errorEl.textContent = msg;
+          errorEl.hidden = !msg;
+        }
+        function showNotice(msg) {
+          noticeEl.textContent = msg;
+          noticeEl.hidden = !msg;
+        }
+
+        var e = params.get("e");
+        if (e) showError(MESSAGES[e] || "Something went wrong. Please try again.");
+
+        document.getElementById("googleBtn").href =
+          "/api/auth/google/start" + (next ? "?next=" + encodeURIComponent(next) : "");
+
+        // ---- Tabs ----
+        var tabLink = document.getElementById("tabLink");
+        var tabPassword = document.getElementById("tabPassword");
+        var magicForm = document.getElementById("magicForm");
+        var passwordForm = document.getElementById("passwordForm");
+
+        function selectTab(which) {
+          var linkActive = which === "link";
+          tabLink.classList.toggle("active", linkActive);
+          tabPassword.classList.toggle("active", !linkActive);
+          tabLink.setAttribute("aria-selected", linkActive ? "true" : "false");
+          tabPassword.setAttribute("aria-selected", linkActive ? "false" : "true");
+          magicForm.hidden = !linkActive;
+          passwordForm.hidden = linkActive;
+        }
+        tabLink.addEventListener("click", function () { selectTab("link"); });
+        tabPassword.addEventListener("click", function () { selectTab("password"); });
+
+        // ---- Magic link ----
+        magicForm.addEventListener("submit", async function (ev) {
+          ev.preventDefault();
+          var btn = document.getElementById("magicBtn");
+          var email = document.getElementById("magicEmail").value.trim();
+          if (!email) return;
+
+          showError("");
+          btn.disabled = true;
+          btn.textContent = "Sending…";
+          try {
+            await api("/api/auth/magic/start", {
+              method: "POST",
+              body: JSON.stringify({ email: email, next: next })
+            });
+            // Deliberately the same message whether or not the account exists —
+            // anything else would let anyone probe for staff addresses.
+            magicForm.hidden = true;
+            showNotice("If that address belongs to a committee member, a sign-in link is on its way. Check your inbox.");
+          } catch (err) {
+            showError(err.message || "Couldn't send the link. Please try again.");
+          } finally {
+            btn.disabled = false;
+            btn.textContent = "Send sign-in link";
+          }
+        });
+
+        // ---- Password ----
+        passwordForm.addEventListener("submit", async function (ev) {
+          ev.preventDefault();
+          var btn = document.getElementById("pwBtn");
+          var email = document.getElementById("pwEmail").value.trim();
+          var password = document.getElementById("pwPassword").value;
+          if (!email || !password) return;
+
+          showError("");
+          showNotice("");
+          btn.disabled = true;
+          btn.textContent = "Signing in…";
+          try {
+            var res = await api("/api/auth/login/password", {
+              method: "POST",
+              body: JSON.stringify({ email: email, password: password, next: next })
+            });
+            location.href = res.next || "/index.html";
+          } catch (err) {
+            showError(err.message || "Sign-in failed.");
+            document.getElementById("pwPassword").value = "";
+            btn.disabled = false;
+            btn.textContent = "Sign in";
+          }
+        });
+      })();
+    </script>
+  </body>
+</html>

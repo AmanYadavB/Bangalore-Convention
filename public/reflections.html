@@ -279,7 +279,7 @@
           const dataUrl = await renderCardPng(r);
           const res = await api("/api/reflections/" + r.id + "/image", {
             method: "POST",
-            body: JSON.stringify({ dataUrl, devKey: getDevKey() }),
+            body: JSON.stringify({ dataUrl }),
           });
           toast("Card saved (" + Math.round(res.bytes / 1024) + " KB)");
           load();
@@ -293,12 +293,7 @@
       async function removeReflection(r) {
         if (!confirm("Delete this reflection?")) return;
         try {
-          await api("/api/reflections/" + r.id, {
-            method: "DELETE",
-            // api() doesn't attach the dev key, so DELETE sends it as a header
-            // the same way the page-delete flow in common.js does.
-            headers: { "Content-Type": "application/json", "x-dev-key": getDevKey() },
-          });
+          await api("/api/reflections/" + r.id, { method: "DELETE" });
           toast("Reflection deleted");
           load();
         } catch (err) {
@@ -312,7 +307,9 @@
           return;
         }
         listEl.innerHTML = "";
-        const dev = isDeveloper();
+        // Viewers can read reflections; composing, broadcasting (which costs
+        // money per recipient) and deleting need admin.
+        const dev = hasRole("admin");
 
         items.forEach((r) => {
           const card = document.createElement("div");
@@ -362,7 +359,7 @@
               try {
                 const res = await api("/api/reflections/send", {
                   method: "POST",
-                  body: JSON.stringify({ devKey: getDevKey() }),
+                  body: JSON.stringify({}),
                 });
                 toast(res.ok ? "Sent to " + res.sent + "/" + res.total : (res.note || "Nothing sent"),
                       res.ok ? "success" : "error");
@@ -404,7 +401,7 @@
         }
       }
 
-      if (isDeveloper()) {
+      function wireCompose() {
         document.getElementById("compose").hidden = false;
         // IST, matching how the Worker dates and looks up reflections. Plain
         // toISOString() would show yesterday between midnight and 05:30 IST.
@@ -418,7 +415,6 @@
             date: document.getElementById("date").value,
             title: document.getElementById("title").value.trim(),
             body: document.getElementById("body").value.trim(),
-            devKey: getDevKey(),
           };
           if (!payload.body) return toast("Write the reflection first.", "error");
           try {
@@ -433,7 +429,14 @@
         });
       }
 
-      load();
+      // Wait for the server to confirm the role before rendering, so the
+      // composer and the per-card actions are decided once rather than
+      // flickering in after the list has already drawn.
+      (async () => {
+        await requireUser();
+        if (hasRole("admin")) wireCompose();
+        load();
+      })();
     </script>
   </body>
 </html>

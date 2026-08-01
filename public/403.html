@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Access denied · Bangalore Convention</title>
+    <link rel="stylesheet" href="css/style.css" />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  </head>
+  <body>
+    <div id="nav"></div>
+
+    <main class="container">
+      <div class="card auth-card">
+        <h1 class="auth-title">Access denied</h1>
+        <p class="muted auth-sub" id="denyMsg">
+          You're signed in, but this section needs a higher access level. Ask an
+          organiser if you think you should have it.
+        </p>
+        <a class="btn primary auth-submit" href="index.html">Back to home</a>
+      </div>
+    </main>
+
+    <script src="js/common.js"></script>
+    <script>
+      (function () {
+        mountNav("", { chat: false });
+        var need = new URLSearchParams(location.search).get("need");
+        if (need) {
+          document.getElementById("denyMsg").textContent =
+            "You're signed in, but this section needs " + need + " access. Ask an organiser if you think you should have it.";
+        }
+      })();
+    </script>
+  </body>
+</html>
