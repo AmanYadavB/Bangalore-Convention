@@ -138,6 +138,7 @@ function renderNav(active) {
   const links = [
     { href: "index.html", label: "Home", key: "home" },
     { href: "register.html", label: "Register", key: "register" },
+    { href: "reflections.html", label: "Reflections", key: "reflections" },
     { href: "registrations.html", label: "Registrations", key: "registrations", admin: true },
     { href: "dashboard.html", label: "Dashboard", key: "dashboard", admin: true },
     { href: "expenses.html", label: "Expenses", key: "expenses", admin: true },

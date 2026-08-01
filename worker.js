@@ -788,9 +788,18 @@ async function runCriticalCheck(env) {
 // Plain var (safe to keep in wrangler.toml):
 //   WHATSAPP_PHONE_ID      the "Phone number ID" from the API Setup page
 
-const WA_GRAPH = "https://graph.facebook.com/v23.0";
+const WA_GRAPH = "https://graph.facebook.com/v26.0";
 const WA_HISTORY_TURNS = 6; // short on purpose: fewer prompt tokens = fewer neurons
 const WA_DAILY_CAP = 40; // per sender, so nobody can drain the free tiers
+
+// STOP opt-out, promised in public/privacy.html. Matched on the whole message
+// with punctuation stripped, so "Stop." opts out but "please stop asking" does
+// not - a false positive here silently cuts someone off from their own booking.
+const WA_STOP_WORDS = new Set(["STOP", "STOPALL", "UNSUBSCRIBE", "OPTOUT", "CANCEL", "QUIT"]);
+const WA_START_WORDS = new Set(["START", "UNSTOP", "RESUME", "SUBSCRIBE", "OPTIN"]);
+// An opt-out has to outlive the 24h conversation record, or it would quietly
+// expire and we would start messaging them again.
+const WA_OPTOUT_TTL = 60 * 60 * 24 * 365;
 
 // Digits-only E.164 is the only shape the Cloud API accepts:
 // "+91 98765 43210" / "09876543210" / "9876543210" -> "919876543210".
@@ -833,6 +842,15 @@ const waSendText = (env, to, body) =>
 async function waSendConfirmation(env, reg, origin) {
   const to = waNormalize(reg && reg.phone);
   if (!to) return null;
+
+  // The privacy policy promises STOP covers every WhatsApp message we send, so
+  // it applies to the transactional receipt too - not just the chatty ones.
+  const state = await env.CONVENTION_KV.get("wa:" + to, { type: "json" });
+  if (state && state.optedOut) {
+    console.log("whatsapp: confirmation skipped, recipient opted out");
+    return null;
+  }
+
   return waPost(env, {
     to,
     type: "template",
@@ -909,6 +927,29 @@ async function waReply(env, ctx, msg, origin) {
   const today = new Date().toISOString().slice(0, 10);
   const state = (await env.CONVENTION_KV.get(key, { type: "json" })) || {};
   const count = state.day === today ? state.count || 0 : 0;
+
+  // Opt-out is handled before the cap and before any AI call, so someone who
+  // has left costs nothing and never gets an unwanted reply.
+  const word = text.replace(/[^a-z]/gi, "").toUpperCase();
+
+  if (WA_STOP_WORDS.has(word)) {
+    await waSendText(env, from, "done — you won't get any more messages from me. send START any time if you change your mind 💙");
+    // Conversation history is dropped: they asked us to stop, so we keep only
+    // the flag that remembers it.
+    await env.CONVENTION_KV.put(
+      key, JSON.stringify({ optedOut: true }), { expirationTtl: WA_OPTOUT_TTL }
+    );
+    return;
+  }
+
+  if (state.optedOut) {
+    if (!WA_START_WORDS.has(word)) return; // stay silent, no reply, no AI call
+    await waSendText(env, from, "you're back! 🎉 ask me anything about the convention");
+    await env.CONVENTION_KV.put(
+      key, JSON.stringify({ day: today, count: 0, msgs: [] }), { expirationTtl: 86400 }
+    );
+    return;
+  }
 
   if (count >= WA_DAILY_CAP) {
     // Say so exactly once, then go quiet - otherwise the cap itself becomes
@@ -1046,6 +1087,49 @@ async function handleApi(request, env, ctx) {
 
   // ---- Pricing ----
   if (resource === "pricing" && method === "GET") return json(PRICING);
+
+  // ---- Daily reflections ----
+  // Written here, read on reflections.html, then posted by hand to the WhatsApp
+  // Channel. Deliberately NOT sent through the Cloud API: a daily reflection is
+  // a Marketing template (~Rs 0.80 per person per day) whereas a Channel post
+  // costs nothing and keeps followers anonymous from each other and from us.
+  if (resource === "reflections") {
+    const list = await loadList(env, "reflections");
+
+    if (method === "GET" && !id) {
+      // Newest first. channelUrl travels with the payload so the follow button
+      // can be changed in wrangler.toml without touching the page.
+      const items = [...list].sort((a, b) => String(b.date).localeCompare(String(a.date)));
+      return json({ channelUrl: env.WHATSAPP_CHANNEL_URL || "", items });
+    }
+
+    if (method === "POST" && !id) {
+      if (!isDeveloper(request, env, body)) return json({ error: "Forbidden" }, 403);
+      const title = (body.title || "").trim();
+      const text = (body.body || "").trim();
+      if (!text) return json({ error: "Reflection text is required." }, 400);
+      const record = {
+        id: crypto.randomUUID(),
+        date: (body.date || new Date().toISOString().slice(0, 10)).slice(0, 10),
+        title,
+        body: text,
+        createdAt: new Date().toISOString(),
+      };
+      list.push(record);
+      await saveList(env, "reflections", list);
+      return json(record, 201);
+    }
+
+    if (method === "DELETE" && id) {
+      if (!isDeveloper(request, env, body)) return json({ error: "Forbidden" }, 403);
+      const next = list.filter((r) => r.id !== id);
+      if (next.length === list.length) return json({ error: "Not found" }, 404);
+      await saveList(env, "reflections", next);
+      return json({ ok: true });
+    }
+
+    return json({ error: "Unsupported method" }, 405);
+  }
 
   // ---- WhatsApp config check ----
   // GET /api/whatsapp/status?devKey=...  Reports which pieces are present

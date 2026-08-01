@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Daily Reflections · Bangalore Convention</title>
+    <link rel="stylesheet" href="css/style.css" />
+    <style>
+      /* Follow card: the one thing this page exists to get people to tap. */
+      .follow-card { text-align: center; }
+      .follow-card .btn { font-size: 1.05rem; padding: 14px 30px; }
+      .follow-note { font-size: 0.86rem; opacity: 0.72; margin-top: 14px; }
+      .refl-date { font-size: 0.82rem; opacity: 0.65; letter-spacing: 0.4px; }
+      .refl-title { margin: 6px 0 10px; }
+      .refl-body { white-space: pre-wrap; line-height: 1.65; }
+      .refl-actions { margin-top: 14px; display: flex; gap: 8px; flex-wrap: wrap; }
+    </style>
+  </head>
+  <body>
+    <div id="nav"></div>
+
+    <div class="container">
+      <h1 class="page-title">Daily Reflections</h1>
+      <p class="page-sub">A short reflection, shared each morning.</p>
+
+      <div class="card follow-card" id="follow-card" hidden>
+        <h2>Get it every morning on WhatsApp</h2>
+        <p>Follow the channel and the day's reflection arrives on its own.</p>
+        <p style="margin-top: 18px">
+          <a class="btn primary" id="follow-link" href="#" target="_blank" rel="noopener">
+            Follow on WhatsApp
+          </a>
+        </p>
+        <p class="follow-note">
+          Following is private — no one else can see that you follow, and we
+          can't see who our followers are. You can leave at any time, and you
+          won't be able to be messaged directly through the channel.
+        </p>
+      </div>
+
+      <!-- Developer-only composer. -->
+      <div id="compose" hidden>
+        <div class="section-head"><h2>New Reflection</h2></div>
+        <div class="card">
+          <form id="refl-form">
+            <div class="form-grid">
+              <div class="field">
+                <label for="date">Date</label>
+                <input id="date" name="date" type="date" />
+              </div>
+              <div class="field">
+                <label for="title">Title</label>
+                <input id="title" name="title" placeholder="e.g. One day at a time" />
+              </div>
+            </div>
+            <div class="field">
+              <label for="body">Reflection *</label>
+              <textarea id="body" name="body" rows="6" required
+                placeholder="Write today's reflection…"></textarea>
+            </div>
+            <button class="btn primary" type="submit">Save</button>
+          </form>
+        </div>
+      </div>
+
+      <div class="section-head"><h2>Past Reflections</h2></div>
+      <div id="refl-list"><div class="empty">Loading…</div></div>
+    </div>
+
+    <script src="js/common.js"></script>
+    <script>
+      mountNav("reflections");
+
+      const listEl = document.getElementById("refl-list");
+      let channelUrl = "";
+
+      // What actually gets pasted into the WhatsApp Channel. WhatsApp bold is
+      // *single asterisks* and italics are _underscores_ — not markdown.
+      function forWhatsApp(r) {
+        const parts = [];
+        if (r.title) parts.push("*" + r.title + "*");
+        parts.push(r.body);
+        parts.push("_Bangalore Convention_");
+        return parts.join("\n\n");
+      }
+
+      function prettyDate(d) {
+        const dt = new Date(d + "T00:00:00");
+        if (isNaN(dt)) return d;
+        return dt.toLocaleDateString("en-IN", {
+          weekday: "long", day: "numeric", month: "long", year: "numeric",
+        });
+      }
+
+      async function copyPost(r, btn) {
+        try {
+          await navigator.clipboard.writeText(forWhatsApp(r));
+          const was = btn.textContent;
+          btn.textContent = "Copied ✓";
+          setTimeout(() => (btn.textContent = was), 1800);
+        } catch (err) {
+          toast("Couldn't copy — select the text manually.", "error");
+        }
+      }
+
+      async function removeReflection(r) {
+        if (!confirm("Delete this reflection?")) return;
+        try {
+          await api("/api/reflections/" + r.id, {
+            method: "DELETE",
+            // api() doesn't attach the dev key, so DELETE sends it as a header
+            // the same way the page-delete flow in common.js does.
+            headers: { "Content-Type": "application/json", "x-dev-key": getDevKey() },
+          });
+          toast("Reflection deleted");
+          load();
+        } catch (err) {
+          toast(err.message, "error");
+        }
+      }
+
+      function render(items) {
+        if (!items.length) {
+          listEl.innerHTML = '<div class="empty">No reflections yet.</div>';
+          return;
+        }
+        listEl.innerHTML = "";
+        const dev = isDeveloper();
+
+        items.forEach((r) => {
+          const card = document.createElement("div");
+          card.className = "card";
+          card.innerHTML =
+            '<div class="refl-date">' + escapeHtml(prettyDate(r.date)) + "</div>" +
+            (r.title ? '<h3 class="refl-title">' + escapeHtml(r.title) + "</h3>" : "") +
+            '<div class="refl-body">' + escapeHtml(r.body) + "</div>" +
+            (dev ? '<div class="refl-actions"></div>' : "");
+
+          if (dev) {
+            const actions = card.querySelector(".refl-actions");
+
+            const copyBtn = document.createElement("button");
+            copyBtn.className = "btn small primary";
+            copyBtn.type = "button";
+            copyBtn.textContent = "Copy for WhatsApp";
+            copyBtn.addEventListener("click", () => copyPost(r, copyBtn));
+            actions.appendChild(copyBtn);
+
+            const delBtn = document.createElement("button");
+            delBtn.className = "btn small";
+            delBtn.type = "button";
+            delBtn.textContent = "Delete";
+            delBtn.addEventListener("click", () => removeReflection(r));
+            actions.appendChild(delBtn);
+          }
+
+          listEl.appendChild(card);
+        });
+      }
+
+      async function load() {
+        try {
+          const data = await api("/api/reflections");
+          channelUrl = data.channelUrl || "";
+
+          // Hide the follow card entirely until the channel link is configured,
+          // rather than showing a button that goes nowhere.
+          if (channelUrl) {
+            document.getElementById("follow-link").href = channelUrl;
+            document.getElementById("follow-card").hidden = false;
+          }
+
+          render(data.items || []);
+        } catch (err) {
+          listEl.innerHTML = '<div class="empty">Could not load reflections.</div>';
+          toast(err.message, "error");
+        }
+      }
+
+      if (isDeveloper()) {
+        document.getElementById("compose").hidden = false;
+        document.getElementById("date").value = new Date().toISOString().slice(0, 10);
+
+        document.getElementById("refl-form").addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const payload = {
+            date: document.getElementById("date").value,
+            title: document.getElementById("title").value.trim(),
+            body: document.getElementById("body").value.trim(),
+            devKey: getDevKey(),
+          };
+          if (!payload.body) return toast("Write the reflection first.", "error");
+          try {
+            await api("/api/reflections", { method: "POST", body: JSON.stringify(payload) });
+            toast("Reflection saved");
+            document.getElementById("title").value = "";
+            document.getElementById("body").value = "";
+            load();
+          } catch (err) {
+            toast(err.message, "error");
+          }
+        });
+      }
+
+      load();
+    </script>
+  </body>
+</html>
