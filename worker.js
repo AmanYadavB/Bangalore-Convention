@@ -710,7 +710,14 @@ async function runDailyDigest(env) {
   const d = await collectDashboardData(env);
   const alerts = findAlerts(d, env);
   const subject = (alerts.length ? "⚠️ " : "📊 ") + "Convention daily dashboard — " + d.today;
-  return sendOpsEmail(env, subject, buildDigestHtml(d, alerts));
+  const result = await sendOpsEmail(env, subject, buildDigestHtml(d, alerts));
+  // Remember the outcome so /api/report/status can answer "did it send?".
+  await env.CONVENTION_KV.put(
+    "report:lastDigest",
+    JSON.stringify({ at: new Date().toISOString(), ok: !!result.ok, note: result.note || "", subject }),
+    { expirationTtl: 60 * 60 * 24 * 14 }
+  );
+  return result;
 }
 
 // The single 10-minute cron lands here. The digest goes out on the first tick
@@ -729,8 +736,12 @@ async function runSchedules(env) {
   const hhmm = ist.toISOString().slice(11, 16);
   const digestAt = await getDigestTime(env);
   if (hhmm >= digestAt && !(await env.CONVENTION_KV.get("digest:sent:" + today))) {
-    await env.CONVENTION_KV.put("digest:sent:" + today, "1", { expirationTtl: 60 * 60 * 48 });
-    await runDailyDigest(env);
+    const result = await runDailyDigest(env);
+    // Mark the day done only when the email actually went out — a transient
+    // mail failure retries on the next 10-minute tick instead of losing the day.
+    if (result && result.ok) {
+      await env.CONVENTION_KV.put("digest:sent:" + today, "1", { expirationTtl: 60 * 60 * 48 });
+    }
   }
   const last = Number(await env.CONVENTION_KV.get("critical:last")) || 0;
   if (Date.now() - last >= 6 * 3600 * 1000) {
@@ -751,7 +762,17 @@ async function runCriticalCheck(env) {
     }
   }
   if (!fresh.length) return { ok: true, note: "nothing critical (or already alerted today)" };
-  return sendOpsEmail(env, "🚨 Convention CRITICAL: " + fresh.map((f) => f.id).join(", "), buildAlertHtml(fresh));
+  const result = await sendOpsEmail(
+    env,
+    "🚨 Convention CRITICAL: " + fresh.map((f) => f.id).join(", "),
+    buildAlertHtml(fresh)
+  );
+  await env.CONVENTION_KV.put(
+    "report:lastCritical",
+    JSON.stringify({ at: new Date().toISOString(), ok: !!result.ok, note: result.note || "", alerts: fresh.map((f) => f.id) }),
+    { expirationTtl: 60 * 60 * 24 * 14 }
+  );
+  return result;
 }
 
 async function handleApi(request, env, ctx) {
@@ -932,11 +953,43 @@ async function handleApi(request, env, ctx) {
     }
     if (parts[2] === "schedule" && method === "POST") {
       const t = String(body.time || "").trim();
+      // {"clear":true} (or an empty time) removes the KV override so the
+      // DIGEST_TIME_IST var in wrangler.toml applies again.
+      if (body.clear === true || t === "") {
+        await env.CONVENTION_KV.delete("settings:digestTime");
+        return json({ ok: true, digestTimeIst: await getDigestTime(env), source: "wrangler.toml var" });
+      }
       if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(t)) {
         return json({ error: 'time must be 24h "HH:MM" (IST), e.g. "18:40"' }, 400);
       }
       await env.CONVENTION_KV.put("settings:digestTime", t);
       return json({ ok: true, digestTimeIst: t });
+    }
+    // GET /api/report/status — why did/didn't the email go out?
+    if (parts[2] === "status" && method === "GET") {
+      const ist = new Date(Date.now() + 5.5 * 3600 * 1000);
+      const today = ist.toISOString().slice(0, 10);
+      const [override, sentFlag, lastDigest, lastCritical, criticalLast] = await Promise.all([
+        env.CONVENTION_KV.get("settings:digestTime"),
+        env.CONVENTION_KV.get("digest:sent:" + today),
+        env.CONVENTION_KV.get("report:lastDigest", { type: "json" }),
+        env.CONVENTION_KV.get("report:lastCritical", { type: "json" }),
+        env.CONVENTION_KV.get("critical:last"),
+      ]);
+      return json({
+        workerTimeIst: ist.toISOString().slice(0, 16).replace("T", " "),
+        digestTimeIst: override || env.DIGEST_TIME_IST || "09:00",
+        digestTimeSource: override
+          ? "KV override (set via /api/report/schedule — clears with {\"clear\":true})"
+          : env.DIGEST_TIME_IST
+          ? "DIGEST_TIME_IST var in wrangler.toml"
+          : "default 09:00",
+        digestAlreadySentToday: Boolean(sentFlag),
+        lastDigestAttempt: lastDigest || "never",
+        lastCriticalEmail: lastCritical || "never",
+        lastCriticalCheckAt: criticalLast ? new Date(Number(criticalLast)).toISOString() : "never",
+        dashboardEmail: env.DASHBOARD_EMAIL || "NOT SET",
+      });
     }
   }
 
