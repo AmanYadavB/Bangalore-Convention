@@ -803,7 +803,14 @@ function waNormalize(raw) {
 }
 
 async function waPost(env, payload) {
-  if (!env.WHATSAPP_TOKEN || !env.WHATSAPP_PHONE_ID) return null; // not wired up yet
+  if (!env.WHATSAPP_TOKEN || !env.WHATSAPP_PHONE_ID) {
+    // Silent here would look exactly like "the bot ignored me".
+    console.log(
+      "whatsapp: NOT CONFIGURED - token:" + (env.WHATSAPP_TOKEN ? "set" : "MISSING") +
+      " phoneId:" + (env.WHATSAPP_PHONE_ID ? "set" : "MISSING")
+    );
+    return null;
+  }
   const res = await fetch(WA_GRAPH + "/" + env.WHATSAPP_PHONE_ID + "/messages", {
     method: "POST",
     headers: {
@@ -948,7 +955,13 @@ async function waProcess(env, ctx, payload, origin) {
   for (const entry of payload.entry || []) {
     for (const change of entry.changes || []) {
       const msgs = change.value && change.value.messages;
-      if (!Array.isArray(msgs)) continue; // delivered/read status callbacks land here too
+      if (!Array.isArray(msgs)) {
+        // Status callbacks (sent/delivered/read) arrive on this same webhook.
+        // Seeing ONLY these means the "messages" field is not subscribed.
+        console.log("whatsapp: non-message change, field=" + (change.field || "?"));
+        continue;
+      }
+      console.log("whatsapp: " + msgs.length + " inbound message(s)");
       for (const msg of msgs) {
         try {
           await waReply(env, ctx, msg, origin);
@@ -984,10 +997,16 @@ async function handleWhatsAppWebhook(request, env, ctx) {
   if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
 
   const raw = await request.text();
+  console.log("whatsapp webhook POST received, " + raw.length + " bytes");
 
   // Without this the endpoint is a public button that spends Workers AI
   // neurons for anyone who finds the URL.
   if (!(await waVerifySignature(env, raw, request.headers.get("x-hub-signature-256")))) {
+    console.log(
+      "whatsapp: SIGNATURE REJECTED - check WHATSAPP_APP_SECRET matches " +
+      "App settings -> Basic -> App secret (header " +
+      (request.headers.get("x-hub-signature-256") ? "present" : "MISSING") + ")"
+    );
     return new Response("Bad signature", { status: 403 });
   }
 
@@ -1027,6 +1046,25 @@ async function handleApi(request, env, ctx) {
 
   // ---- Pricing ----
   if (resource === "pricing" && method === "GET") return json(PRICING);
+
+  // ---- WhatsApp config check ----
+  // GET /api/whatsapp/status?devKey=...  Reports which pieces are present
+  // WITHOUT echoing any secret, so a silent bot can be diagnosed from a browser.
+  if (resource === "whatsapp" && parts[2] === "status" && method === "GET") {
+    if (url.searchParams.get("devKey") !== env.DEV_KEY) {
+      return json({ error: "Forbidden" }, 403);
+    }
+    return json({
+      WHATSAPP_TOKEN: env.WHATSAPP_TOKEN ? "set (" + env.WHATSAPP_TOKEN.length + " chars)" : "MISSING",
+      WHATSAPP_PHONE_ID: env.WHATSAPP_PHONE_ID || "MISSING",
+      WHATSAPP_VERIFY_TOKEN: env.WHATSAPP_VERIFY_TOKEN ? "set" : "MISSING",
+      WHATSAPP_APP_SECRET: env.WHATSAPP_APP_SECRET
+        ? "set — signature checking ON"
+        : "MISSING — signature checking SKIPPED",
+      WHATSAPP_TEMPLATE_LANG: env.WHATSAPP_TEMPLATE_LANG || "en (default)",
+      webhookUrl: url.origin + "/api/whatsapp/webhook",
+    });
+  }
 
   // ---- Registrations ----
   if (resource === "registrations") {
@@ -2168,7 +2206,9 @@ export default {
 
     // WhatsApp webhook is handled ahead of handleApi because the signature
     // check needs the raw body, which handleApi would consume as JSON.
-    if (url.pathname === "/api/whatsapp/webhook") {
+    // Trailing slash tolerated - Meta keeps whatever URL was pasted in, and a
+    // stray "/" would otherwise fall through to the static asset handler.
+    if (url.pathname.replace(/\/+$/, "") === "/api/whatsapp/webhook") {
       try {
         return await handleWhatsAppWebhook(request, env, ctx);
       } catch (err) {
