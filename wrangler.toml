@@ -74,3 +74,21 @@ WHATSAPP_TEMPLATE_LANG = "en"
 # the channel (WhatsApp -> Updates -> your channel -> Channel info -> Share link).
 # Until this is set, the follow button on reflections.html stays hidden.
 WHATSAPP_CHANNEL_URL = "https://whatsapp.com/channel/0029VbDRqVyJkK77DOFXs00o"
+
+# ---- Daily reflection broadcast (paid: Marketing template, ~Rs 0.80/message) ----
+# Comma-separated numbers, any format - "+91 98765 43210", "09876543210" and
+# "919876543210" all normalise the same way. Leave EMPTY to disable the
+# broadcast entirely; the free WhatsApp Channel above is unaffected either way.
+# While on the Meta test number, only your 5 verified test recipients can receive.
+REFLECTION_RECIPIENTS = "919625018330"
+# When the broadcast goes out, IST 24h "HH:MM". The 10-minute cron means the
+# real send lands within 10 minutes after this.
+REFLECTION_TIME_IST = "07:00"
+# Must match the daily_reflection template EXACTLY as approved:
+#   "image" -> the template has a Media/Image header (send one every time)
+#   "none"  -> the template is body-only (never send a header)
+# Getting this wrong fails every send with a parameter mismatch.
+REFLECTION_TEMPLATE_HEADER = "image"
+# Public origin of this site. Used to build the template header image URL from
+# the cron, where there is no incoming request to read an origin from.
+SITE_ORIGIN = "https://biaac.com"

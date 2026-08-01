@@ -14,6 +14,66 @@
       .refl-title { margin: 6px 0 10px; }
       .refl-body { white-space: pre-wrap; line-height: 1.65; }
       .refl-actions { margin-top: 14px; display: flex; gap: 8px; flex-wrap: wrap; }
+      /* The card is rendered off-screen, never shown. Kept out of #cardStyle so
+         this positioning does not end up inside the exported PNG. */
+      #cardStage { position: absolute; left: -99999px; top: 0; }
+    </style>
+
+    <!-- Card design, cloned verbatim into the exported PNG. System fonts only,
+         no color-mix(), no external images, solid text colours. -->
+    <style id="cardStyle">
+      .card {
+        position: relative; width: 1125px; height: 600px; overflow: hidden;
+        box-sizing: border-box;
+        background:
+          radial-gradient(600px 380px at 12% 112%, rgba(251,191,36,0.26), transparent 62%),
+          radial-gradient(720px 460px at 90% -14%, rgba(124,111,255,0.24), transparent 60%),
+          #0b0f1a;
+        font-family: "Segoe UI", system-ui, sans-serif;
+      }
+      .card-grid {
+        position: absolute; inset: 0;
+        background-image: radial-gradient(circle at 1px 1px, rgba(238,242,251,0.07) 1px, transparent 0);
+        background-size: 34px 34px;
+      }
+      .masthead { position: absolute; top: 44px; left: 76px; display: flex; align-items: center; gap: 60px; }
+      .mascot-slot { position: relative; width: 46px; height: 56px; flex: none; }
+      .mascot { position: absolute; top: 0; left: 0; width: 44px; height: 53px; transform: scale(1.05); transform-origin: top left; }
+      .fm-head {
+        position: absolute; top: 8px; left: 4px; width: 36px; height: 26px; border-radius: 10px;
+        background: linear-gradient(160deg, #eef2ff, #c7d2fe); border: 1px solid #b9c0f7;
+        box-shadow: inset 0 -3px 6px rgba(99,102,241,0.25);
+        display: flex; align-items: center; justify-content: center; gap: 6px;
+      }
+      .fm-eye { width: 7px; height: 2.4px; border-radius: 2px; background: #6366f1; }
+      .fm-antenna { position: absolute; top: 0; left: 50%; width: 2px; height: 9px; margin-left: -1px; background: #b0b8f7; }
+      .fm-antenna::after {
+        content: ""; position: absolute; top: -5px; left: 50%; margin-left: -3.5px;
+        width: 7px; height: 7px; border-radius: 50%; background: #fbbf24;
+        box-shadow: 0 0 8px 1px rgba(251,191,36,0.75);
+      }
+      .fm-body {
+        position: absolute; top: 31px; left: 7px; width: 30px; height: 15px;
+        border-radius: 8px 8px 6px 6px; background: linear-gradient(160deg, #818cf8, #a78bfa);
+      }
+      .fm-arm { position: absolute; top: 34px; width: 10px; height: 3px; border-radius: 2px; background: #fff; }
+      .fm-arm.right { right: -2px; transform-origin: left center; transform: rotate(16deg); }
+      .fm-arm.left { left: -2px; transform-origin: right center; transform: rotate(-16deg); }
+      .fm-legs { position: absolute; top: 45px; left: 12px; width: 20px; height: 8px; }
+      .fm-legs i { position: absolute; top: 0; width: 5px; height: 8px; border-radius: 3px; background: #6366f1; }
+      .fm-legs i:first-child { left: 0; }
+      .fm-legs i:last-child { right: 0; }
+      .c-eyebrow { font-size: 19px; font-weight: 600; letter-spacing: 3px; text-transform: uppercase; color: #fcd34d; }
+      .c-stamp { position: absolute; top: 48px; right: 76px; font-size: 19px; font-weight: 500; color: #8d97b0; }
+      .body-wrap {
+        position: absolute; left: 76px; right: 76px; top: 132px; bottom: 96px;
+        display: flex; flex-direction: column; justify-content: center;
+      }
+      .c-title { margin: 0 0 22px; font-weight: 800; letter-spacing: -0.8px; color: #f2f5ff; line-height: 1.12; }
+      .c-body { margin: 0; white-space: pre-wrap; color: #dbe2f4; line-height: 1.5; font-weight: 400; }
+      .c-footer { position: absolute; left: 76px; bottom: 46px; display: flex; align-items: center; gap: 18px; }
+      .c-rule { width: 78px; height: 4px; border-radius: 4px; background: linear-gradient(90deg, #fbbf24, #a78bfa); }
+      .c-footer span { font-size: 20px; color: #8d97b0; font-weight: 500; }
     </style>
   </head>
   <body>
@@ -57,6 +117,11 @@
               <label for="body">Reflection *</label>
               <textarea id="body" name="body" rows="6" required
                 placeholder="Write today's reflection…"></textarea>
+              <small class="follow-note">
+                Line breaks are kept for the Channel copy, but WhatsApp does not
+                allow them inside template variables — the 7&nbsp;AM broadcast
+                flattens them to spaces. Prefer one paragraph if you use it.
+              </small>
             </div>
             <button class="btn primary" type="submit">Save</button>
           </form>
@@ -65,6 +130,35 @@
 
       <div class="section-head"><h2>Past Reflections</h2></div>
       <div id="refl-list"><div class="empty">Loading…</div></div>
+    </div>
+
+    <!-- Off-screen card, filled per reflection then serialised to a PNG. -->
+    <div id="cardStage">
+      <div class="card" id="card">
+        <div class="card-grid"></div>
+        <div class="masthead">
+          <div class="mascot-slot">
+            <div class="mascot">
+              <div class="fm-antenna"></div>
+              <div class="fm-head"><span class="fm-eye"></span><span class="fm-eye"></span></div>
+              <div class="fm-body"></div>
+              <div class="fm-arm left"></div>
+              <div class="fm-arm right"></div>
+              <div class="fm-legs"><i></i><i></i></div>
+            </div>
+          </div>
+          <div class="c-eyebrow">Daily Reflection</div>
+        </div>
+        <div class="c-stamp" id="cardStamp"></div>
+        <div class="body-wrap">
+          <h2 class="c-title" id="cardTitle"></h2>
+          <p class="c-body" id="cardBody"></p>
+        </div>
+        <div class="c-footer">
+          <div class="c-rule"></div>
+          <span>Bangalore Convention 2027</span>
+        </div>
+      </div>
     </div>
 
     <script src="js/common.js"></script>
@@ -100,6 +194,78 @@
           setTimeout(() => (btn.textContent = was), 1800);
         } catch (err) {
           toast("Couldn't copy — select the text manually.", "error");
+        }
+      }
+
+      // ---- Card image: rendered here in the browser, uploaded to the Worker --
+      // Longer reflections get smaller type so the card never overflows. Driven
+      // by character count rather than measurement, so it stays deterministic.
+      function sizeFor(len) {
+        if (len <= 120) return { body: 36, title: 50 };
+        if (len <= 220) return { body: 31, title: 46 };
+        if (len <= 340) return { body: 26, title: 42 };
+        if (len <= 480) return { body: 22, title: 38 };
+        return { body: 19, title: 34 };
+      }
+
+      async function renderCardPng(r) {
+        const titleEl = document.getElementById("cardTitle");
+        const bodyEl = document.getElementById("cardBody");
+        titleEl.textContent = r.title || "";
+        titleEl.style.display = r.title ? "" : "none";
+        bodyEl.textContent = r.body || "";
+        document.getElementById("cardStamp").textContent = new Date(
+          r.date + "T00:00:00"
+        ).toLocaleDateString("en-IN", { day: "numeric", month: "long" });
+
+        const s = sizeFor((r.body || "").length);
+        bodyEl.style.fontSize = s.body + "px";
+        titleEl.style.fontSize = s.title + "px";
+
+        const W = 1125, H = 600;
+        const css = document.getElementById("cardStyle").textContent;
+        const markup = new XMLSerializer().serializeToString(
+          document.getElementById("card").cloneNode(true)
+        );
+        const svg =
+          '<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H + '">' +
+            '<foreignObject x="0" y="0" width="' + W + '" height="' + H + '">' +
+              '<div xmlns="http://www.w3.org/1999/xhtml"><style>' + css + "</style>" +
+              markup + "</div>" +
+            "</foreignObject>" +
+          "</svg>";
+
+        const img = new Image();
+        // data: URL rather than blob: so the canvas stays untainted.
+        img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+        await img.decode();
+
+        const canvas = document.createElement("canvas");
+        canvas.width = W;
+        canvas.height = H;
+        const ctx = canvas.getContext("2d");
+        ctx.fillStyle = "#0b0f1a";
+        ctx.fillRect(0, 0, W, H);
+        ctx.drawImage(img, 0, 0, W, H);
+        return canvas.toDataURL("image/png");
+      }
+
+      async function makeImage(r, btn) {
+        btn.disabled = true;
+        const was = btn.textContent;
+        btn.textContent = "Rendering…";
+        try {
+          const dataUrl = await renderCardPng(r);
+          const res = await api("/api/reflections/" + r.id + "/image", {
+            method: "POST",
+            body: JSON.stringify({ dataUrl, devKey: getDevKey() }),
+          });
+          toast("Card saved (" + Math.round(res.bytes / 1024) + " KB)");
+          load();
+        } catch (err) {
+          toast(err.message || "Could not render the card", "error");
+          btn.textContent = was;
+          btn.disabled = false;
         }
       }
 
@@ -145,6 +311,46 @@
             copyBtn.textContent = "Copy for WhatsApp";
             copyBtn.addEventListener("click", () => copyPost(r, copyBtn));
             actions.appendChild(copyBtn);
+
+            const imgBtn = document.createElement("button");
+            imgBtn.className = "btn small" + (r.hasImage ? "" : " primary");
+            imgBtn.type = "button";
+            imgBtn.textContent = r.hasImage ? "Regenerate card" : "Generate card";
+            imgBtn.addEventListener("click", () => makeImage(r, imgBtn));
+            actions.appendChild(imgBtn);
+
+            if (r.hasImage) {
+              const view = document.createElement("a");
+              view.className = "btn small";
+              view.target = "_blank";
+              view.rel = "noopener";
+              view.href = "/api/reflections/" + r.id + "/image";
+              view.textContent = "View card";
+              actions.appendChild(view);
+            }
+
+            // Fires the broadcast immediately, ignoring the once-a-day marker,
+            // so the 7 AM job can be tested without waiting for 7 AM.
+            const sendBtn = document.createElement("button");
+            sendBtn.className = "btn small";
+            sendBtn.type = "button";
+            sendBtn.textContent = "Send broadcast now";
+            sendBtn.addEventListener("click", async () => {
+              if (!confirm("Send this to REFLECTION_RECIPIENTS now? This costs money per recipient.")) return;
+              sendBtn.disabled = true;
+              try {
+                const res = await api("/api/reflections/send", {
+                  method: "POST",
+                  body: JSON.stringify({ devKey: getDevKey() }),
+                });
+                toast(res.ok ? "Sent to " + res.sent + "/" + res.total : (res.note || "Nothing sent"),
+                      res.ok ? "success" : "error");
+              } catch (err) {
+                toast(err.message, "error");
+              }
+              sendBtn.disabled = false;
+            });
+            actions.appendChild(sendBtn);
 
             const delBtn = document.createElement("button");
             delBtn.className = "btn small";

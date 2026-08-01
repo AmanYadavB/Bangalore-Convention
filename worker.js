@@ -743,6 +743,25 @@ async function runSchedules(env) {
       await env.CONVENTION_KV.put("digest:sent:" + today, "1", { expirationTtl: 60 * 60 * 48 });
     }
   }
+  // Daily reflection broadcast, same shape as the digest: fires on the first
+  // tick at/after the configured IST time, once per IST day. Stays completely
+  // inert until REFLECTION_RECIPIENTS is set.
+  const reflectAt = /^([01]\d|2[0-3]):[0-5]\d$/.test(env.REFLECTION_TIME_IST || "")
+    ? env.REFLECTION_TIME_IST
+    : "07:00";
+  if (
+    env.REFLECTION_RECIPIENTS &&
+    hhmm >= reflectAt &&
+    !(await env.CONVENTION_KV.get("reflection:sent:" + today))
+  ) {
+    const result = await runReflectionBroadcast(env);
+    // Only mark the day done once something actually went out, so a transient
+    // failure retries on the next tick instead of silently losing the day.
+    if (result && result.ok) {
+      await env.CONVENTION_KV.put("reflection:sent:" + today, "1", { expirationTtl: 60 * 60 * 48 });
+    }
+  }
+
   const last = Number(await env.CONVENTION_KV.get("critical:last")) || 0;
   if (Date.now() - last >= 6 * 3600 * 1000) {
     await env.CONVENTION_KV.put("critical:last", String(Date.now()), { expirationTtl: 60 * 60 * 48 });
@@ -876,6 +895,88 @@ async function waSendConfirmation(env, reg, origin) {
       ],
     },
   });
+}
+
+// WhatsApp template PARAMETERS may not contain newlines, tabs, or runs of 4+
+// spaces - Meta rejects the whole message if they do. So a multi-paragraph
+// reflection gets flattened to single spaces when broadcast. The Channel copy
+// (reflections.html "Copy for WhatsApp") keeps the original line breaks.
+const waParam = (s) =>
+  String(s || "")
+    .replace(/\s*\n+\s*/g, " ")
+    .replace(/\t/g, " ")
+    .replace(/ {4,}/g, "   ")
+    .trim();
+
+// The 7 AM daily reflection broadcast. Uses the "daily_reflection" Marketing
+// template - a reflection is not tied to a transaction, so it cannot be Utility.
+async function runReflectionBroadcast(env) {
+  const recipients = String(env.REFLECTION_RECIPIENTS || "")
+    .split(",")
+    .map((s) => waNormalize(s))
+    .filter(Boolean);
+  if (!recipients.length) return { ok: false, note: "REFLECTION_RECIPIENTS is empty" };
+
+  const origin = env.SITE_ORIGIN || "https://biaac.com";
+  const today = istDate(0);
+  const list = await loadList(env, "reflections");
+  const todays = list.find((r) => r.date === today);
+  if (!todays) {
+    console.log("reflection broadcast: nothing written for " + today);
+    return { ok: false, note: "no reflection written for " + today };
+  }
+
+  let sent = 0;
+  for (const num of recipients) {
+    // Honour the same STOP opt-out the chat bot uses.
+    const state = await env.CONVENTION_KV.get("wa:" + num, { type: "json" });
+    if (state && state.optedOut) continue;
+
+    const res = await waPost(env, {
+      to: num,
+      type: "template",
+      template: {
+        name: "daily_reflection",
+        language: { code: env.WHATSAPP_TEMPLATE_LANG || "en" },
+        components: [
+          // Components must match the APPROVED template exactly: one created
+          // with an image header must ALWAYS be sent one, and a body-only
+          // template must NEVER be sent one. Either mismatch fails the whole
+          // message, so this is config rather than a guess.
+          ...(String(env.REFLECTION_TEMPLATE_HEADER || "image").toLowerCase() === "image"
+            ? [
+                {
+                  type: "header",
+                  parameters: [
+                    {
+                      type: "image",
+                      // Today's generated card, falling back to the static
+                      // branded one so a forgotten card still sends.
+                      image: {
+                        link: todays.hasImage
+                          ? origin + "/api/reflections/" + todays.id + "/image"
+                          : origin + "/img/daily-reflection.png",
+                      },
+                    },
+                  ],
+                },
+              ]
+            : []),
+          {
+            type: "body",
+            parameters: [
+              { type: "text", text: waParam(todays.title || "Today's Reflection") },
+              { type: "text", text: waParam(todays.body) },
+            ],
+          },
+        ],
+      },
+    });
+    if (res && res.ok) sent++;
+  }
+
+  console.log("reflection broadcast: sent " + sent + "/" + recipients.length + " for " + today);
+  return { ok: sent > 0, sent, total: recipients.length, date: today };
 }
 
 // The model writes for the website: [[ACTION]]/[[HTML]] markers drive the DOM
@@ -1096,6 +1197,47 @@ async function handleApi(request, env, ctx) {
   if (resource === "reflections") {
     const list = await loadList(env, "reflections");
 
+    // ---- Per-reflection card image ----
+    // Rendered in the browser on reflections.html and uploaded here, so the
+    // 7 AM template header has a real public URL to fetch. KV stores the PNG
+    // bytes directly; Meta fetches this URL when the message is sent.
+    if (parts[3] === "image") {
+      if (method === "GET") {
+        const buf = await env.CONVENTION_KV.get("reflimg:" + id, { type: "arrayBuffer" });
+        if (!buf) return json({ error: "No image for this reflection" }, 404);
+        return new Response(buf, {
+          headers: {
+            "content-type": "image/png",
+            "cache-control": "public, max-age=86400",
+          },
+        });
+      }
+
+      if (method === "POST") {
+        if (!isDeveloper(request, env, body)) return json({ error: "Forbidden" }, 403);
+        const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(body.dataUrl || "");
+        if (!m) return json({ error: "Expected a data:image/png;base64 payload" }, 400);
+
+        const bin = atob(m[1]);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        await env.CONVENTION_KV.put("reflimg:" + id, bytes, {
+          expirationTtl: 60 * 60 * 24 * 60, // 60 days is plenty for a daily card
+        });
+
+        // Flag it on the record so the broadcast knows to use this URL instead
+        // of the generic fallback, without reading the whole blob to check.
+        const item = list.find((r) => r.id === id);
+        if (item) {
+          item.hasImage = true;
+          await saveList(env, "reflections", list);
+        }
+        return json({ ok: true, bytes: bytes.length });
+      }
+
+      return json({ error: "Unsupported method" }, 405);
+    }
+
     if (method === "GET" && !id) {
       // Newest first. channelUrl travels with the payload so the follow button
       // can be changed in wrangler.toml without touching the page.
@@ -1118,6 +1260,13 @@ async function handleApi(request, env, ctx) {
       list.push(record);
       await saveList(env, "reflections", list);
       return json(record, 201);
+    }
+
+    // Manual trigger, so the 7 AM broadcast can be tested without waiting for
+    // 7 AM. Ignores the once-per-day marker on purpose.
+    if (method === "POST" && id === "send") {
+      if (!isDeveloper(request, env, body)) return json({ error: "Forbidden" }, 403);
+      return json(await runReflectionBroadcast(env));
     }
 
     if (method === "DELETE" && id) {
