@@ -45,7 +45,7 @@ DEEPGRAM_API_KEY = "60167b8e4cf80a81095ba76f3e465283b507fd03"
 DASHBOARD_EMAIL = "amankumaryadavasasmd@gmail.com"
 # Daily digest time in IST (24h "HH:MM"). Can also be changed live without a
 # redeploy:  POST /api/report/schedule  {"devKey":"...","time":"18:40"}
-DIGEST_TIME_IST = "22:30"
+DIGEST_TIME_IST = "06:00"
 # Critical alert fires when Deepgram credit drops below this many dollars.
 ALERT_DEEPGRAM_MIN = "2"
 # Deepgram's starting free credit in dollars — used to compute the "credit

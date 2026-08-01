@@ -965,6 +965,14 @@ async function handleApi(request, env, ctx) {
       await env.CONVENTION_KV.put("settings:digestTime", t);
       return json({ ok: true, digestTimeIst: t });
     }
+    // POST /api/report/reset — clear today's "already sent" flag so the next
+    // 10-minute tick can send the digest again (useful after changing the time
+    // or when a stale flag from an older deploy blocks the day).
+    if (parts[2] === "reset" && method === "POST") {
+      const today = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+      await env.CONVENTION_KV.delete("digest:sent:" + today);
+      return json({ ok: true, cleared: "digest:sent:" + today });
+    }
     // GET /api/report/status — why did/didn't the email go out?
     if (parts[2] === "status" && method === "GET") {
       const ist = new Date(Date.now() + 5.5 * 3600 * 1000);
