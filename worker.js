@@ -46,6 +46,61 @@ async function saveList(env, key, list) {
   await env.CONVENTION_KV.put(key, JSON.stringify(list));
 }
 
+// ---- Usage tracking (feeds the daily dashboard email) ----------------------
+// One KV JSON blob per day: counters for chat/TTS/provider wins. Kept 45 days.
+const usageKey = (d) => "usage:" + (d || new Date().toISOString().slice(0, 10));
+
+async function bumpUsage(env, updates) {
+  try {
+    const key = usageKey();
+    const cur = (await env.CONVENTION_KV.get(key, { type: "json" })) || {};
+    for (const [k, v] of Object.entries(updates)) {
+      if (k === "models") {
+        cur.models = cur.models || {};
+        for (const [m, n] of Object.entries(v)) cur.models[m] = (cur.models[m] || 0) + n;
+      } else {
+        cur[k] = (cur[k] || 0) + v;
+      }
+    }
+    await env.CONVENTION_KV.put(key, JSON.stringify(cur), { expirationTtl: 60 * 60 * 24 * 45 });
+  } catch (e) {
+    /* tracking must never break the app */
+  }
+}
+
+// Fire-and-forget: never adds latency to the user's request.
+function track(env, ctx, updates) {
+  const p = bumpUsage(env, updates);
+  if (ctx && ctx.waitUntil) ctx.waitUntil(p);
+}
+
+// Groq has no usage/billing API, but every API response carries rate-limit
+// headers: requests remaining TODAY and tokens remaining this minute. Keep the
+// latest snapshot in KV so the dashboard shows real remaining Groq quota.
+function captureGroqLimits(env, ctx, res) {
+  try {
+    const num = (v) => {
+      if (v === null || v === "") return null;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : null;
+    };
+    const snap = {
+      at: new Date().toISOString(),
+      requestsLimit: num(res.headers.get("x-ratelimit-limit-requests")),
+      requestsRemaining: num(res.headers.get("x-ratelimit-remaining-requests")),
+      tokensLimit: num(res.headers.get("x-ratelimit-limit-tokens")),
+      tokensRemaining: num(res.headers.get("x-ratelimit-remaining-tokens")),
+    };
+    if (snap.requestsLimit === null && snap.tokensLimit === null) return;
+    const p = env.CONVENTION_KV.put("groq:limits", JSON.stringify(snap), {
+      expirationTtl: 60 * 60 * 24 * 7,
+    });
+    if (ctx && ctx.waitUntil) ctx.waitUntil(p);
+  } catch (e) {
+    /* never break a reply over telemetry */
+  }
+}
+
 // ---- Developer-generated pages (stored in D1) ----------------------------
 // Both tables only need creating once per isolate; skipping the repeat DDL
 // saves a D1 round trip on every chat message and /p/<slug> view.
@@ -243,7 +298,278 @@ async function buildDataSummary(env) {
   ].join("\n");
 }
 
-async function handleApi(request, env) {
+// ---- Ops dashboard email (daily digest + critical alerts) ------------------
+async function getUsage(env, dateStr) {
+  return (await env.CONVENTION_KV.get(usageKey(dateStr), { type: "json" })) || {};
+}
+
+// Deepgram: dollars remaining on the account (documented balances API).
+async function getDeepgramBalance(env) {
+  if (!env.DEEPGRAM_API_KEY) return { ok: false, note: "no DEEPGRAM_API_KEY" };
+  try {
+    const headers = { Authorization: "Token " + env.DEEPGRAM_API_KEY };
+    const pr = await fetch("https://api.deepgram.com/v1/projects", { headers });
+    if (!pr.ok) return { ok: false, note: "projects http " + pr.status };
+    const pd = await pr.json().catch(() => ({}));
+    const id = pd.projects && pd.projects[0] && pd.projects[0].project_id;
+    if (!id) return { ok: false, note: "no project on account" };
+    const br = await fetch(`https://api.deepgram.com/v1/projects/${id}/balances`, { headers });
+    if (!br.ok) return { ok: false, note: "balances http " + br.status };
+    const bd = await br.json().catch(() => ({}));
+    const dollars = (bd.balances || []).reduce((s, b) => s + (Number(b.amount) || 0), 0);
+    return { ok: true, dollars };
+  } catch (e) {
+    return { ok: false, note: e && e.message ? e.message : String(e) };
+  }
+}
+
+// Cloudflare Workers request stats for the last 24h via the GraphQL API.
+// Optional: needs CF_ACCOUNT_ID (var) + CF_API_TOKEN (secret, Analytics:Read).
+async function getCloudflareRequests(env) {
+  if (!env.CF_API_TOKEN || !env.CF_ACCOUNT_ID)
+    return { ok: false, note: "set CF_ACCOUNT_ID var + CF_API_TOKEN secret to enable" };
+  try {
+    const end = new Date();
+    const start = new Date(end.getTime() - 24 * 3600 * 1000);
+    const query =
+      "query($tag: String!, $start: Time!, $end: Time!) { viewer { accounts(filter: {accountTag: $tag}) { " +
+      "workersInvocationsAdaptive(filter: {datetime_geq: $start, datetime_leq: $end}, limit: 100) { sum { requests errors subrequests } } } } }";
+    const res = await fetch("https://api.cloudflare.com/client/v4/graphql", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + env.CF_API_TOKEN, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query,
+        variables: { tag: env.CF_ACCOUNT_ID, start: start.toISOString(), end: end.toISOString() },
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (data.errors && data.errors.length)
+      return { ok: false, note: data.errors[0].message || "graphql error" };
+    const rows =
+      (data.data &&
+        data.data.viewer &&
+        data.data.viewer.accounts &&
+        data.data.viewer.accounts[0] &&
+        data.data.viewer.accounts[0].workersInvocationsAdaptive) ||
+      [];
+    let requests = 0, errors = 0, subrequests = 0;
+    for (const r of rows) {
+      requests += (r.sum && r.sum.requests) || 0;
+      errors += (r.sum && r.sum.errors) || 0;
+      subrequests += (r.sum && r.sum.subrequests) || 0;
+    }
+    return { ok: true, requests, errors, subrequests };
+  } catch (e) {
+    return { ok: false, note: e && e.message ? e.message : String(e) };
+  }
+}
+
+async function sendOpsEmail(env, subject, html) {
+  if (!env.DASHBOARD_EMAIL) return { ok: false, note: "DASHBOARD_EMAIL not set" };
+  try {
+    const res = await fetch("https://api.mailchannels.net/tx/v1/send", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-api-key": env.MAILCHANNELS_API_KEY || "" },
+      body: JSON.stringify({
+        personalizations: [{ to: [{ email: env.DASHBOARD_EMAIL, name: "Convention Ops" }] }],
+        from: { email: "noreply@biaac.com", name: "Convention Ops Dashboard" },
+        subject,
+        content: [{ type: "text/html", value: html }],
+      }),
+    });
+    return { ok: res.ok || res.status === 202, note: "http " + res.status };
+  } catch (e) {
+    return { ok: false, note: e && e.message ? e.message : String(e) };
+  }
+}
+
+// Everything the dashboard shows, gathered in one place.
+async function collectDashboardData(env) {
+  const today = new Date().toISOString().slice(0, 10);
+  const yesterday = new Date(Date.now() - 24 * 3600 * 1000).toISOString().slice(0, 10);
+  const [usageToday, usageYesterday, dg, cf, registrations, expenses, groqLimits] = await Promise.all([
+    getUsage(env, today),
+    getUsage(env, yesterday),
+    getDeepgramBalance(env),
+    getCloudflareRequests(env),
+    loadList(env, "registrations"),
+    loadList(env, "expenses"),
+    env.CONVENTION_KV.get("groq:limits", { type: "json" }),
+  ]);
+  const paid = registrations.filter((r) => r.paid);
+  const collected = paid.reduce((s, r) => s + (r.amount || 0), 0);
+  const spent = expenses.reduce((s, e) => s + (e.amount || 0), 0);
+  return {
+    today, yesterday, usageToday, usageYesterday, dg, cf, groqLimits,
+    regs: {
+      count: registrations.length,
+      paidCount: paid.length,
+      collected,
+      expenses: spent,
+      balance: collected - spent,
+    },
+  };
+}
+
+// Critical conditions worth an immediate email. Each has a stable id so the
+// 6-hourly check never sends the same alert twice in a day.
+function findAlerts(d, env) {
+  const alerts = [];
+  const minDollars = Number(env.ALERT_DEEPGRAM_MIN || 2);
+  if (d.dg.ok && d.dg.dollars < minDollars) {
+    alerts.push({
+      id: "deepgram-low",
+      text: `Deepgram balance is $${d.dg.dollars.toFixed(2)} — below the $${minDollars} threshold. The neural voice stops working at $0; top up soon.`,
+    });
+  }
+  if (!d.dg.ok && env.DEEPGRAM_API_KEY) {
+    alerts.push({
+      id: "deepgram-error",
+      text: `Deepgram API is not answering for the configured key (${d.dg.note}). The key may be expired or revoked — voice replies are falling back to the robotic browser voice.`,
+    });
+  }
+  if ((d.usageToday.degradedReplies || 0) >= 5) {
+    alerts.push({
+      id: "chat-degraded",
+      text: `${d.usageToday.degradedReplies} chat requests today ended in the "assistant is resting" fallback — ALL AI providers (Workers AI, Gemini, Groq) are failing. Check keys and quotas.`,
+    });
+  }
+  if (
+    d.groqLimits &&
+    d.groqLimits.requestsLimit &&
+    d.groqLimits.requestsRemaining !== null &&
+    d.groqLimits.requestsRemaining < d.groqLimits.requestsLimit * 0.1
+  ) {
+    alerts.push({
+      id: "groq-quota-low",
+      text: `Groq has only ${d.groqLimits.requestsRemaining} of ${d.groqLimits.requestsLimit} daily requests left — when it hits 0 the chat loses its most reliable fallback provider until the daily reset.`,
+    });
+  }
+  if (d.cf.ok && d.cf.requests > 90000) {
+    alerts.push({
+      id: "cf-requests-high",
+      text: `${d.cf.requests.toLocaleString()} Worker requests in the last 24h — the free plan allows 100,000/day. The site may start rejecting requests.`,
+    });
+  }
+  return alerts;
+}
+
+const money = (n) => "₹" + Number(n || 0).toLocaleString("en-IN");
+
+// Human note for the Groq row: real remaining quota from Groq's own
+// rate-limit headers, captured on the most recent Groq call.
+function groqQuotaNote(gl) {
+  if (!gl) return "quota appears after the first Groq call";
+  const parts = [];
+  if (gl.requestsRemaining !== null && gl.requestsLimit) {
+    parts.push(gl.requestsRemaining.toLocaleString() + " of " + gl.requestsLimit.toLocaleString() + " requests left today");
+  }
+  if (gl.tokensRemaining !== null) {
+    parts.push(gl.tokensRemaining.toLocaleString() + " tokens/min free");
+  }
+  const when = gl.at ? " (as of " + gl.at.slice(11, 16) + " UTC)" : "";
+  return parts.length ? parts.join(" · ") + when : "quota headers unavailable";
+}
+
+function dashRow(label, value, note) {
+  return (
+    '<tr><td style="padding:8px 12px;border-bottom:1px solid #eee;color:#555">' + label +
+    '</td><td style="padding:8px 12px;border-bottom:1px solid #eee;font-weight:600;text-align:right">' + value +
+    '</td><td style="padding:8px 12px;border-bottom:1px solid #eee;color:#999;font-size:12px">' + (note || "") +
+    "</td></tr>"
+  );
+}
+
+function dashSection(title, rowsHtml) {
+  return (
+    '<h3 style="margin:22px 0 6px;font-size:14px;color:#333">' + title + "</h3>" +
+    '<table style="border-collapse:collapse;width:100%;background:#fff;border:1px solid #eee;border-radius:8px">' +
+    rowsHtml + "</table>"
+  );
+}
+
+function buildDigestHtml(d, alerts) {
+  const u = d.usageToday, y = d.usageYesterday;
+  const cmp = (a, b) => `${a || 0} <span style="color:#999;font-weight:400">(yday ${b || 0})</span>`;
+  const models = Object.entries(u.models || {})
+    .sort((a, b) => b[1] - a[1])
+    .map(([m, n]) => dashRow(m, n, ""))
+    .join("") || dashRow("no chat replies yet today", "-", "");
+  // Deepgram Aura-2 list price ≈ $0.030 per 1k characters.
+  const ttsCost = ((u.ttsChars || 0) / 1000) * 0.03;
+
+  const alertHtml = alerts.length
+    ? '<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px 16px;margin:0 0 18px">' +
+      '<strong style="color:#b91c1c">⚠️ Needs attention</strong><ul style="margin:8px 0 0;padding-left:18px;color:#7f1d1d">' +
+      alerts.map((a) => "<li>" + a.text + "</li>").join("") + "</ul></div>"
+    : '<p style="color:#15803d;margin:0 0 18px">✅ All systems healthy.</p>';
+
+  return (
+    '<div style="font-family:Segoe UI,Arial,sans-serif;max-width:640px;margin:0 auto;padding:20px;background:#f8fafc">' +
+    '<h2 style="margin:0 0 4px">📊 Convention dashboard — ' + d.today + "</h2>" +
+    '<p style="color:#777;margin:0 0 18px">Daily ops digest for the Bangalore Convention site.</p>' +
+    alertHtml +
+    dashSection("💰 Balances & platform",
+      dashRow("Deepgram credit remaining", d.dg.ok ? "$" + d.dg.dollars.toFixed(2) : "unavailable", d.dg.ok ? "TTS voice budget" : d.dg.note) +
+      dashRow("Cloudflare requests (24h)", d.cf.ok ? d.cf.requests.toLocaleString() : "n/a", d.cf.ok ? d.cf.errors + " errors · " + d.cf.subrequests.toLocaleString() + " subrequests" : d.cf.note)
+    ) +
+    dashSection("🤖 AI usage today",
+      dashRow("Chat requests", cmp(u.chatRequests, y.chatRequests), (u.voiceChats || 0) + " via voice") +
+      dashRow("Workers AI replies", cmp(u.workersAiWins, y.workersAiWins), "free tier: 10k neurons/day") +
+      dashRow("Groq replies", cmp(u.groqCalls, y.groqCalls), groqQuotaNote(d.groqLimits)) +
+      dashRow("Failed completely (degraded)", cmp(u.degradedReplies, y.degradedReplies), "“assistant is resting” shown")
+    ) +
+    dashSection("🗣️ Text-to-speech today",
+      dashRow("TTS clips", cmp(u.ttsCalls, y.ttsCalls), (u.melo || 0) + " fell back to MeloTTS") +
+      dashRow("Characters synthesized", cmp(u.ttsChars, y.ttsChars), "≈ $" + ttsCost.toFixed(3) + " at Aura-2 list price")
+    ) +
+    dashSection("🎯 Models that answered today", models) +
+    dashSection("🎟️ Event numbers",
+      dashRow("Registrations", d.regs.count, d.regs.paidCount + " paid") +
+      dashRow("Collected", money(d.regs.collected), "") +
+      dashRow("Expenses", money(d.regs.expenses), "") +
+      dashRow("Balance", money(d.regs.balance), "")
+    ) +
+    '<p style="color:#aaa;font-size:11px;margin-top:20px">Sent automatically by the Convention Worker · daily digest</p>' +
+    "</div>"
+  );
+}
+
+function buildAlertHtml(alerts) {
+  return (
+    '<div style="font-family:Segoe UI,Arial,sans-serif;max-width:640px;margin:0 auto;padding:20px">' +
+    '<h2 style="color:#b91c1c;margin:0 0 12px">🚨 Convention site — critical alert</h2>' +
+    '<ul style="padding-left:18px;color:#333;line-height:1.6">' +
+    alerts.map((a) => "<li>" + a.text + "</li>").join("") +
+    "</ul>" +
+    '<p style="color:#777">The daily digest has full numbers. This alert is sent at most once per issue per day.</p>' +
+    "</div>"
+  );
+}
+
+async function runDailyDigest(env) {
+  const d = await collectDashboardData(env);
+  const alerts = findAlerts(d, env);
+  const subject = (alerts.length ? "⚠️ " : "📊 ") + "Convention daily dashboard — " + d.today;
+  return sendOpsEmail(env, subject, buildDigestHtml(d, alerts));
+}
+
+async function runCriticalCheck(env) {
+  const d = await collectDashboardData(env);
+  const alerts = findAlerts(d, env);
+  const fresh = [];
+  for (const a of alerts) {
+    const k = "alert:" + d.today + ":" + a.id;
+    if (!(await env.CONVENTION_KV.get(k))) {
+      fresh.push(a);
+      await env.CONVENTION_KV.put(k, "1", { expirationTtl: 60 * 60 * 24 });
+    }
+  }
+  if (!fresh.length) return { ok: true, note: "nothing critical (or already alerted today)" };
+  return sendOpsEmail(env, "🚨 Convention CRITICAL: " + fresh.map((f) => f.id).join(", "), buildAlertHtml(fresh));
+}
+
+async function handleApi(request, env, ctx) {
   if (!env.CONVENTION_KV) {
     return json(
       { error: "KV namespace 'CONVENTION_KV' is not bound. Add it in wrangler.toml or Worker settings." },
@@ -397,6 +723,25 @@ async function handleApi(request, env) {
     return json({ ok: isDeveloper(request, env, body) });
   }
 
+  // ---- Ops dashboard: preview in browser / send now (developer-gated) ----
+  // GET  /api/report/preview?devKey=...  → the digest HTML, rendered live
+  // POST /api/report/send                → email the daily digest right now
+  // POST /api/report/check               → run the critical check right now
+  if (resource === "report") {
+    const qKey = url.searchParams.get("devKey") || "";
+    const authed =
+      isDeveloper(request, env, body) || (Boolean(env.DEV_KEY) && qKey === env.DEV_KEY);
+    if (!authed) return json({ error: "Developer key required." }, 403);
+    if (parts[2] === "preview" && method === "GET") {
+      const d = await collectDashboardData(env);
+      return new Response(buildDigestHtml(d, findAlerts(d, env)), {
+        headers: { "content-type": "text/html; charset=utf-8" },
+      });
+    }
+    if (parts[2] === "send" && method === "POST") return json(await runDailyDigest(env));
+    if (parts[2] === "check" && method === "POST") return json(await runCriticalCheck(env));
+  }
+
   // ---- AI knowledge (Feed AI page; developer-gated, stored in D1) ----
   if (resource === "knowledge") {
     if (!env.CONVENTION_DB) {
@@ -525,6 +870,7 @@ async function handleApi(request, env) {
     // Voice mode: the user is listening, so we keep answers short and snappy so
     // the neural TTS returns quickly and there is far less to wait for.
     const voice = body.voice === true;
+    track(env, ctx, { chatRequests: 1, voiceChats: voice ? 1 : 0 });
 
     const priceLines = PRICING.map(
       (c) => `- ${c.name}: \u20b9${c.price} (${c.description})`
@@ -828,6 +1174,7 @@ async function handleApi(request, env) {
               }
             }
             if (full) {
+              track(env, ctx, { workersAiWins: 1, models: { [model]: 1 } });
               sse({ done: true, reply: full.replace(/<think>[\s\S]*?<\/think>/gi, "").trim() });
               writer.close(); return;
             }
@@ -874,7 +1221,10 @@ async function handleApi(request, env) {
                   } catch {}
                 }
               }
-              if (full) { sse({ done: true, reply: full.trim() }); writer.close(); return; }
+              if (full) {
+                track(env, ctx, { models: { "gemini-2.0-flash": 1 } });
+                sse({ done: true, reply: full.trim() }); writer.close(); return;
+              }
               attempts.push("gemini-stream: empty reply");
             } else {
               attempts.push("gemini-stream: http " + gRes.status);
@@ -891,7 +1241,10 @@ async function handleApi(request, env) {
           });
           const fb = ((fallback && (fallback.response || fallback.result)) || "")
             .replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
-          if (fb) { sse({ done: true, reply: fb }); writer.close(); return; }
+          if (fb) {
+            track(env, ctx, { workersAiWins: 1, models: { "@cf/meta/llama-3.1-8b-instruct-fast (plain)": 1 } });
+            sse({ done: true, reply: fb }); writer.close(); return;
+          }
           attempts.push("plain-fallback: empty reply");
         } catch (err) {
           attempts.push("plain-fallback: " + (err && err.message ? err.message : String(err)));
@@ -917,6 +1270,7 @@ async function handleApi(request, env) {
                 stream: true,
               }),
             });
+            captureGroqLimits(env, ctx, groqRes);
             if (groqRes.ok && groqRes.body) {
               const reader = groqRes.body.getReader();
               const dec = new TextDecoder();
@@ -944,6 +1298,7 @@ async function handleApi(request, env) {
                 }
               }
               if (full) {
+                track(env, ctx, { groqCalls: 1, models: { "groq/llama-3.3-70b-versatile": 1 } });
                 sse({ done: true, reply: full.replace(/<think>[\s\S]*?<\/think>/gi, "").trim() });
                 writer.close(); return;
               }
@@ -958,6 +1313,7 @@ async function handleApi(request, env) {
         }
         const detail = attempts.join(" | ");
         console.log("voice/stream chat fallback:", detail);
+        track(env, ctx, { degradedReplies: 1 });
         sse({
           done: true,
           reply: "The assistant is taking a quick break \uD83D\uDE34. Please try again shortly \u2014 meanwhile you can sign up on the Register page or reach the organising committee.",
@@ -989,7 +1345,10 @@ async function handleApi(request, env) {
     for (const model of models) {
       try {
         const reply = await runModel(fullSystem, model, maxTokens);
-        if (reply) return json({ reply });
+        if (reply) {
+          track(env, ctx, { workersAiWins: 1, models: { [model]: 1 } });
+          return json({ reply });
+        }
         attempts.push(model + ": empty reply");
       } catch (err) {
         attempts.push(model + ": " + (err && err.message ? err.message : String(err)));
@@ -1000,7 +1359,10 @@ async function handleApi(request, env) {
     //    chatbot working no matter how much data was fed.
     try {
       const reply = await runModel(leanSystem, "@cf/meta/llama-3.1-8b-instruct-fast", 256);
-      if (reply) return json({ reply });
+      if (reply) {
+        track(env, ctx, { workersAiWins: 1, models: { "@cf/meta/llama-3.1-8b-instruct-fast (lean)": 1 } });
+        return json({ reply });
+      }
       attempts.push("lean-retry: empty reply");
     } catch (err) {
       attempts.push("lean-retry: " + (err && err.message ? err.message : String(err)));
@@ -1088,6 +1450,7 @@ async function handleApi(request, env) {
           }
         );
 
+        captureGroqLimits(env, ctx, groqRes);
         const rawText = await groqRes.clone().text().catch(() => "");
 
         if (groqRes.ok) {
@@ -1096,7 +1459,10 @@ async function handleApi(request, env) {
           const reply =
             gd?.choices?.[0]?.message?.content?.trim();
 
-          if (reply) return json({ reply });
+          if (reply) {
+            track(env, ctx, { groqCalls: 1, models: { "groq/llama-3.3-70b-versatile": 1 } });
+            return json({ reply });
+          }
 
           attempts.push(
             "groq: empty reply | raw=" + rawText.slice(0, 500)
@@ -1118,6 +1484,7 @@ async function handleApi(request, env) {
     //    Network tab without scaring end users.
     const detail = attempts.join(" | ");
     console.log("chat fallback:", detail);
+    track(env, ctx, { degradedReplies: 1 });
     return json({
       reply:
         "I'm taking a quick break. Please try again shortly, or contact the organisers if you need urgent help.",
@@ -1254,6 +1621,7 @@ async function handleApi(request, env) {
           const bytes = new Uint8Array(buf);
           let binary = "";
           for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+          track(env, ctx, { ttsCalls: 1, ttsChars: text.length });
           return json({ audio: btoa(binary) });
         }
         // Non-OK response falls through to MeloTTS fallback below.
@@ -1267,6 +1635,7 @@ async function handleApi(request, env) {
       const res = await env.AI.run("@cf/myshell-ai/melotts", { prompt: text, lang: "en" });
       const audio = res && res.audio ? res.audio : null;
       if (!audio) return json({ error: "no audio produced" }, 502);
+      track(env, ctx, { ttsCalls: 1, ttsChars: text.length, melo: 1 });
       return json({ audio });
     } catch (err) {
       return json(
@@ -1280,13 +1649,13 @@ async function handleApi(request, env) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
     // API requests go to the backend.
     if (url.pathname === "/api" || url.pathname.startsWith("/api/")) {
       try {
-        return await handleApi(request, env);
+        return await handleApi(request, env, ctx);
       } catch (err) {
         // Never let the backend crash into a blank 500 - surface the real reason
         // as JSON so it shows up in the browser console / Network tab.
@@ -1324,5 +1693,17 @@ export default {
 
     // Everything else is served from the static site (public/).
     return env.ASSETS.fetch(request);
+  },
+
+  // Cron Triggers (wrangler.toml [triggers]): the 6-hourly cron runs the
+  // critical check (emails only when something needs attention, deduped per
+  // day); any other cron is the daily digest — so the digest time can be
+  // changed in wrangler.toml without touching this code.
+  async scheduled(event, env, ctx) {
+    if (event.cron === "0 */6 * * *") {
+      ctx.waitUntil(runCriticalCheck(env));
+    } else {
+      ctx.waitUntil(runDailyDigest(env));
+    }
   },
 };

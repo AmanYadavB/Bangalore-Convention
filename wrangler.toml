@@ -25,6 +25,12 @@ database_id = "60bc0f91-4595-478b-a576-1841ebb41588"
 [ai]
 binding = "AI"
 
+# Ops dashboard emails (cron times are UTC — IST is UTC+5:30):
+#   "10 13 * * *" = daily digest at 18:40 IST (6:40 PM)
+#   "0 */6 * * *" = critical-only check every 6 hours (emails only on problems)
+[triggers]
+crons = ["10 13 * * *", "0 */6 * * *"]
+
 # Developer-role gate. Only requests carrying this exact key may create,
 # edit or delete pages through the agent. CHANGE THIS before deploying, and
 # prefer setting it as a secret:  npx wrangler secret put DEV_KEY
@@ -34,3 +40,13 @@ MAILCHANNELS_API_KEY = "uqrnax8EQ8hveVhcTZTKjkFAdl9Q6iQb"
 RAZORPAY_KEY_ID = "rzp_test_TIK9lJop7jGPPi"
 RAZORPAY_KEY_SECRET = "0aYSxQjaJf95wOOczK5k1fLm"
 DEEPGRAM_API_KEY = "60167b8e4cf80a81095ba76f3e465283b507fd03"
+
+# Where the ops dashboard emails go. CHANGE THIS to your Gmail address.
+DASHBOARD_EMAIL = "amankumaryadavasasmd@gmail.com"
+# Critical alert fires when Deepgram credit drops below this many dollars.
+ALERT_DEEPGRAM_MIN = "2"
+# Optional — enables the "Cloudflare requests (24h)" row in the digest:
+#   CF_ACCOUNT_ID  = your account id (dash.cloudflare.com → Workers → right sidebar)
+#   CF_API_TOKEN   = create an API token with "Account Analytics: Read", then run
+#                    npx wrangler secret put CF_API_TOKEN
+CF_ACCOUNT_ID = "8d7633c4e9136784b6f1f567c35728ad"

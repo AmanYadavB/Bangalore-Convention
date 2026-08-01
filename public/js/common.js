@@ -1526,7 +1526,9 @@ function mountChat() {
     const voice = !!opts.voice;
     const mySpeakId = ++speakId;
     const typingEl = addMsg("assistant typing", "\u2026");
-    let bubble = null;          // non-voice: plain element
+    // Typed mode: the mascot stands beside its words and scribbles while the
+    // tokens land, exactly like a non-streamed reply. bubble is its text span.
+    let bubble = null, bubbleRow = null, bubbleBot = null;
     let voiceMascot = null;     // voice: { row, bot, txt } from addAssistantBubble
     let fullText = "", sentenceBuf = "", spokenText = "";
     const ttsQueue = [];
@@ -1604,7 +1606,13 @@ function mountChat() {
             sentenceBuf += data.t;
             if (!voice) {
               if (typingEl.parentNode) typingEl.remove();
-              if (!bubble) bubble = addMsg("assistant", "");
+              if (!bubble) {
+                const m = addAssistantBubble();
+                m.bot.classList.add("writing");
+                bubbleRow = m.row;
+                bubbleBot = m.bot;
+                bubble = m.txt;
+              }
               bubble.innerHTML = escapeHtml(visibleText(fullText)).replace(/\n/g, "<br>");
               log.scrollTop = log.scrollHeight;
             } else {
@@ -1640,7 +1648,7 @@ function mountChat() {
       // SSE sent an error event (AI models unavailable) — show friendly message, not "network error".
       if (sseError) {
         if (typingEl.parentNode) typingEl.remove();
-        if (voice) { if (voiceMascot) voiceMascot.row.remove(); } else { if (bubble) bubble.remove(); }
+        if (voice) { if (voiceMascot) voiceMascot.row.remove(); } else { if (bubbleRow) bubbleRow.remove(); }
         if (voice) { speaking = false; afterSpeak(); }
         handleAssistantReply(
           "The assistant is resting for a moment \uD83D\uDE34. Please try again shortly \u2014 meanwhile you can sign up on the Register page or reach the organising committee.",
@@ -1692,7 +1700,7 @@ function mountChat() {
     } catch (err) {
       console.error("[stream]", err);
       typingEl.remove();
-      if (voice) { if (voiceMascot) voiceMascot.row.remove(); } else { if (bubble) bubble.remove(); }
+      if (voice) { if (voiceMascot) voiceMascot.row.remove(); } else { if (bubbleRow) bubbleRow.remove(); }
       if (voice) { speaking = false; afterSpeak(); }
       handleAssistantReply(
         "I couldn\u2019t reach the server just now \uD83D\uDCF6. Please check your connection and try again.",
@@ -1700,6 +1708,8 @@ function mountChat() {
       );
     } finally {
       sendBtn.disabled = false;
+      // Stream over -> the mascot puts its pen down.
+      if (bubbleBot) bubbleBot.classList.remove("writing");
       if (!isMobile() && !voice) text.focus();
     }
   }
@@ -1718,13 +1728,25 @@ function mountChat() {
     return sendToChatStream(q, opts);
   }
 
+  // Sending a typed message cuts the bot's voice — focusing or typing alone
+  // leaves it talking.
   form.addEventListener("submit", (e) => {
     e.preventDefault();
+    stopSpeaking();
     const q = text.value.trim();
     if (!q) return;
+    if (voiceMode) stopVoiceMode();
     text.value = "";
     sendToChat(q, { voice: false });
   });
+
+  // Touching the text box is an explicit switch to text mode: the mic must not
+  // stay live in the background, listening to the room while the user types.
+  const leaveVoiceForTyping = () => {
+    if (voiceMode) stopVoiceMode();
+  };
+  text.addEventListener("focus", leaveVoiceForTyping);
+  text.addEventListener("input", leaveVoiceForTyping);
 
   // ---- Voice / talk mode (browser Web Speech API, no install needed) -------
   // Listen with SpeechRecognition, answer via the same /api/chat, then speak
@@ -2250,6 +2272,13 @@ function mountChat() {
     const said = (finalBuffer + " " + lastInterim).replace(/\s+/g, " ").trim();
     finalBuffer = "";
     lastInterim = "";
+    // Talk mode off (user switched to typing) -> whatever the recogniser was
+    // still holding is dropped, never sent. Otherwise a trailing phrase gets
+    // committed after the mic was turned off and the bot answers out loud.
+    if (!voiceMode) {
+      clearInterim();
+      return;
+    }
     if (!said || processing || speaking) return;
     clearInterim();
     processing = true; // lock: no more input until we've answered + spoken
@@ -2275,9 +2304,10 @@ function mountChat() {
     };
 
     recognition.onresult = (ev) => {
-      // Ignore anything heard while the bot is talking, still answering, or in
-      // the echo-tail window. This is what stops mobile stacking prompts.
-      if (speaking || processing || Date.now() < ignoreResultsUntil) {
+      // Ignore anything heard while talk mode is off, while the bot is talking,
+      // while it's still answering, or in the echo-tail window. This is what
+      // stops mobile stacking prompts.
+      if (!voiceMode || speaking || processing || Date.now() < ignoreResultsUntil) {
         clearInterim();
         return;
       }
@@ -2318,6 +2348,14 @@ function mountChat() {
 
     recognition.onend = () => {
       recognizing = false;
+      // Talk mode was switched off — stay stopped and drop the tail. stop()
+      // makes the recogniser flush one last result, so this really does happen.
+      if (!voiceMode) {
+        finalBuffer = "";
+        lastInterim = "";
+        clearInterim();
+        return;
+      }
       // If the user finished a phrase (recognizer stopped on its own), send it.
       if ((finalBuffer.trim() || lastInterim.trim()) && !processing && !speaking) {
         commitPhrase();
