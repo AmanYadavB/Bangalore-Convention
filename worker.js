@@ -48,7 +48,13 @@ async function saveList(env, key, list) {
 
 // ---- Usage tracking (feeds the daily dashboard email) ----------------------
 // One KV JSON blob per day: counters for chat/TTS/provider wins. Kept 45 days.
-const usageKey = (d) => "usage:" + (d || new Date().toISOString().slice(0, 10));
+// Days are bucketed by IST date so "today" in the email matches the organiser's
+// day, not UTC's (which flips at 5:30 AM IST).
+const istDate = (daysAgo) =>
+  new Date(Date.now() + 5.5 * 3600 * 1000 - (daysAgo || 0) * 86400000)
+    .toISOString()
+    .slice(0, 10);
+const usageKey = (d) => "usage:" + (d || istDate(0));
 
 async function bumpUsage(env, updates) {
   try {
@@ -304,16 +310,26 @@ async function getUsage(env, dateStr) {
 }
 
 // Deepgram: dollars remaining on the account (documented balances API).
+// NOTE: reading balances needs a key with Owner/Administrator scope; a
+// speak-only key gets 403 here even though TTS itself works fine. Set
+// DEEPGRAM_BALANCE_KEY to a scoped key to enable this row without widening
+// the main TTS key's permissions.
 async function getDeepgramBalance(env) {
-  if (!env.DEEPGRAM_API_KEY) return { ok: false, note: "no DEEPGRAM_API_KEY" };
+  const bKey = env.DEEPGRAM_BALANCE_KEY || env.DEEPGRAM_API_KEY;
+  if (!bKey) return { ok: false, note: "no DEEPGRAM_API_KEY" };
+  const permissionNote =
+    "TTS works, but this key can't read the balance (403). Create a key with " +
+    "Owner/Administrator scope in the Deepgram console and set it as DEEPGRAM_BALANCE_KEY.";
   try {
-    const headers = { Authorization: "Token " + env.DEEPGRAM_API_KEY };
+    const headers = { Authorization: "Token " + bKey };
     const pr = await fetch("https://api.deepgram.com/v1/projects", { headers });
+    if (pr.status === 403) return { ok: false, permission: true, note: permissionNote };
     if (!pr.ok) return { ok: false, note: "projects http " + pr.status };
     const pd = await pr.json().catch(() => ({}));
     const id = pd.projects && pd.projects[0] && pd.projects[0].project_id;
     if (!id) return { ok: false, note: "no project on account" };
     const br = await fetch(`https://api.deepgram.com/v1/projects/${id}/balances`, { headers });
+    if (br.status === 403) return { ok: false, permission: true, note: permissionNote };
     if (!br.ok) return { ok: false, note: "balances http " + br.status };
     const bd = await br.json().catch(() => ({}));
     const dollars = (bd.balances || []).reduce((s, b) => s + (Number(b.amount) || 0), 0);
@@ -385,8 +401,8 @@ async function sendOpsEmail(env, subject, html) {
 
 // Everything the dashboard shows, gathered in one place.
 async function collectDashboardData(env) {
-  const today = new Date().toISOString().slice(0, 10);
-  const yesterday = new Date(Date.now() - 24 * 3600 * 1000).toISOString().slice(0, 10);
+  const today = istDate(0);
+  const yesterday = istDate(1);
   const [usageToday, usageYesterday, dg, cf, registrations, expenses, groqLimits] = await Promise.all([
     getUsage(env, today),
     getUsage(env, yesterday),
@@ -422,7 +438,9 @@ function findAlerts(d, env) {
       text: `Deepgram balance is $${d.dg.dollars.toFixed(2)} — below the $${minDollars} threshold. The neural voice stops working at $0; top up soon.`,
     });
   }
-  if (!d.dg.ok && env.DEEPGRAM_API_KEY) {
+  // A 403 is a key-scope issue, not an outage — TTS still works, so it stays
+  // an informational note in the digest rather than a critical alert.
+  if (!d.dg.ok && !d.dg.permission && env.DEEPGRAM_API_KEY) {
     alerts.push({
       id: "deepgram-error",
       text: `Deepgram API is not answering for the configured key (${d.dg.note}). The key may be expired or revoked — voice replies are falling back to the robotic browser voice.`,
@@ -552,6 +570,32 @@ async function runDailyDigest(env) {
   const alerts = findAlerts(d, env);
   const subject = (alerts.length ? "⚠️ " : "📊 ") + "Convention daily dashboard — " + d.today;
   return sendOpsEmail(env, subject, buildDigestHtml(d, alerts));
+}
+
+// The single 10-minute cron lands here. The digest goes out on the first tick
+// at/after the configured IST time (once per IST day); the critical check runs
+// every ~6 hours. Digest time: KV override (set via /api/report/schedule,
+// no redeploy needed) → DIGEST_TIME_IST var → 09:00.
+async function getDigestTime(env) {
+  const saved = await env.CONVENTION_KV.get("settings:digestTime");
+  const t = saved || env.DIGEST_TIME_IST || "09:00";
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(t) ? t : "09:00";
+}
+
+async function runSchedules(env) {
+  const ist = new Date(Date.now() + 5.5 * 3600 * 1000); // IST = UTC+5:30
+  const today = ist.toISOString().slice(0, 10);
+  const hhmm = ist.toISOString().slice(11, 16);
+  const digestAt = await getDigestTime(env);
+  if (hhmm >= digestAt && !(await env.CONVENTION_KV.get("digest:sent:" + today))) {
+    await env.CONVENTION_KV.put("digest:sent:" + today, "1", { expirationTtl: 60 * 60 * 48 });
+    await runDailyDigest(env);
+  }
+  const last = Number(await env.CONVENTION_KV.get("critical:last")) || 0;
+  if (Date.now() - last >= 6 * 3600 * 1000) {
+    await env.CONVENTION_KV.put("critical:last", String(Date.now()), { expirationTtl: 60 * 60 * 48 });
+    await runCriticalCheck(env);
+  }
 }
 
 async function runCriticalCheck(env) {
@@ -740,6 +784,19 @@ async function handleApi(request, env, ctx) {
     }
     if (parts[2] === "send" && method === "POST") return json(await runDailyDigest(env));
     if (parts[2] === "check" && method === "POST") return json(await runCriticalCheck(env));
+    // GET/POST /api/report/schedule — view or change the daily digest time
+    // (IST, "HH:MM") instantly, no redeploy needed.
+    if (parts[2] === "schedule" && method === "GET") {
+      return json({ digestTimeIst: await getDigestTime(env) });
+    }
+    if (parts[2] === "schedule" && method === "POST") {
+      const t = String(body.time || "").trim();
+      if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(t)) {
+        return json({ error: 'time must be 24h "HH:MM" (IST), e.g. "18:40"' }, 400);
+      }
+      await env.CONVENTION_KV.put("settings:digestTime", t);
+      return json({ ok: true, digestTimeIst: t });
+    }
   }
 
   // ---- AI knowledge (Feed AI page; developer-gated, stored in D1) ----
@@ -1695,15 +1752,9 @@ export default {
     return env.ASSETS.fetch(request);
   },
 
-  // Cron Triggers (wrangler.toml [triggers]): the 6-hourly cron runs the
-  // critical check (emails only when something needs attention, deduped per
-  // day); any other cron is the daily digest — so the digest time can be
-  // changed in wrangler.toml without touching this code.
+  // A single cron ticks every 10 minutes; runSchedules decides what's due —
+  // the daily digest at the configured IST time, the critical check every 6h.
   async scheduled(event, env, ctx) {
-    if (event.cron === "0 */6 * * *") {
-      ctx.waitUntil(runCriticalCheck(env));
-    } else {
-      ctx.waitUntil(runDailyDigest(env));
-    }
+    ctx.waitUntil(runSchedules(env));
   },
 };

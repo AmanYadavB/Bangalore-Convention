@@ -25,11 +25,11 @@ database_id = "60bc0f91-4595-478b-a576-1841ebb41588"
 [ai]
 binding = "AI"
 
-# Ops dashboard emails (cron times are UTC — IST is UTC+5:30):
-#   "10 13 * * *" = daily digest at 18:40 IST (6:40 PM)
-#   "0 */6 * * *" = critical-only check every 6 hours (emails only on problems)
+# Ops dashboard emails: one cron ticks every 10 minutes and the Worker decides
+# what's due — the daily digest at DIGEST_TIME_IST (set below, plain IST time,
+# no UTC math), and the critical-only check every 6 hours.
 [triggers]
-crons = ["10 13 * * *", "0 */6 * * *"]
+crons = ["*/10 * * * *"]
 
 # Developer-role gate. Only requests carrying this exact key may create,
 # edit or delete pages through the agent. CHANGE THIS before deploying, and
@@ -43,8 +43,15 @@ DEEPGRAM_API_KEY = "60167b8e4cf80a81095ba76f3e465283b507fd03"
 
 # Where the ops dashboard emails go. CHANGE THIS to your Gmail address.
 DASHBOARD_EMAIL = "amankumaryadavasasmd@gmail.com"
+# Daily digest time in IST (24h "HH:MM"). Can also be changed live without a
+# redeploy:  POST /api/report/schedule  {"devKey":"...","time":"18:40"}
+DIGEST_TIME_IST = "22:10"
 # Critical alert fires when Deepgram credit drops below this many dollars.
 ALERT_DEEPGRAM_MIN = "2"
+# The main DEEPGRAM_API_KEY can speak but may lack permission to read the
+# account balance (403). To show "dollars remaining", create a key with
+# Owner/Administrator scope in the Deepgram console and paste it here:
+DEEPGRAM_BALANCE_KEY = "c6e0cd2a8d85b8fbe794c8bd7813cc46d04cee38"
 # Optional — enables the "Cloudflare requests (24h)" row in the digest:
 #   CF_ACCOUNT_ID  = your account id (dash.cloudflare.com → Workers → right sidebar)
 #   CF_API_TOKEN   = create an API token with "Account Analytics: Read", then run
