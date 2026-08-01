@@ -10,10 +10,16 @@
       /* Keep long values (emails, notes, JSON) from widening the page — a
          horizontally-overflowing page clips the fixed chat mascot. */
       .ops-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-      #statusSummary table { width: 100%; table-layout: fixed; border-collapse: collapse; }
-      #statusSummary td {
-        padding: 6px 8px 6px 0;
-        vertical-align: top;
+      /* Status rows are a grid of divs, not a <table> — table boxes keep their
+         min-content width when squeezed and overflow phone screens. */
+      .status-row {
+        display: grid;
+        grid-template-columns: minmax(110px, 38%) 1fr;
+        gap: 4px 12px;
+        padding: 6px 0;
+      }
+      .status-row > div {
+        min-width: 0;
         word-break: break-word;
         overflow-wrap: anywhere;
       }
@@ -24,9 +30,8 @@
         .ops-actions .btn { flex: 1 1 100%; }
         #timeInput { flex: 1 1 100%; max-width: none !important; }
         /* Stack each status row as label-over-value instead of two columns. */
-        #statusSummary td { display: block; width: 100% !important; }
-        #statusSummary tr td:first-child { padding-bottom: 0; font-size: 12px; opacity: 0.75; }
-        #statusSummary tr td:last-child { padding-top: 2px; padding-bottom: 10px; }
+        .status-row { grid-template-columns: 1fr; padding: 8px 0; }
+        .status-row > div:first-child { font-size: 12px; opacity: 0.75; }
         .section-head { flex-wrap: wrap; gap: 8px; }
       }
     </style>
@@ -156,15 +161,19 @@
           last && last !== "never"
             ? (last.ok ? "✅ sent" : "❌ FAILED (" + last.note + ")") + " at " + last.at + " — “" + last.subject + "”"
             : "never attempted (since this version deployed)";
+        // Plain divs, deliberately not a <table>: table boxes keep their own
+        // min-content sizing even when squeezed, which overflowed the page on
+        // phones. The two-column look is done with grid and collapses to
+        // stacked label-over-value under 600px (see the style block above).
+        const row = (label, value) =>
+          "<div class='status-row'><div class='muted'>" + label + "</div><div>" + value + "</div></div>";
         box.innerHTML =
-          "<table style='width:100%'>" +
-          "<tr><td class='muted'>Worker time (IST)</td><td><b>" + escapeHtml(s.workerTimeIst) + "</b></td></tr>" +
-          "<tr><td class='muted'>Digest time (IST)</td><td><b>" + escapeHtml(s.digestTimeIst) + "</b> <span class='muted'>(" + escapeHtml(s.digestTimeSource) + ")</span></td></tr>" +
-          "<tr><td class='muted'>Digest already sent today</td><td><b>" + (s.digestAlreadySentToday ? "yes — use Reset to allow another" : "no") + "</b></td></tr>" +
-          "<tr><td class='muted'>Last digest attempt</td><td>" + escapeHtml(lastLine) + "</td></tr>" +
-          "<tr><td class='muted'>Last critical check</td><td>" + escapeHtml(String(s.lastCriticalCheckAt)) + "</td></tr>" +
-          "<tr><td class='muted'>Emails go to</td><td><b>" + escapeHtml(String(s.dashboardEmail)) + "</b></td></tr>" +
-          "</table>";
+          row("Worker time (IST)", "<b>" + escapeHtml(s.workerTimeIst) + "</b>") +
+          row("Digest time (IST)", "<b>" + escapeHtml(s.digestTimeIst) + "</b> <span class='muted'>(" + escapeHtml(s.digestTimeSource) + ")</span>") +
+          row("Digest already sent today", "<b>" + (s.digestAlreadySentToday ? "yes — use Reset to allow another" : "no") + "</b>") +
+          row("Last digest attempt", escapeHtml(lastLine)) +
+          row("Last critical check", escapeHtml(String(s.lastCriticalCheckAt))) +
+          row("Emails go to", "<b>" + escapeHtml(String(s.dashboardEmail)) + "</b>");
         if (s.digestTimeIst && /^\d\d:\d\d$/.test(s.digestTimeIst)) {
           document.getElementById("timeInput").value = s.digestTimeIst;
         }

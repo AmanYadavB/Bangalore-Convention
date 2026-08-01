@@ -2309,11 +2309,18 @@ h3,
     justify-content: center;
   }
 
-  /* Wide tables scroll inside themselves rather than stretching the page. */
-  .card table {
-    display: block;
-    overflow-x: auto;
+  /* Tables are constrained, NOT switched to display:block. Making a table a
+     block destroys its table formatting context, which breaks any page that
+     stacks its own cells on mobile (ops.html does exactly that) and lets the
+     cells lay out as full-width columns that overflow the page instead. */
+  table {
     max-width: 100%;
+    table-layout: fixed;
+  }
+
+  td,
+  th {
+    overflow-wrap: anywhere;
   }
 }
 

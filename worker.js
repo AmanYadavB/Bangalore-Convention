@@ -1252,7 +1252,10 @@ async function handleApi(request, env, ctx) {
       if (!text) return json({ error: "Reflection text is required." }, 400);
       const record = {
         id: crypto.randomUUID(),
-        date: (body.date || new Date().toISOString().slice(0, 10)).slice(0, 10),
+        // istDate, NOT toISOString: the broadcast looks today's reflection up
+        // by IST date, so defaulting from UTC would mis-date anything written
+        // between midnight and 05:30 IST and the 7 AM send would find nothing.
+        date: (body.date || istDate(0)).slice(0, 10),
         title,
         body: text,
         createdAt: new Date().toISOString(),

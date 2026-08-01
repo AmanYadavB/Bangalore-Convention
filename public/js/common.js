@@ -138,7 +138,10 @@ function renderNav(active) {
   const links = [
     { href: "index.html", label: "Home", key: "home" },
     { href: "register.html", label: "Register", key: "register" },
-    { href: "reflections.html", label: "Reflections", key: "reflections" },
+    // Not in the anonymous nav (visitors see only Home and Register), but the
+    // page itself stays reachable by URL - it is the public landing page for
+    // the WhatsApp channel link, shared directly on WhatsApp.
+    { href: "reflections.html", label: "Reflections", key: "reflections", admin: true },
     { href: "registrations.html", label: "Registrations", key: "registrations", admin: true },
     { href: "dashboard.html", label: "Dashboard", key: "dashboard", admin: true },
     { href: "expenses.html", label: "Expenses", key: "expenses", admin: true },

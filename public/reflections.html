@@ -39,7 +39,11 @@
     <!-- Card design, cloned verbatim into the exported PNG. System fonts only,
          no color-mix(), no external images, solid text colours. -->
     <style id="cardStyle">
-      .card {
+      /* EVERY class here is rc- prefixed. These rules are injected into the
+         exported SVG, but they also live on this page — unprefixed names like
+         .card or .fm-head collide with style.css and would restyle the real
+         page cards and the chat mascot. */
+      .rc-card {
         position: relative; width: 1125px; height: 600px; overflow: hidden;
         box-sizing: border-box;
         background:
@@ -48,49 +52,49 @@
           #0b0f1a;
         font-family: "Segoe UI", system-ui, sans-serif;
       }
-      .card-grid {
+      .rc-grid {
         position: absolute; inset: 0;
         background-image: radial-gradient(circle at 1px 1px, rgba(238,242,251,0.07) 1px, transparent 0);
         background-size: 34px 34px;
       }
-      .masthead { position: absolute; top: 44px; left: 76px; display: flex; align-items: center; gap: 60px; }
-      .mascot-slot { position: relative; width: 46px; height: 56px; flex: none; }
-      .mascot { position: absolute; top: 0; left: 0; width: 44px; height: 53px; transform: scale(1.05); transform-origin: top left; }
-      .fm-head {
+      .rc-masthead { position: absolute; top: 44px; left: 76px; display: flex; align-items: center; gap: 60px; }
+      .rc-slot { position: relative; width: 46px; height: 56px; flex: none; }
+      .rc-bot { position: absolute; top: 0; left: 0; width: 44px; height: 53px; transform: scale(1.05); transform-origin: top left; }
+      .rc-head {
         position: absolute; top: 8px; left: 4px; width: 36px; height: 26px; border-radius: 10px;
         background: linear-gradient(160deg, #eef2ff, #c7d2fe); border: 1px solid #b9c0f7;
         box-shadow: inset 0 -3px 6px rgba(99,102,241,0.25);
         display: flex; align-items: center; justify-content: center; gap: 6px;
       }
-      .fm-eye { width: 7px; height: 2.4px; border-radius: 2px; background: #6366f1; }
-      .fm-antenna { position: absolute; top: 0; left: 50%; width: 2px; height: 9px; margin-left: -1px; background: #b0b8f7; }
-      .fm-antenna::after {
+      .rc-eye { width: 7px; height: 2.4px; border-radius: 2px; background: #6366f1; }
+      .rc-antenna { position: absolute; top: 0; left: 50%; width: 2px; height: 9px; margin-left: -1px; background: #b0b8f7; }
+      .rc-antenna::after {
         content: ""; position: absolute; top: -5px; left: 50%; margin-left: -3.5px;
         width: 7px; height: 7px; border-radius: 50%; background: #fbbf24;
         box-shadow: 0 0 8px 1px rgba(251,191,36,0.75);
       }
-      .fm-body {
+      .rc-torso {
         position: absolute; top: 31px; left: 7px; width: 30px; height: 15px;
         border-radius: 8px 8px 6px 6px; background: linear-gradient(160deg, #818cf8, #a78bfa);
       }
-      .fm-arm { position: absolute; top: 34px; width: 10px; height: 3px; border-radius: 2px; background: #fff; }
-      .fm-arm.right { right: -2px; transform-origin: left center; transform: rotate(16deg); }
-      .fm-arm.left { left: -2px; transform-origin: right center; transform: rotate(-16deg); }
-      .fm-legs { position: absolute; top: 45px; left: 12px; width: 20px; height: 8px; }
-      .fm-legs i { position: absolute; top: 0; width: 5px; height: 8px; border-radius: 3px; background: #6366f1; }
-      .fm-legs i:first-child { left: 0; }
-      .fm-legs i:last-child { right: 0; }
-      .c-eyebrow { font-size: 19px; font-weight: 600; letter-spacing: 3px; text-transform: uppercase; color: #fcd34d; }
-      .c-stamp { position: absolute; top: 48px; right: 76px; font-size: 19px; font-weight: 500; color: #8d97b0; }
-      .body-wrap {
+      .rc-arm { position: absolute; top: 34px; width: 10px; height: 3px; border-radius: 2px; background: #fff; }
+      .rc-arm.rc-r { right: -2px; transform-origin: left center; transform: rotate(16deg); }
+      .rc-arm.rc-l { left: -2px; transform-origin: right center; transform: rotate(-16deg); }
+      .rc-legs { position: absolute; top: 45px; left: 12px; width: 20px; height: 8px; }
+      .rc-legs i { position: absolute; top: 0; width: 5px; height: 8px; border-radius: 3px; background: #6366f1; }
+      .rc-legs i:first-child { left: 0; }
+      .rc-legs i:last-child { right: 0; }
+      .rc-eyebrow { font-size: 19px; font-weight: 600; letter-spacing: 3px; text-transform: uppercase; color: #fcd34d; }
+      .rc-stamp { position: absolute; top: 48px; right: 76px; font-size: 19px; font-weight: 500; color: #8d97b0; }
+      .rc-wrap {
         position: absolute; left: 76px; right: 76px; top: 132px; bottom: 96px;
         display: flex; flex-direction: column; justify-content: center;
       }
-      .c-title { margin: 0 0 22px; font-weight: 800; letter-spacing: -0.8px; color: #f2f5ff; line-height: 1.12; }
-      .c-body { margin: 0; white-space: pre-wrap; color: #dbe2f4; line-height: 1.5; font-weight: 400; }
-      .c-footer { position: absolute; left: 76px; bottom: 46px; display: flex; align-items: center; gap: 18px; }
-      .c-rule { width: 78px; height: 4px; border-radius: 4px; background: linear-gradient(90deg, #fbbf24, #a78bfa); }
-      .c-footer span { font-size: 20px; color: #8d97b0; font-weight: 500; }
+      .rc-title { margin: 0 0 22px; font-weight: 800; letter-spacing: -0.8px; color: #f2f5ff; line-height: 1.12; }
+      .rc-text { margin: 0; white-space: pre-wrap; color: #dbe2f4; line-height: 1.5; font-weight: 400; }
+      .rc-footer { position: absolute; left: 76px; bottom: 46px; display: flex; align-items: center; gap: 18px; }
+      .rc-rule { width: 78px; height: 4px; border-radius: 4px; background: linear-gradient(90deg, #fbbf24, #a78bfa); }
+      .rc-footer span { font-size: 20px; color: #8d97b0; font-weight: 500; }
     </style>
   </head>
   <body>
@@ -151,28 +155,28 @@
 
     <!-- Off-screen card, filled per reflection then serialised to a PNG. -->
     <div id="cardStage">
-      <div class="card" id="card">
-        <div class="card-grid"></div>
-        <div class="masthead">
-          <div class="mascot-slot">
-            <div class="mascot">
-              <div class="fm-antenna"></div>
-              <div class="fm-head"><span class="fm-eye"></span><span class="fm-eye"></span></div>
-              <div class="fm-body"></div>
-              <div class="fm-arm left"></div>
-              <div class="fm-arm right"></div>
-              <div class="fm-legs"><i></i><i></i></div>
+      <div class="rc-card" id="card">
+        <div class="rc-grid"></div>
+        <div class="rc-masthead">
+          <div class="rc-slot">
+            <div class="rc-bot">
+              <div class="rc-antenna"></div>
+              <div class="rc-head"><span class="rc-eye"></span><span class="rc-eye"></span></div>
+              <div class="rc-torso"></div>
+              <div class="rc-arm rc-l"></div>
+              <div class="rc-arm rc-r"></div>
+              <div class="rc-legs"><i></i><i></i></div>
             </div>
           </div>
-          <div class="c-eyebrow">Daily Reflection</div>
+          <div class="rc-eyebrow">Daily Reflection</div>
         </div>
-        <div class="c-stamp" id="cardStamp"></div>
-        <div class="body-wrap">
-          <h2 class="c-title" id="cardTitle"></h2>
-          <p class="c-body" id="cardBody"></p>
+        <div class="rc-stamp" id="cardStamp"></div>
+        <div class="rc-wrap">
+          <h2 class="rc-title" id="cardTitle"></h2>
+          <p class="rc-text" id="cardBody"></p>
         </div>
-        <div class="c-footer">
-          <div class="c-rule"></div>
+        <div class="rc-footer">
+          <div class="rc-rule"></div>
           <span>Bangalore Convention 2027</span>
         </div>
       </div>
@@ -402,7 +406,11 @@
 
       if (isDeveloper()) {
         document.getElementById("compose").hidden = false;
-        document.getElementById("date").value = new Date().toISOString().slice(0, 10);
+        // IST, matching how the Worker dates and looks up reflections. Plain
+        // toISOString() would show yesterday between midnight and 05:30 IST.
+        document.getElementById("date").value = new Date(Date.now() + 5.5 * 3600 * 1000)
+          .toISOString()
+          .slice(0, 10);
 
         document.getElementById("refl-form").addEventListener("submit", async (e) => {
           e.preventDefault();
