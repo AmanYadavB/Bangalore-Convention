@@ -808,7 +808,8 @@ function mountChat() {
       </header>
       <div class="chat-log" id="chatLog"></div>
       <div class="chat-voice" id="chatVoice" hidden>
-        <span class="chat-voice-dot"></span>
+        <span class="voice-orb" aria-hidden="true"></span>
+        <span class="voice-viz" id="voiceViz" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
         <span id="chatVoiceLabel">Talk mode on</span>
         <button type="button" id="chatVoiceStop" class="chat-voice-stop">Stop</button>
       </div>
@@ -941,9 +942,11 @@ function mountChat() {
   // it out loud (voice) \u2014 the little mascot animates the whole time.
   function typeReply(shown, voice, done) {
     const { bot, txt } = addAssistantBubble();
-    bot.classList.add(voice ? "speaking" : "writing");
+    // Voice mode: the visualizer bars carry the speaking animation, so the
+    // mascot stays still; typed mode keeps its little "writing" scribble.
+    if (!voice) bot.classList.add("writing");
     typeOut(txt, shown, writeSpeed(shown, voice), () => {
-      bot.classList.remove("writing", "speaking");
+      bot.classList.remove("writing");
       if (done) done();
     });
   }
@@ -1530,8 +1533,9 @@ function mountChat() {
     const revealChunk = (chunk) => {
       if (typingEl.parentNode) typingEl.remove();
       if (!voiceMascot) {
+        // No "speaking" class — the voice visualizer bars are the only
+        // speaking animation; the mascot stays still.
         voiceMascot = addAssistantBubble();
-        voiceMascot.bot.classList.add("speaking");
       }
       spokenText += (spokenText ? " " : "") + chunk;
       voiceMascot.txt.innerHTML = escapeHtml(spokenText).replace(/\n/g, "<br>");
@@ -1557,7 +1561,6 @@ function mountChat() {
         if (audio64) await playClip(audio64, null, mySpeakId);
       }
       draining = false;
-      if (voiceMascot) voiceMascot.bot.classList.remove("speaking");
       if (mySpeakId === speakId) afterSpeak();
     };
 
@@ -1752,7 +1755,115 @@ function mountChat() {
       .trim();
   }
 
+  // ---- Real-time voice visualizer (Gemini-style reactive bars) -------------
+  // The bars are driven by GENUINE audio levels via the Web Audio API: the
+  // microphone stream while the user is talking, the TTS clip while the bot is
+  // talking. speechSynthesis exposes no audio graph, and a denied mic can't be
+  // analysed either — those cases fall back to a CSS keyframe animation.
+  const vizEl = document.getElementById("voiceViz");
+  const vizBars = vizEl ? Array.prototype.slice.call(vizEl.children) : [];
+  let vizAC = null, micAnalyser = null, ttsAnalyser = null;
+  let micStream = null, micSource = null, vizRaf = 0;
+  let vizState = ""; // mirrors the latest setVoiceStatus state
+  let ttsLive = false; // true when the current speech is analyser-driven
+  const vizLevels = vizBars.map(() => 0);
+  let vizData = null; // shared FFT buffer, allocated once
+
+  function vizContext() {
+    if (!vizAC) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      vizAC = new AC();
+    }
+    if (vizAC.state === "suspended") vizAC.resume().catch(() => {});
+    return vizAC;
+  }
+
+  function makeAnalyser(ctx) {
+    const a = ctx.createAnalyser();
+    a.fftSize = 256;
+    a.smoothingTimeConstant = 0.55;
+    return a;
+  }
+
+  async function vizAttachMic() {
+    const ctx = vizContext();
+    if (!ctx || micSource || !(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) return;
+    try {
+      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      micAnalyser = makeAnalyser(ctx);
+      micSource = ctx.createMediaStreamSource(micStream);
+      micSource.connect(micAnalyser); // analysis only — never routed to speakers
+    } catch (e) {
+      /* mic denied for analysis — bars fall back to the CSS animation */
+    }
+  }
+
+  function vizDetachMic() {
+    try { if (micSource) micSource.disconnect(); } catch (e) {}
+    try { if (micStream) micStream.getTracks().forEach((t) => t.stop()); } catch (e) {}
+    micSource = null; micStream = null; micAnalyser = null;
+  }
+
+  // Route a TTS <audio> element through the analyser so the bars move with the
+  // bot's actual voice. The analyser passes audio on to the speakers.
+  function vizAttachAudio(audioEl) {
+    const ctx = vizContext();
+    if (!ctx) return;
+    try {
+      if (!ttsAnalyser) {
+        ttsAnalyser = makeAnalyser(ctx);
+        ttsAnalyser.connect(ctx.destination);
+      }
+      ctx.createMediaElementSource(audioEl).connect(ttsAnalyser);
+      ttsLive = true;
+    } catch (e) {
+      /* already attached or unsupported — the clip still plays normally */
+    }
+  }
+
+  // Five symmetric frequency bands (center = low-mids where voices live) so
+  // each bar dances independently, like Gemini's waveform.
+  const VIZ_BANDS = [[24, 48], [10, 24], [2, 10], [10, 24], [24, 48]];
+
+  function vizFrame() {
+    vizRaf = requestAnimationFrame(vizFrame);
+    if (!vizEl) return;
+    const analyser =
+      vizState === "speaking" ? (ttsLive ? ttsAnalyser : null) :
+      vizState === "listening" ? micAnalyser : null;
+    const live = !!(analyser && vizAC && vizAC.state === "running");
+    vizEl.classList.toggle("live", live);
+    if (!live) return; // CSS keyframes take over for this state
+    if (!vizData) vizData = new Uint8Array(analyser.frequencyBinCount);
+    analyser.getByteFrequencyData(vizData);
+    for (let i = 0; i < vizBars.length; i++) {
+      const band = VIZ_BANDS[i] || VIZ_BANDS[0];
+      let sum = 0;
+      for (let b = band[0]; b < band[1]; b++) sum += vizData[b] || 0;
+      const target = Math.min(1, (sum / (band[1] - band[0]) / 255) * 1.6);
+      // Fast attack, gentle decay — snappy but never jittery.
+      vizLevels[i] = target > vizLevels[i] ? target : vizLevels[i] * 0.8;
+      vizBars[i].style.height = (5 + vizLevels[i] * 21).toFixed(1) + "px";
+    }
+  }
+
+  function vizStart() {
+    if (!vizRaf) vizFrame();
+  }
+
+  function vizStop() {
+    if (vizRaf) cancelAnimationFrame(vizRaf);
+    vizRaf = 0;
+    if (vizEl) vizEl.classList.remove("live");
+    for (let i = 0; i < vizBars.length; i++) {
+      vizLevels[i] = 0;
+      vizBars[i].style.height = "";
+    }
+  }
+
   function setVoiceStatus(state) {
+    vizState = state;
     if (micBtn) {
       micBtn.classList.toggle("active", voiceMode);
       micBtn.classList.toggle("listening", voiceMode && state === "listening");
@@ -1760,14 +1871,21 @@ function mountChat() {
     }
     const chatAvatar = document.getElementById("chatAvatar");
     if (chatAvatar) {
-      // In voice mode the header mascot 'talks' while it speaks.
-      chatAvatar.classList.toggle("talking", voiceMode && state === "speaking");
+      // The visualizer bars are the speaking animation — the header mascot
+      // stays still while the bot talks (only "thinking" still shows).
+      chatAvatar.classList.remove("talking");
       chatAvatar.classList.toggle("thinking", voiceMode && state === "thinking");
+    }
+    if (panel) {
+      // Soft ambient glow on the whole panel while talk mode is on.
+      panel.classList.toggle("voice-open", voiceMode);
+      panel.classList.toggle("voice-speaking", voiceMode && state === "speaking");
     }
     if (!voiceBar) return;
     voiceBar.hidden = !voiceMode;
     voiceBar.classList.toggle("is-listening", state === "listening");
     voiceBar.classList.toggle("is-speaking", state === "speaking");
+    voiceBar.classList.toggle("is-thinking", state === "thinking");
     if (voiceLabel) {
       voiceLabel.textContent =
         state === "listening"
@@ -1939,6 +2057,8 @@ function mountChat() {
       } catch (e) {}
       const audio = new Audio("data:audio/mp3;base64," + audio64);
       currentAudio = audio;
+      // Talk mode: drive the visualizer bars with this clip's real levels.
+      if (voiceMode) vizAttachAudio(audio);
       audio.onplay = () => onStart && onStart();
       audio.onended = () => resolve();
       audio.onerror = () => resolve();
@@ -1973,6 +2093,7 @@ function mountChat() {
 
   // Fallback: browser speechSynthesis with the best available voice.
   function browserSpeak(msg, begin) {
+    ttsLive = false; // no audio graph here — visualizer uses its CSS animation
     if (!canSpeak) {
       begin && begin();
       afterSpeak();
@@ -2194,6 +2315,10 @@ function mountChat() {
     }
     setVoiceStatus("listening");
     startListening();
+    // Live visualizer: analyse the mic (separately from SpeechRecognition) so
+    // the bars move with the user's actual voice.
+    vizAttachMic();
+    vizStart();
   }
 
   function stopVoiceMode() {
@@ -2223,6 +2348,8 @@ function mountChat() {
     }
     clearInterim();
     setVoiceStatus("");
+    vizStop();
+    vizDetachMic();
   }
 
   function toggleVoiceMode() {
