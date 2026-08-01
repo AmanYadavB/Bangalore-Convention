@@ -843,7 +843,20 @@ function mountChat() {
     "Yo! Excited to see your interest in the Convention! this is going to be packed with meaningful connections, engaging activities, and memorable moments. How can I help today?",
     "Bro! The Convention is just around the corner! From July 9th to 11th, Bangalore will host three incredible days of learning, fellowship, and fun. What information are you looking for?"
   ];
-  const prewarmGreetingText = VISITOR_GREETINGS[Math.floor(Math.random() * VISITOR_GREETINGS.length)];
+  // One greeting per browser session (not per page load) so the audio we cache
+  // below always matches the text we'll actually say, and moving between pages
+  // never re-synthesises it.
+  const prewarmGreetingText = (() => {
+    try {
+      const saved = sessionStorage.getItem("greetText");
+      if (saved) return saved;
+    } catch (e) {}
+    const pick = VISITOR_GREETINGS[Math.floor(Math.random() * VISITOR_GREETINGS.length)];
+    try {
+      sessionStorage.setItem("greetText", pick);
+    } catch (e) {}
+    return pick;
+  })();
   let prewarmAudioP = null; // Promise<base64|null>, resolved once TTS is ready
 
   // Pricing/categories, loaded once so the bot can book on the user's behalf.
@@ -996,25 +1009,17 @@ function mountChat() {
         greeting = prewarmGreetingText; // use the pre-warmed text
       }
       // Speak the greeting and show it as text. Mic stays off — user taps it to start.
-      if (!isDeveloper() && !isAdmin() && canListen && canSpeak) {
-        if (!recognition) initRecognition();
+      if (!isDeveloper() && !isAdmin()) {
+        if (canListen && !recognition) initRecognition();
         processing = false;
-        speaking = true; // block mic until greeting finishes
         finalBuffer = "";
         lastInterim = "";
         if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
-        setVoiceStatus("speaking");
-        const myGreetId = ++speakId;
         typeReply(greeting, true);
-        // Play the pre-warmed Deepgram audio if ready; fall back to browser TTS.
-        (prewarmAudioP || Promise.resolve(null)).then((audio64) => {
-          if (audio64 && myGreetId === speakId) {
-            playClip(audio64, null, myGreetId).then(() => { if (myGreetId === speakId) afterSpeak(); });
-          } else {
-            speaking = false;
-            browserSpeak(greeting, null);
-          }
-        });
+        // speak() owns speaking/speakId/afterSpeak. Handing it the pre-warmed
+        // first chunk means the voice starts right away instead of after a
+        // full round trip to the TTS service.
+        speak(greeting, null, prewarmAudioP);
       } else {
         typeReply(greeting, false);
       }
@@ -1755,15 +1760,16 @@ function mountChat() {
       .trim();
   }
 
-  // ---- Real-time voice visualizer (Gemini-style reactive bars) -------------
-  // The bars are driven by GENUINE audio levels via the Web Audio API: the
-  // microphone stream while the user is talking, the TTS clip while the bot is
-  // talking. speechSynthesis exposes no audio graph, and a denied mic can't be
-  // analysed either — those cases fall back to a CSS keyframe animation.
+  // ---- Voice visualizer (Gemini-style reactive bars) -----------------------
+  // While the BOT talks the bars follow the real TTS levels via the Web Audio
+  // API. While the USER talks they run on CSS keyframes instead: SpeechRecognition
+  // owns the microphone, and opening a second getUserMedia capture alongside it
+  // makes Chrome's recogniser stop hearing anything at all. Pretty bars are not
+  // worth a mic that doesn't listen.
   const vizEl = document.getElementById("voiceViz");
   const vizBars = vizEl ? Array.prototype.slice.call(vizEl.children) : [];
-  let vizAC = null, micAnalyser = null, ttsAnalyser = null;
-  let micStream = null, micSource = null, vizRaf = 0;
+  let vizAC = null, ttsAnalyser = null, ttsSource = null;
+  let vizRaf = 0;
   let vizState = ""; // mirrors the latest setVoiceStatus state
   let ttsLive = false; // true when the current speech is analyser-driven
   const vizLevels = vizBars.map(() => 0);
@@ -1786,39 +1792,28 @@ function mountChat() {
     return a;
   }
 
-  async function vizAttachMic() {
-    const ctx = vizContext();
-    if (!ctx || micSource || !(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) return;
-    try {
-      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      micAnalyser = makeAnalyser(ctx);
-      micSource = ctx.createMediaStreamSource(micStream);
-      micSource.connect(micAnalyser); // analysis only — never routed to speakers
-    } catch (e) {
-      /* mic denied for analysis — bars fall back to the CSS animation */
-    }
-  }
-
-  function vizDetachMic() {
-    try { if (micSource) micSource.disconnect(); } catch (e) {}
-    try { if (micStream) micStream.getTracks().forEach((t) => t.stop()); } catch (e) {}
-    micSource = null; micStream = null; micAnalyser = null;
-  }
-
   // Route a TTS <audio> element through the analyser so the bars move with the
   // bot's actual voice. The analyser passes audio on to the speakers.
   function vizAttachAudio(audioEl) {
     const ctx = vizContext();
-    if (!ctx) return;
+    // Only ever route a clip through the graph when the context is already
+    // running — a suspended context would swallow the audio completely, and a
+    // silent bot is a far worse bug than static bars.
+    if (!ctx || ctx.state !== "running") {
+      ttsLive = false;
+      return;
+    }
     try {
       if (!ttsAnalyser) {
         ttsAnalyser = makeAnalyser(ctx);
         ttsAnalyser.connect(ctx.destination);
       }
-      ctx.createMediaElementSource(audioEl).connect(ttsAnalyser);
+      try { if (ttsSource) ttsSource.disconnect(); } catch (e) {}
+      ttsSource = ctx.createMediaElementSource(audioEl);
+      ttsSource.connect(ttsAnalyser);
       ttsLive = true;
     } catch (e) {
-      /* already attached or unsupported — the clip still plays normally */
+      ttsLive = false; // unsupported — the clip still plays normally
     }
   }
 
@@ -1829,9 +1824,9 @@ function mountChat() {
   function vizFrame() {
     vizRaf = requestAnimationFrame(vizFrame);
     if (!vizEl) return;
-    const analyser =
-      vizState === "speaking" ? (ttsLive ? ttsAnalyser : null) :
-      vizState === "listening" ? micAnalyser : null;
+    // Speaking is the only state with a real audio graph; listening/thinking
+    // fall through to the CSS keyframe bars.
+    const analyser = vizState === "speaking" && ttsLive ? ttsAnalyser : null;
     const live = !!(analyser && vizAC && vizAC.state === "running");
     vizEl.classList.toggle("live", live);
     if (!live) return; // CSS keyframes take over for this state
@@ -1943,7 +1938,9 @@ function mountChat() {
   // be shown in sync with the voice.
   let currentAudio = null;
 
-  function speak(msg, onStart) {
+  // firstAudioP (optional) is an already-in-flight TTS promise for the FIRST
+  // chunk — used by the greeting, which is pre-warmed before the chat opens.
+  function speak(msg, onStart, firstAudioP) {
     let started = false;
     const startOnce = () => {
       if (started) return;
@@ -1968,7 +1965,7 @@ function mountChat() {
       clearTimeout(capTimer);
       startOnce();
     };
-    serverSpeak(msg, begin);
+    serverSpeak(msg, begin, firstAudioP);
   }
 
   // High-quality neural voice from the Worker (Cloudflare MeloTTS).
@@ -1984,12 +1981,26 @@ function mountChat() {
     const sentences = (text.match(/[^.!?]+[.!?]*/g) || [text])
       .map((s) => s.trim())
       .filter(Boolean);
-    if (sentences.length <= 1) return [text.slice(0, 800)];
-    // First chunk = just the opening sentence (fast to synthesise); the rest
-    // becomes a second chunk so we make at most two TTS calls.
-    const first = sentences[0].slice(0, 180); // shorter = faster first TTS response
-    const rest = sentences.slice(1).join(" ").slice(0, 700);
-    return rest ? [first, rest] : [first];
+    // The OPENING chunk is deliberately small: it decides how long the user
+    // stares at silence. Later chunks can be bigger because they're fetched
+    // while the previous one is already playing.
+    const limitFor = (n) => (n === 0 ? 110 : 220);
+    const chunks = [];
+    let cur = "";
+    let total = 0;
+    for (const s of sentences) {
+      if (total >= 900) break; // hard cap on how much we ever synthesise
+      const piece = s.slice(0, 300);
+      if (!cur) cur = piece;
+      else if (cur.length + 1 + piece.length <= limitFor(chunks.length)) cur += " " + piece;
+      else {
+        chunks.push(cur);
+        total += cur.length;
+        cur = piece;
+      }
+    }
+    if (cur && total < 900) chunks.push(cur);
+    return chunks;
   }
 
   // Prepare text for neural TTS: strip emojis and normalise informal spellings
@@ -2040,14 +2051,42 @@ function mountChat() {
     }
   }
 
-  // Pre-warm the greeting TTS only once the user shows intent to chat (hover
-  // or open) instead of paying a Deepgram synthesis on every page load.
+  // Pre-warm the greeting TTS. Only the FIRST chunk is synthesised here: it is
+  // short, so it comes back quickly and playback can start the moment the chat
+  // opens while the rest is fetched during that first clip. The result is kept
+  // for the whole browser session, so moving between pages costs nothing and
+  // opening the chat again is instant.
+  const GREET_AUDIO_KEY = "greetAudio";
   function startPrewarm() {
     if (prewarmAudioP || isDeveloper() || isAdmin()) return;
-    prewarmAudioP = fetchTts(prewarmGreetingText);
+    let cached = null;
+    try {
+      cached = sessionStorage.getItem(GREET_AUDIO_KEY);
+    } catch (e) {}
+    if (cached) {
+      prewarmAudioP = Promise.resolve(cached);
+      return;
+    }
+    prewarmAudioP = fetchTts(splitForSpeech(prewarmGreetingText)[0]).then((audio) => {
+      if (audio) {
+        try {
+          sessionStorage.setItem(GREET_AUDIO_KEY, audio);
+        } catch (e) {
+          /* quota — we just re-fetch next page */
+        }
+      }
+      return audio;
+    });
   }
   fab.addEventListener("pointerenter", startPrewarm, { once: true });
   fab.addEventListener("touchstart", startPrewarm, { once: true, passive: true });
+  // Don't make the greeting wait for a hover that may never happen (touch
+  // devices never hover): warm it as soon as the page has settled, or on the
+  // first interaction anywhere, whichever comes first.
+  ["pointerdown", "keydown", "scroll"].forEach((ev) =>
+    window.addEventListener(ev, startPrewarm, { once: true, passive: true })
+  );
+  setTimeout(startPrewarm, 1200);
 
   function playClip(audio64, onStart, myId) {
     return new Promise((resolve) => {
@@ -2066,7 +2105,7 @@ function mountChat() {
     });
   }
 
-  async function serverSpeak(msg, begin) {
+  async function serverSpeak(msg, begin, firstAudioP) {
     const myId = speakId;
     const chunks = splitForSpeech(msg);
     if (!chunks.length) {
@@ -2074,9 +2113,9 @@ function mountChat() {
       afterSpeak();
       return;
     }
-    // Prefetch the first chunk; then loop, prefetching the next while the
-    // current one plays so playback is gapless.
-    let nextAudio = fetchTts(chunks[0]);
+    // Prefetch the first chunk (or reuse the pre-warmed one); then loop,
+    // prefetching the next while the current one plays so playback is gapless.
+    let nextAudio = firstAudioP || fetchTts(chunks[0]);
     for (let i = 0; i < chunks.length; i++) {
       if (myId !== speakId) return; // stopped or superseded
       const audio64 = await nextAudio;
@@ -2304,6 +2343,9 @@ function mountChat() {
     }
     if (!recognition) initRecognition();
     if (panel.hidden) openChat();
+    // The greeting (or a previous answer) may still be playing — silence it
+    // first, or the mic immediately hears the bot and answers its own voice.
+    stopSpeaking();
     voiceMode = true;
     processing = false;
     speaking = false;
@@ -2315,9 +2357,6 @@ function mountChat() {
     }
     setVoiceStatus("listening");
     startListening();
-    // Live visualizer: analyse the mic (separately from SpeechRecognition) so
-    // the bars move with the user's actual voice.
-    vizAttachMic();
     vizStart();
   }
 
@@ -2349,7 +2388,6 @@ function mountChat() {
     clearInterim();
     setVoiceStatus("");
     vizStop();
-    vizDetachMic();
   }
 
   function toggleVoiceMode() {
