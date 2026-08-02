@@ -3786,7 +3786,11 @@ async function handleApi(request, env, ctx) {
                 const payload = line.slice(5).trim();
                 if (payload === "[DONE]") continue;
                 try {
-                  const t = JSON.parse(payload).response || "";
+                  // The digit "0" arrives as a falsy token (JSON number 0), so
+                  // `.response || ""` swallowed it — every streamed price lost
+                  // its zeros (₹1500 became ₹150). Coerce, never boolean-test.
+                  const raw = JSON.parse(payload).response;
+                  const t = raw == null ? "" : String(raw);
                   if (t) {
                     full += t;
                     const visible = stripThink(t);
@@ -3840,7 +3844,8 @@ async function handleApi(request, env, ctx) {
                   if (!line.startsWith("data:")) continue;
                   try {
                     const gd = JSON.parse(line.slice(5).trim());
-                    const t = gd?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+                    const rawT = gd?.candidates?.[0]?.content?.parts?.[0]?.text;
+                    const t = rawT == null ? "" : String(rawT);
                     if (t) { full += t; sse({ t }); }
                   } catch {}
                 }
@@ -3913,7 +3918,8 @@ async function handleApi(request, env, ctx) {
                   const payload = line.slice(5).trim();
                   if (payload === "[DONE]") continue;
                   try {
-                    const t = JSON.parse(payload)?.choices?.[0]?.delta?.content || "";
+                    const rawT = JSON.parse(payload)?.choices?.[0]?.delta?.content;
+                    const t = rawT == null ? "" : String(rawT);
                     if (t) {
                       full += t;
                       const visible = stripThink(t);

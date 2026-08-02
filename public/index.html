@@ -24,14 +24,16 @@
       </div>
       <div class="hero-cta" style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap">
         <a class="btn primary" href="register.html">Register Now</a>
-        <a class="btn ghost" href="register.html">View Pricing</a>
+        <!-- JS intercepts this into the burst overlay; the href is the
+             graceful no-JS fallback. -->
+        <a class="btn ghost" href="register.html" id="viewPricingBtn">View Pricing</a>
       </div>
 
-      <!-- The registration categories live here now: one compact card that
-           cycles through them, instead of the old four-card grid below. -->
-      <div class="price-spot" id="priceSpot" hidden>
-        <a class="spot-card" id="spotCard" href="register.html"></a>
-        <div class="spot-dots" id="spotDots" aria-hidden="true"></div>
+      <!-- Programme wisdom, one line at a time. Pricing lives behind the
+           View Pricing burst and on the Register page. -->
+      <div class="price-spot" id="sloganSpot">
+        <div class="spot-card slogan-card" id="sloganCard"></div>
+        <div class="spot-dots" id="sloganDots" aria-hidden="true"></div>
       </div>
     </section>
 
@@ -65,6 +67,29 @@
           </p>
         </div>
       </div>
+
+      <div class="section-head">
+        <h2>Memories</h2>
+      </div>
+      <!-- The living wall: tiles breathe, and every few seconds one flips to
+           show a memory quote. Placeholder tiles until real photos land in
+           img/gallery/ — see the GALLERY manifest in the script below. -->
+      <div class="mem-wall" id="memWall" aria-label="Moments from past conventions"></div>
+    </div>
+
+    <!-- "View Pricing" burst overlay (P2d) -->
+    <div class="pburst" id="pburst">
+      <button class="pburst-x" type="button" aria-label="Close">✕</button>
+      <div class="pburst-grid" id="pburstGrid"></div>
+    </div>
+
+    <!-- Memories lightbox -->
+    <div class="mem-lightbox" id="memLightbox">
+      <button class="mem-x" type="button" aria-label="Close">✕</button>
+      <figure class="mem-fig">
+        <div class="mem-ph" id="memPh"></div>
+        <figcaption><b id="memTitle"></b><small id="memSub"></small></figcaption>
+      </figure>
     </div>
 
     <div class="footer">
@@ -103,35 +128,36 @@
         setInterval(tick, 1000);
       })();
 
-      // Price spotlight: one compact card cycling through the categories,
-      // each arriving with the site's tumble. Tap → register, preselected.
-      (async () => {
-        let pricing;
-        try {
-          pricing = await api("/api/pricing");
-        } catch (e) {
-          return; // pricing unavailable — the hero simply shows no spotlight
-        }
-        if (!Array.isArray(pricing) || !pricing.length) return;
+      const CAT_ICONS = ["🛏️", "🚪", "👥", "👨‍👩‍👦", "🎟️", "⭐"];
+      const CAT_GRADS = [
+        "linear-gradient(140deg,#f59e0b,#ef4444)",
+        "linear-gradient(140deg,#38bdf8,#5b5bf0)",
+        "linear-gradient(140deg,#a78bfa,#7c3aed)",
+        "linear-gradient(140deg,#34d399,#0ea5e9)",
+        "linear-gradient(140deg,#fb7185,#f59e0b)",
+      ];
 
-        const wrap = document.getElementById("priceSpot");
-        const card = document.getElementById("spotCard");
-        const dots = document.getElementById("spotDots");
-        const ICONS = ["🛏️", "🚪", "👥", "👨‍👩‍👦", "🎟️", "⭐"];
-        wrap.hidden = false;
-        dots.innerHTML = pricing.map(() => "<i></i>").join("");
-
+      // AA one-liners cycling in the hero, each arriving with the tumble.
+      (() => {
+        const SLOGANS = [
+          ["🌅", "One day at a time"],
+          ["🕊️", "Easy does it"],
+          ["🧭", "First things first"],
+          ["🌿", "Live and let live"],
+          ["🎈", "Keep it simple"],
+          ["⛅", "This too shall pass"],
+          ["🙏", "Let go and let God"],
+          ["👣", "Progress, not perfection"],
+        ];
+        const card = document.getElementById("sloganCard");
+        const dots = document.getElementById("sloganDots");
+        dots.innerHTML = SLOGANS.map(() => "<i></i>").join("");
         let i = 0;
         function show(n) {
           i = n;
-          const c = pricing[n];
-          card.href = "register.html?category=" + encodeURIComponent(c.id);
           card.innerHTML =
-            `<span class="spot-ico" aria-hidden="true">${ICONS[n % ICONS.length]}</span>` +
-            `<span class="spot-txt"><b>${escapeHtml(c.name)}</b><small>${escapeHtml(
-              c.description || ""
-            )}</small></span>` +
-            `<span class="spot-price">${money(c.price)}</span>`;
+            `<span class="spot-ico" aria-hidden="true">${SLOGANS[n][0]}</span>` +
+            `<span class="slogan-text">${SLOGANS[n][1]}</span>`;
           card.classList.remove("anim");
           void card.offsetWidth; // restart the tumble
           card.classList.add("anim");
@@ -139,8 +165,155 @@
         }
         show(0);
         setInterval(() => {
-          if (!document.hidden) show((i + 1) % pricing.length);
-        }, 3000);
+          if (!document.hidden) show((i + 1) % SLOGANS.length);
+        }, 3200);
+      })();
+
+      // "View Pricing" burst overlay (P2d: spring pop + pointer tilt).
+      (async () => {
+        let pricing;
+        try {
+          pricing = await api("/api/pricing");
+        } catch (e) {
+          return; // pricing unavailable — the View Pricing link simply
+                  // navigates to the register page like it always did
+        }
+        if (!Array.isArray(pricing) || !pricing.length) return;
+        const burst = document.getElementById("pburst");
+        const grid = document.getElementById("pburstGrid");
+        const vpBtn = document.getElementById("viewPricingBtn");
+        grid.innerHTML = pricing
+          .map(
+            (c, n) => `
+          <a class="pb-card" style="--i:${n}" href="register.html?category=${encodeURIComponent(c.id)}">
+            <span class="pb-ph" style="--ph:${CAT_GRADS[n % CAT_GRADS.length]}" aria-hidden="true">${
+              CAT_ICONS[n % CAT_ICONS.length]
+            }</span>
+            <span class="pb-body"><b>${escapeHtml(c.name)}</b><small>${escapeHtml(
+              c.description || ""
+            )}</small><span class="pb-price">${money(c.price)}</span></span>
+          </a>`
+          )
+          .join("");
+
+        vpBtn.addEventListener("click", (e) => {
+          e.preventDefault();
+          // Aim every card's flight at the button. offsetLeft/offsetTop
+          // ignore transforms, so the hidden-but-laid-out grid measures true.
+          const br = vpBtn.getBoundingClientRect();
+          const bx = br.left + br.width / 2;
+          const by = br.top + br.height / 2;
+          grid.querySelectorAll(".pb-card").forEach((el) => {
+            let x = 0, y = 0, p = el;
+            while (p && p !== document.body) { x += p.offsetLeft; y += p.offsetTop; p = p.offsetParent; }
+            el.style.setProperty("--fx", bx - (x + el.offsetWidth / 2) + "px");
+            el.style.setProperty("--fy", by - (y + el.offsetHeight / 2) + "px");
+          });
+          burst.classList.add("open");
+        });
+        const closeBurst = () => {
+          burst.classList.remove("open");
+          grid.style.transform = "";
+        };
+        burst.addEventListener("click", (e) => {
+          if (e.target === burst || e.target.classList.contains("pburst-x")) closeBurst();
+        });
+        // The P2d tilt: desktop pointers only.
+        if (matchMedia("(hover: hover) and (pointer: fine)").matches) {
+          burst.addEventListener("mousemove", (e) => {
+            if (!burst.classList.contains("open")) return;
+            const rx = (e.clientY / innerHeight - 0.5) * -8;
+            const ry = (e.clientX / innerWidth - 0.5) * 10;
+            grid.style.transform =
+              "perspective(900px) rotateX(" + rx.toFixed(2) + "deg) rotateY(" + ry.toFixed(2) + "deg)";
+          });
+        }
+        document.addEventListener("keydown", (e) => {
+          if (e.key === "Escape") closeBurst();
+        });
+      })();
+
+      // ---- Memories: the living photo wall -------------------------------
+      // Drop real photos into img/gallery/ and set `img` on an entry (e.g.
+      // img: "img/gallery/opening-2025.jpg") — it replaces the placeholder
+      // tile AND the lightbox image. Add or remove entries freely.
+      (() => {
+        // Stock stand-ins live in img/gallery/ (Lorem Picsum, free to use).
+        // Overwrite any file with a real convention photo of the same name —
+        // or point `img` somewhere else / set it null to get the gradient
+        // placeholder tile back.
+        const GALLERY = [
+          { img: "img/gallery/opening-circle.jpg", e: "🙏", t: "Opening circle", y: "July 2025", q: "“The room felt like home in five minutes.”", g: "linear-gradient(150deg,#f59e0b,#ef4444)", h: 150 },
+          { img: "img/gallery/saturday-speaker.jpg", e: "🎤", t: "Saturday speaker", y: "July 2025", q: "“One story changed my whole weekend.”", g: "linear-gradient(150deg,#38bdf8,#5b5bf0)", h: 210 },
+          { img: "img/gallery/lunch-together.jpg", e: "🍛", t: "Lunch together", y: "July 2025", q: "“Nobody eats alone here.”", g: "linear-gradient(150deg,#34d399,#0ea5e9)", h: 170 },
+          { img: "img/gallery/music-night.jpg", e: "🎶", t: "Music night", y: "July 2026", q: "“We sang until the lights came on.”", g: "linear-gradient(150deg,#a78bfa,#7c3aed)", h: 230 },
+          { img: "img/gallery/fellowship-hall.jpg", e: "🤝", t: "Fellowship hall", y: "July 2026", q: "“Handshakes that turned into friendships.”", g: "linear-gradient(150deg,#fb7185,#f59e0b)", h: 160 },
+          { img: "img/gallery/morning-meditation.jpg", e: "🌅", t: "Morning meditation", y: "July 2026", q: "“Sunrise, silence, serenity.”", g: "linear-gradient(150deg,#0ea5e9,#34d399)", h: 200 },
+          { img: "img/gallery/sobriety-birthdays.jpg", e: "🎂", t: "Sobriety birthdays", y: "July 2026", q: "“Cake for the bravest people I know.”", g: "linear-gradient(150deg,#5b5bf0,#a78bfa)", h: 180 },
+          { img: "img/gallery/workshop-hour.jpg", e: "📖", t: "Workshop hour", y: "July 2026", q: "“Notes I still read every week.”", g: "linear-gradient(150deg,#ef4444,#7c3aed)", h: 150 },
+        ];
+
+        const wall = document.getElementById("memWall");
+        const lb = document.getElementById("memLightbox");
+        const lbTitle = document.getElementById("memTitle");
+        const lbSub = document.getElementById("memSub");
+
+        GALLERY.forEach((m, n) => {
+          const tile = document.createElement("button");
+          tile.type = "button";
+          tile.className = "mem-tile";
+          tile.style.setProperty("--i", n);
+          const face = m.img
+            ? `<img src="${m.img}" alt="${escapeHtml(m.t)}" loading="lazy" />`
+            : `<span class="mem-ph" style="--ph:${m.g};height:${m.h}px" aria-hidden="true">${m.e}</span>`;
+          tile.innerHTML =
+            `<span class="mem-inner">` +
+            `<span class="mem-front">${face}<span class="mem-cap">${escapeHtml(m.t)} · ${escapeHtml(m.y)}</span></span>` +
+            `<span class="mem-back" style="min-height:${m.h}px">${escapeHtml(m.q)}<small>${escapeHtml(
+              m.t
+            )} · ${escapeHtml(m.y)}</small></span>` +
+            `</span>`;
+          tile.addEventListener("click", () => {
+            if (tile.classList.contains("flip")) return;
+            // Re-query: the swap below replaces the node, so a cached
+            // reference would go stale after the first open.
+            const ph = document.getElementById("memPh");
+            ph.outerHTML = m.img
+              ? `<img id="memPh" src="${m.img}" alt="${escapeHtml(m.t)}" />`
+              : `<div class="mem-ph" id="memPh" style="--ph:${m.g}">${m.e}</div>`;
+            lbTitle.textContent = m.t;
+            lbSub.textContent = m.y;
+            lb.classList.add("open");
+          });
+          wall.appendChild(tile);
+        });
+
+        // Tiles pop in when the wall scrolls into view…
+        new IntersectionObserver(
+          (entries, io) => {
+            if (!entries.some((en) => en.isIntersecting)) return;
+            wall.classList.add("pop");
+            io.disconnect();
+          },
+          { threshold: 0.15 }
+        ).observe(wall);
+
+        // …then the wall lives: every few seconds a random tile flips over.
+        setInterval(() => {
+          if (document.hidden || !wall.classList.contains("pop")) return;
+          const tiles = [...wall.querySelectorAll(".mem-tile:not(.flip)")];
+          if (!tiles.length) return;
+          const t = tiles[Math.floor(Math.random() * tiles.length)];
+          t.classList.add("flip");
+          setTimeout(() => t.classList.remove("flip"), 2600);
+        }, 3400);
+
+        lb.addEventListener("click", (e) => {
+          if (e.target === lb || e.target.classList.contains("mem-x")) lb.classList.remove("open");
+        });
+        document.addEventListener("keydown", (e) => {
+          if (e.key === "Escape") lb.classList.remove("open");
+        });
       })();
     </script>
   </body>

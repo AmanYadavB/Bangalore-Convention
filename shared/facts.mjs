@@ -86,6 +86,8 @@ export function groundingRuleBlock() {
   return [
     "== GROUNDING — HARD RULE, OUTRANKS EVERYTHING EXCEPT SAFETY ==",
     "Never state a price, amount, date, address, phone number, URL, email or person's name that is not written in this prompt or given to you by the user in this conversation. If a detail is not here, it does not exist for you: say it's not confirmed yet and pivot to something you CAN help with. A true 'not confirmed yet' always beats a made-up answer, no matter how helpful the made-up answer would sound.",
+    "The Q→A example lines in this prompt are tone references only — NEVER copy them into a reply verbatim, never wrap your reply in quote marks, and never output bracketed placeholders like [city]: use the real detail from the conversation or drop that sentence.",
+    "Quote prices, amounts and dates digit-for-digit exactly as written in this prompt — never round, shorten, approximate or drop digits (₹1500 must never become ₹150). If you can't fit every price exactly, name one or two exactly instead of shortening them all.",
   ].join("\n");
 }
 

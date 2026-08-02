@@ -1086,9 +1086,9 @@ tbody tr:hover {
 }
 
 /* ---------- Toast ----------
-   The pill toast was replaced by the mascot corner toast (.chattoast, in the
-   mascot section near the end of this file): the robot pops out above its
-   chat button and says the message in its own speech bubble. ---------- */
+   The pill toast was replaced by the spotlight card (.toastcard, in the
+   mascot section near the end of this file): the page dims and the corner
+   mascot rides the announcement in at eye level. ---------- */
 
 /* ---------- Misc ---------- */
 .section-head {
@@ -1169,7 +1169,13 @@ body.chat-open .chat-widget {
   display: grid;
   place-items: center;
   box-shadow: 0 12px 28px -8px rgba(124, 111, 255, 0.6);
-  transition: transform 0.15s ease, box-shadow 0.2s ease;
+  transition: transform 0.15s ease, box-shadow 0.2s ease, opacity 0.3s ease;
+}
+
+/* While the mascot is off riding the announcement card, its button parks. */
+.chat-fab.away {
+  opacity: 0.25;
+  pointer-events: none;
 }
 
 .chat-fab:hover {
@@ -2080,52 +2086,6 @@ body.chat-open .chat-widget {
   transform: translateY(0) scale(1);
 }
 
-/* Toast mode: toast() hands site messages to the mascot, and this same
-   bubble carries them — wider, left-aligned, typewriter text, party/error
-   tints, confetti burst. (See __mascotSay in common.js.) */
-.fab-bubble.toast-mode {
-  max-width: 280px;
-  text-align: left;
-  font-weight: 500;
-  font-size: 13.5px;
-  line-height: 1.5;
-  padding: 10px 14px 11px;
-  border-radius: 14px;
-}
-
-.fab-bubble .ct-title {
-  display: block;
-  font-weight: 800;
-  font-size: 14.5px;
-  margin-bottom: 2px;
-}
-
-.fab-bubble.party .ct-title {
-  background: linear-gradient(90deg, var(--accent), var(--accent-2), var(--accent-3));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-
-.fab-bubble.party { border-color: color-mix(in srgb, var(--green) 40%, var(--border)); }
-.fab-bubble.error { border-color: color-mix(in srgb, var(--red) 40%, var(--border)); }
-
-.fab-bubble .burst {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-
-.fab-bubble .burst i {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 6px;
-  height: 9px;
-  border-radius: 2px;
-  opacity: 0;
-  animation: ctBurst 0.9s cubic-bezier(0.16, 0.8, 0.4, 1) forwards;
-}
 /* Never show a floating message while the mascot is rolling or huge, even if
    a bubble timer from the previous scene is still running. */
 .chat-fab.rolling .fab-bubble,
@@ -2774,6 +2734,21 @@ h3,
   white-space: nowrap;
 }
 
+/* Slogan flavour of the spotlight: centred one-liner, no price column. */
+.slogan-card {
+  justify-content: center;
+  gap: 11px;
+  max-width: 330px;
+  cursor: default;
+}
+
+.slogan-text {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
 .spot-dots { display: flex; gap: 6px; justify-content: center; margin-top: 10px; }
 
 .spot-dots i {
@@ -2911,6 +2886,426 @@ select.dd-native {
   .spot-card.anim { animation: none; }
   .dd.open .dd-menu { animation: none; }
   .dd-opt { animation: none; opacity: 1; }
+}
+
+/* ---------- Talk-mode horizon glow (W4, dialed a notch lighter) ----------
+   Only exists while voice mode is on (.voice-open, set by setVoiceStatus):
+   aurora blobs rest on the panel floor and a glowing horizon line blooms
+   upward, both driven by --amp (real TTS loudness from vizFrame). Typed
+   chat never shows any of it. */
+.chat-panel {
+  --amp: 0;
+}
+
+.chat-fx {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  overflow: hidden;
+  display: none;
+}
+
+.chat-panel.voice-open .chat-fx {
+  display: block;
+}
+
+/* Everything else in the panel paints above the glow. */
+.chat-panel > :not(.chat-fx) {
+  position: relative;
+  z-index: 1;
+}
+
+.chat-fx i {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(40px);
+  opacity: calc(0.09 + var(--amp) * 0.32);
+  transform: translateY(calc(26px - var(--amp) * 40px)) scale(calc(0.9 + var(--amp) * 0.4));
+  transition: opacity 0.12s linear, transform 0.12s linear;
+}
+
+.chat-fx i:nth-child(1) { width: 240px; height: 240px; left: -70px; bottom: -110px; background: var(--accent); }
+.chat-fx i:nth-child(2) { width: 220px; height: 220px; left: 80px; bottom: -130px; background: var(--accent-2); animation: chat-fx-drift1 9s ease-in-out infinite; }
+.chat-fx i:nth-child(3) { width: 210px; height: 210px; right: -60px; bottom: -100px; background: var(--accent-3); animation: chat-fx-drift2 11s ease-in-out infinite; }
+
+@keyframes chat-fx-drift1 {
+  0%, 100% { translate: 0 0; }
+  50% { translate: -26px 0; }
+}
+
+@keyframes chat-fx-drift2 {
+  0%, 100% { translate: 0 0; }
+  50% { translate: 24px 0; }
+}
+
+.chat-fx b {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(to top, color-mix(in srgb, var(--accent) 55%, transparent), transparent calc(4px + var(--amp) * 5px)),
+    linear-gradient(to top, color-mix(in srgb, var(--accent-2) 26%, transparent), transparent calc(10% + var(--amp) * 28%));
+  opacity: calc(0.2 + var(--amp) * 0.4);
+  transition: opacity 0.1s linear;
+}
+
+/* Mic tapped → the typing row leaves; Stop → it comes back. */
+.chat-panel.voice-open .chat-input {
+  display: none;
+}
+
+/* The log and the voice bar normally paint opaque --bg-2, which sat right on
+   top of the glow and hid it completely. In talk mode they go glassy so the
+   aurora shows through. */
+.chat-panel.voice-open .chat-log {
+  background: transparent;
+}
+
+.chat-panel.voice-open .chat-voice {
+  background: color-mix(in srgb, var(--bg-2) 55%, transparent);
+}
+
+/* ---------- Blur history (voice AND typed chat) ----------
+   The bubbles are the normal chat bubbles in both modes. The newest message
+   stays sharp; the previous one is lightly blurred and everything older
+   deeply blurred. Scrolling up (.browsing, set by the log's scroll handler)
+   sharpens the whole history for reading; returning to the bottom re-blurs
+   it. The glow behind the bubbles remains talk-mode only — typed chat gets
+   the blur but zero background animation. */
+.chat-msg {
+  transition: filter 0.45s ease, opacity 0.45s ease;
+}
+
+/* Thin blur — recessed but still readable without scrolling back. */
+.chat-log:not(.browsing) > :nth-last-child(2) {
+  filter: blur(0.8px);
+  opacity: 0.78;
+}
+
+.chat-log:not(.browsing) > :nth-last-child(n + 3) {
+  filter: blur(1.4px);
+  opacity: 0.6;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-msg { transition: none; }
+}
+
+/* ---------- Live blurred text (assistant replies, both modes) ---------- */
+.chat-log .lw {
+  opacity: 0;
+  filter: blur(6px);
+  transition: opacity 0.25s ease, filter 0.35s ease;
+}
+
+.chat-log .lw.in {
+  opacity: 1;
+  filter: blur(0);
+}
+
+/* ---------- Memories: the living photo wall (home page) ---------- */
+.mem-wall {
+  columns: 3 220px;
+  column-gap: 14px;
+  perspective: 1000px;
+}
+
+.mem-tile {
+  width: 100%;
+  margin-bottom: 14px;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  background: none;
+  cursor: pointer;
+  break-inside: avoid;
+  display: block;
+  position: relative;
+  opacity: 0;
+}
+
+.mem-inner {
+  display: block;
+  position: relative;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  transform-style: preserve-3d;
+  transition: transform 0.65s cubic-bezier(0.34, 1.45, 0.64, 1);
+}
+
+.mem-tile.flip .mem-inner {
+  transform: rotateY(180deg);
+}
+
+.mem-front {
+  display: block;
+  backface-visibility: hidden;
+  position: relative;
+}
+
+.mem-ph {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  font-size: 36px;
+  background: var(--ph, linear-gradient(140deg, var(--accent-3), var(--accent)));
+  color: rgba(255, 255, 255, 0.95);
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+}
+
+.mem-front img {
+  display: block;
+  width: 100%;
+}
+
+.mem-cap {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 20px 12px 9px;
+  background: linear-gradient(transparent, rgba(10, 14, 28, 0.72));
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.mem-back {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  transform: rotateY(180deg);
+  background: linear-gradient(140deg, var(--accent-3), var(--accent) 55%, var(--accent-2));
+  color: #fff;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  padding: 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  border-radius: 14px;
+}
+
+.mem-back small {
+  opacity: 0.8;
+  font-size: 10.5px;
+  display: block;
+  margin-top: 6px;
+}
+
+/* Pop in when scrolled into view, then keep breathing gently. */
+.mem-wall.pop .mem-tile {
+  animation:
+    mem-tum 0.5s cubic-bezier(0.34, 1.45, 0.64, 1) both,
+    mem-breathe 5.5s ease-in-out infinite;
+  animation-delay: calc(var(--i, 0) * 60ms), calc(1s + var(--i, 0) * 0.5s);
+}
+
+@keyframes mem-tum {
+  0% { opacity: 0; transform: translate(34px, -34px) rotate(7deg) scale(0.5); }
+  100% { opacity: 1; transform: none; }
+}
+
+@keyframes mem-breathe {
+  0%, 100% { translate: 0 0; }
+  50% { translate: 0 -5px; }
+}
+
+.mem-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 74;
+  background: color-mix(in srgb, var(--bg) 80%, transparent);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.25s ease, visibility 0s linear 0.25s;
+  display: grid;
+  place-items: center;
+}
+
+.mem-lightbox.open {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition: opacity 0.25s ease;
+}
+
+.mem-lightbox .mem-x {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  font-size: 17px;
+  cursor: pointer;
+}
+
+.mem-fig {
+  margin: 0;
+  width: min(560px, 92vw);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 30px 70px -20px rgba(0, 0, 0, 0.5);
+  transform: translate(30px, -30px) rotate(6deg) scale(0.5);
+  opacity: 0;
+  transition: transform 0.45s cubic-bezier(0.34, 1.45, 0.64, 1), opacity 0.2s ease;
+}
+
+.mem-lightbox.open .mem-fig {
+  transform: none;
+  opacity: 1;
+}
+
+.mem-fig .mem-ph {
+  height: min(340px, 48vh);
+  font-size: 74px;
+}
+
+.mem-fig img {
+  display: block;
+  width: 100%;
+  max-height: min(340px, 48vh);
+  object-fit: cover;
+}
+
+.mem-fig figcaption {
+  padding: 13px 18px;
+}
+
+.mem-fig figcaption b {
+  display: block;
+  font-size: 15px;
+}
+
+.mem-fig figcaption small {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+/* ---------- "View Pricing" burst (P2d: spring pop + pointer tilt) ---------- */
+.pburst {
+  position: fixed;
+  inset: 0;
+  z-index: 74;
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.25s ease, visibility 0s linear 0.25s;
+  display: grid;
+  place-items: center;
+}
+
+.pburst.open {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition: opacity 0.25s ease;
+}
+
+.pburst .pburst-x {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  font-size: 17px;
+  cursor: pointer;
+}
+
+.pburst-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(150px, 215px));
+  gap: 16px;
+  padding: 0 14px;
+  transition: transform 0.15s ease-out;
+}
+
+.pb-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: 0 18px 40px -14px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+  color: var(--text);
+  display: block;
+  opacity: 0;
+  transform: translate(var(--fx, 0px), var(--fy, -150px)) rotate(12deg) scale(0.2);
+  /* the P2d spring: a big, playful overshoot on arrival */
+  transition: transform 0.7s cubic-bezier(0.2, 1.9, 0.4, 1), opacity 0.2s ease;
+  transition-delay: 0ms;
+}
+
+.pburst.open .pb-card {
+  opacity: 1;
+  transform: none;
+  transition-delay: calc(var(--i, 0) * 70ms);
+}
+
+.pb-card:hover {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+
+.pb-ph {
+  height: 100px;
+  display: grid;
+  place-items: center;
+  font-size: 36px;
+  background: var(--ph, linear-gradient(140deg, var(--accent-3), var(--accent)));
+  color: rgba(255, 255, 255, 0.95);
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+}
+
+.pb-body {
+  display: block;
+  padding: 10px 14px 13px;
+}
+
+.pb-body b {
+  display: block;
+  font-size: 14.5px;
+}
+
+.pb-body small {
+  color: var(--muted);
+  font-size: 11.5px;
+  display: block;
+  min-height: 30px;
+}
+
+.pb-price {
+  display: block;
+  font-weight: 800;
+  font-size: 18px;
+  margin-top: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-fx i, .chat-fx b { transition: none; }
+  .chat-log .lw { transition: opacity 0.15s ease; filter: none; }
+  .mem-wall.pop .mem-tile { animation: none; opacity: 1; }
+  .mem-inner, .mem-fig, .pb-card { transition: none; }
+  .pburst.open .pb-card { opacity: 1; transform: none; }
 }
 
 /* ==========================================================================
@@ -3249,101 +3644,110 @@ select.dd-native {
 }
 
 /* ==========================================================================
-   TOAST — the robot leans out of its corner, right above the chat button,
-   and says the message in its own speech bubble (typewriter included).
-   Built by toast() in common.js.
+   TOAST — the spotlight card. The page dims, the corner mascot leaves its
+   button and rides the announcement in at eye level. Outcome-coloured:
+   green = it worked, red = it didn't, amber = careful. Built by toast()
+   in common.js; a new message fast-forwards the current one (never-wait).
    ========================================================================== */
 
-.chattoast {
+.toast-dim {
   position: fixed;
-  right: 20px;
-  bottom: 88px;
-  z-index: 140;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  max-width: 300px;
+  inset: 0;
+  z-index: 118;
+  background: rgba(8, 10, 24, 0.45);
+  opacity: 0;
+  transition: opacity 0.32s ease;
   pointer-events: none;
 }
 
-/* Pages without the chat button (e.g. sign-in) — sit in the corner itself. */
-.chattoast.no-fab { bottom: 20px; }
+.toast-dim.on { opacity: 1; }
 
-.chattoast .bubble {
-  position: relative;
+.toastcard {
+  position: fixed;
+  right: 18px;
+  bottom: 118px;
+  z-index: 119;
+  width: 400px;
+  max-width: calc(100vw - 32px);
   background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 14px;
+  border: 2px solid var(--border);
+  border-radius: 16px;
   box-shadow: var(--shadow);
-  padding: 10px 14px 11px;
-  font-size: 13.5px;
-  line-height: 1.5;
-  color: var(--text);
-  opacity: 0;
-  transform: translateY(10px) scale(0.75);
-  transform-origin: bottom right;
-  transition: opacity 0.26s ease, transform 0.3s cubic-bezier(0.34, 1.45, 0.64, 1);
+  padding: 16px 18px 13px;
+  cursor: pointer;
+  transform: translateX(calc(100% + 44px));
+  transition: transform 0.55s cubic-bezier(0.3, 1.08, 0.4, 1), opacity 0.22s ease;
 }
 
-.chattoast .bubble::after {
-  content: "";
+.toastcard.in { transform: none; }
+.toastcard.out { opacity: 0; }
+
+/* Chat panel open: stay out of its way — quiet card bottom-left, no rider. */
+.toastcard.quiet {
+  right: auto;
+  left: 18px;
+  bottom: 18px;
+  transform: translateX(calc(-100% - 44px));
+}
+.toastcard.quiet.in { transform: none; }
+
+.toastcard .rider {
   position: absolute;
-  bottom: -6px;
-  right: 22px;
-  width: 12px;
-  height: 12px;
-  transform: rotate(45deg);
-  background: var(--card);
-  border-right: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
+  top: -47px;
+  left: 22px;
 }
 
-.chattoast .ebot {
-  zoom: 0.78;
-  margin: 11px 16px 0 0;
-  opacity: 0;
-  transform: translateY(26px);
-  transition: opacity 0.24s ease, transform 0.34s cubic-bezier(0.34, 1.45, 0.64, 1);
-}
+.toastcard .rider .ebot { zoom: 0.95; }
 
-.chattoast.show .bubble { opacity: 1; transform: none; transition-delay: 0.14s; }
-.chattoast.show .ebot { opacity: 1; transform: none; }
-.chattoast.hide .bubble { opacity: 0; transform: translateY(8px) scale(0.8); }
-.chattoast.hide .ebot { opacity: 0; transform: translateY(26px); }
-
-.chattoast .ct-title {
+.toastcard .ct-title {
   display: block;
   font-weight: 800;
-  font-size: 14.5px;
+  font-size: 15px;
   margin-bottom: 2px;
 }
 
-.chattoast.party .ct-title {
-  background: linear-gradient(90deg, var(--accent), var(--accent-2), var(--accent-3));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+.toastcard .amsg {
+  font-size: 14px;
+  line-height: 1.55;
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
 }
 
-.chattoast.party .bubble { border-color: color-mix(in srgb, var(--green) 40%, var(--border)); }
-.chattoast.error .bubble { border-color: color-mix(in srgb, var(--red) 40%, var(--border)); }
-
-.chattoast .type-caret {
-  display: inline-block;
-  width: 6px;
-  height: 12px;
-  background: var(--accent);
-  border-radius: 2px;
-  vertical-align: -1px;
-  animation: caretBlink 0.7s steps(1) infinite;
+.toastcard .chip {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  margin-top: 1px;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 800;
+  color: #fff;
 }
 
-/* (caretBlink is defined once, next to the chat's own typing caret.) */
+.toastcard .life {
+  height: 3px;
+  border-radius: 3px;
+  margin-top: 12px;
+  transform-origin: left;
+}
 
-/* One-shot confetti burst out of the bubble on party toasts. */
-.chattoast .burst { position: absolute; inset: 0; pointer-events: none; }
+.toastcard.in .life { animation: tcLife 4.6s linear forwards; }
 
-.chattoast .burst i {
+@keyframes tcLife {
+  0% { transform: scaleX(1); }
+  100% { transform: scaleX(0); }
+}
+
+.toastcard .burst {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.toastcard .burst i {
   position: absolute;
   top: 50%;
   left: 50%;
@@ -3360,9 +3764,41 @@ select.dd-native {
   100% { opacity: 0; transform: translate(var(--bx), var(--by)) rotate(var(--br)); }
 }
 
+/* GREEN — success & party */
+.toastcard.good {
+  border-color: color-mix(in srgb, var(--green) 55%, var(--border));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--green) 9%, var(--card)), var(--card) 60%);
+}
+.toastcard.good .chip { background: var(--green); }
+.toastcard.good .life { background: linear-gradient(90deg, var(--green), #2ba75f); }
+.toastcard.good .ct-title {
+  background: linear-gradient(90deg, var(--green), var(--accent), var(--accent-2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* RED — errors */
+.toastcard.bad {
+  border-color: color-mix(in srgb, var(--red) 55%, var(--border));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--red) 9%, var(--card)), var(--card) 60%);
+}
+.toastcard.bad .chip { background: var(--red); }
+.toastcard.bad .life { background: linear-gradient(90deg, var(--red), #b3362e); }
+.toastcard.bad .ct-title { color: var(--red); }
+
+/* AMBER — warnings (toast type "info") */
+.toastcard.warn {
+  border-color: color-mix(in srgb, var(--amber) 60%, var(--border));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--amber) 10%, var(--card)), var(--card) 60%);
+}
+.toastcard.warn .chip { background: var(--amber); color: #3b2f04; }
+.toastcard.warn .life { background: linear-gradient(90deg, var(--amber), #d99e28); }
+.toastcard.warn .ct-title { color: var(--amber); }
+
 @media (max-width: 720px) {
-  .chattoast { right: 12px; bottom: 150px; }
-  .chattoast.no-fab { bottom: 20px; }
+  .toastcard { right: 12px; bottom: 106px; }
+  .toastcard.quiet { left: 12px; bottom: 12px; }
 }
 
 /* ==========================================================================

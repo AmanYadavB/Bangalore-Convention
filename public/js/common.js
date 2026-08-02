@@ -99,58 +99,78 @@ function mascotStage(mood) {
   );
 }
 
-// Toast, the chatbot way: the robot pops up above its chat button, the
-// speech bubble springs open with a tail, and the message TYPES itself out.
-// Party news gets a gradient headline, a dancing robot and a confetti burst.
-// Then it ducks back down. Same signature as before: toast(message, type)
-// with type one of success (default) / error / info / party.
-let __toastEl = null;
-let __toastTimers = [];
+// Toast — the spotlight card. The page dims, the corner mascot leaves its
+// button and rides the announcement in at eye level. Outcome-coloured:
+// green (success/party), red (error), amber (info). Same signature as ever:
+// toast(message, type) with type success (default) / error / info / party.
+//
+// The "always completes, never waits" rule: an announcement always finishes
+// gracefully — if a new message arrives mid-show, the current one
+// fast-forwards to its finished state (full text, quick exit) and the next
+// starts immediately. Clicking the card counts as "read". The dim never
+// blocks the page underneath.
+let __toast = null; // { my, finishFast(next) }
+let __toastSeq = 0;
 
 function toast(message, type = "success") {
-  // ONE mascot rule: when the corner mascot is home (and not mid-flight or
-  // grown huge, and the chat panel is closed), IT says the message itself —
-  // registered by mountMascot as __mascotSay. Everything below is the
-  // fallback: a plain corner bubble, with a robot ONLY on pages that have no
-  // corner mascot at all (e.g. sign-in) so there are never two on screen.
-  const fabEl = document.getElementById("chatFab");
-  if (
-    window.__mascotSay &&
-    fabEl &&
-    !document.body.classList.contains("chat-open") &&
-    !fabEl.classList.contains("flying") &&
-    !fabEl.classList.contains("huge")
-  ) {
-    window.__mascotSay(message, type);
-    return;
+  const begin = () => __toastShow(String(message || ""), type);
+  if (__toast) return __toast.finishFast(begin);
+  begin();
+}
+
+function __toastShow(text, type) {
+  const my = ++__toastSeq;
+  const T =
+    type === "error"
+      ? { cls: "bad", chip: "✕", mood: "sad", title: "that didn't work" }
+      : type === "info"
+      ? { cls: "warn", chip: "!", mood: "worried", title: "heads up" }
+      : type === "party"
+      ? { cls: "good", chip: "✓", mood: "dance", title: "LET'S GOOOO!! 🎉" }
+      : { cls: "good", chip: "✓", mood: "happy", title: "" };
+
+  const fab = document.getElementById("chatFab");
+  const chatOpen = document.body.classList.contains("chat-open");
+  // ONE mascot rule: the rider is the corner mascot, moved onto the card. If
+  // it's visibly busy elsewhere (flying a loop, grown huge) or the chat panel
+  // is open, the card goes out plain — never two robots on screen.
+  const mascotBusy = fab && (fab.classList.contains("flying") || fab.classList.contains("huge"));
+  const rider = !chatOpen && !mascotBusy;
+  const dimmed = !chatOpen;
+
+  // Park the corner button and hold the mascot's scene loop while it's away.
+  if (rider && fab) {
+    fab.classList.remove("waving", "rolling", "jumping");
+    fab.classList.add("away");
+    window.__mascotSayUntil = Date.now() + 1200 + text.length * 17 + 4600 + 800;
   }
 
-  if (__toastEl) __toastEl.remove();
-  __toastTimers.forEach(clearTimeout);
-  __toastTimers = [];
+  let dim = null;
+  if (dimmed) {
+    dim = document.createElement("div");
+    dim.className = "toast-dim";
+    document.body.appendChild(dim);
+    requestAnimationFrame(() => dim.classList.add("on"));
+  }
 
-  const mood =
-    type === "error" ? "sad" : type === "info" ? "worried" : type === "party" ? "dance" : "happy";
-  const flavor = type === "party" ? "party" : type === "error" ? "error" : "";
-  const title = type === "party" ? "LET'S GOOOO!! 🎉" : "";
+  const card = document.createElement("div");
+  card.className = "toastcard " + T.cls + (chatOpen ? " quiet" : "");
+  card.innerHTML =
+    (rider ? '<span class="rider">' + mascotHTML(T.mood) + "</span>" : "") +
+    (T.title ? '<b class="ct-title"></b>' : "") +
+    '<div class="amsg"><span class="chip">' + T.chip + "</span>" +
+    '<div><span class="ct-msg"></span><span class="type-caret"></span>' +
+    (type === "party" ? '<span class="burst"></span>' : "") +
+    "</div></div>" +
+    '<div class="life"></div>';
+  if (T.title) card.querySelector(".ct-title").textContent = T.title;
+  document.body.appendChild(card);
+  setTimeout(() => card.classList.add("in"), 30);
 
-  const el = document.createElement("div");
-  __toastEl = el;
-  el.className = "chattoast " + flavor + (fabEl ? "" : " no-fab");
-  el.innerHTML =
-    '<div class="bubble">' +
-    (title ? '<b class="ct-title"></b>' : "") +
-    '<span class="ct-msg"></span><span class="type-caret"></span>' +
-    '<span class="burst"></span></div>' +
-    (fabEl ? "" : mascotHTML(mood));
-  if (title) el.querySelector(".ct-title").textContent = title;
-  document.body.appendChild(el);
-  requestAnimationFrame(() => el.classList.add("show"));
-
-  // Party: a one-shot confetti burst out of the bubble.
-  if (flavor === "party") {
-    const burst = el.querySelector(".burst");
-    const colors = ["#5b5bf0", "#7c3aed", "#0ea5e9", "#10b981", "#f59e0b", "#ef4444"];
+  // Party: one-shot confetti burst out of the card.
+  if (type === "party") {
+    const burst = card.querySelector(".burst");
+    const colors = ["#10b981", "#5b5bf0", "#7c3aed", "#0ea5e9", "#f59e0b", "#ef4444"];
     for (let i = 0; i < 10; i++) {
       const p = document.createElement("i");
       const ang = (i / 10) * Math.PI * 2;
@@ -163,34 +183,63 @@ function toast(message, type = "success") {
     }
   }
 
+  const msgEl = card.querySelector(".ct-msg");
+  const timers = [];
+  let typeTimer = 0;
+  let closed = false;
+
+  const cleanup = () => {
+    card.remove();
+    if (dim) {
+      dim.classList.remove("on");
+      setTimeout(() => dim.remove(), 350);
+    }
+    if (rider && fab) fab.classList.remove("away");
+    if (my === __toastSeq) window.__mascotSayUntil = 0;
+    if (__toast && __toast.my === my) __toast = null;
+  };
+
+  const exit = (fast, next) => {
+    if (closed) return;
+    closed = true;
+    timers.forEach(clearTimeout);
+    clearInterval(typeTimer);
+    card.classList.add("out");
+    card.classList.remove("in");
+    setTimeout(() => {
+      cleanup();
+      next && next();
+    }, fast ? 240 : 380);
+  };
+
   // The message types itself out, exactly like the chatbot writing.
-  const msgEl = el.querySelector(".ct-msg");
-  const caret = el.querySelector(".type-caret");
-  const text = String(message || "");
   let i = 0;
-  const tick = setInterval(() => {
-    if (el !== __toastEl) return clearInterval(tick);
+  typeTimer = setInterval(() => {
     msgEl.textContent = text.slice(0, ++i);
     if (i >= text.length) {
-      clearInterval(tick);
-      caret.remove();
-      // Read time scales a little with message length, then it ducks away.
-      __toastTimers.push(
-        setTimeout(() => {
-          if (el !== __toastEl) return;
-          el.classList.add("hide");
-          __toastTimers.push(
-            setTimeout(() => {
-              if (el === __toastEl) {
-                el.remove();
-                __toastEl = null;
-              }
-            }, 380)
-          );
-        }, 2200 + Math.min(1800, text.length * 12))
-      );
+      clearInterval(typeTimer);
+      const c = card.querySelector(".type-caret");
+      if (c) c.remove();
+      timers.push(setTimeout(() => exit(false), 2600 + Math.min(1600, text.length * 8)));
     }
   }, 17);
+
+  __toast = {
+    my,
+    // Graceful fast-forward: full text NOW, complete quick exit, then next.
+    finishFast(next) {
+      clearInterval(typeTimer);
+      msgEl.textContent = text;
+      const c = card.querySelector(".type-caret");
+      if (c) c.remove();
+      exit(true, next);
+    },
+  };
+
+  // Clicking the card counts as "read" — it completes and leaves at once.
+  card.addEventListener("click", () => {
+    if (__toast && __toast.my === my) __toast.finishFast();
+  });
 }
 
 // Mascot-fronted replacement for window.confirm(). Returns Promise<boolean>.
@@ -615,7 +664,8 @@ function mountReveals() {
     { sel: ".hero > *:not(.hero-grid)", stagger: true },
     { sel: ".grid > *", stagger: true },
     { sel: ".reg-layout > *", stagger: true },
-    { sel: ".container > *:not(.grid):not(.reg-layout):not(script):not(style)", stagger: false },
+    // .mem-wall runs its own per-tile pop (index.html), so it opts out here.
+    { sel: ".container > *:not(.grid):not(.reg-layout):not(.mem-wall):not(script):not(style)", stagger: false },
   ];
 
   // Strip the classes once the entrance ends so the card :hover lifts (and
@@ -1041,82 +1091,9 @@ function mountMascot() {
     return roll();
   }
 
-  // ---- toast() hands messages here: THE mascot says them itself ----------
-  // The chat-bubble button morphs into the robot, feels the mood, types the
-  // message in its own speech bubble, then tucks back in. The scene loop is
-  // held off (via __mascotSayUntil) while it talks.
-  let sayToken = 0;
-  window.__mascotSay = function (message, type) {
-    const my = ++sayToken;
-    const text = String(message || "");
-    const mood =
-      type === "error" ? "sad" : type === "info" ? "worried" : type === "party" ? "dance" : "happy";
-    const flavor = type === "party" ? "party" : type === "error" ? "error" : "";
-    const hold = 2200 + Math.min(1800, text.length * 12);
-    window.__mascotSayUntil = Date.now() + text.length * 17 + hold + 1200;
+  // (Toast announcements are handled by toast() itself now — it parks the
+  // button with .away and holds this scene loop via __mascotSayUntil.)
 
-    clearMoves();
-    hideBubble();
-    setForm("bot");
-    const bot = fab.querySelector(".ebot");
-    if (bot) bot.className = "ebot " + mood;
-
-    bubble.className = "fab-bubble toast-mode show" + (flavor ? " " + flavor : "");
-    bubble.innerHTML =
-      (type === "party" ? '<b class="ct-title">LET\'S GOOOO!! 🎉</b>' : "") +
-      '<span class="ct-msg"></span><span class="type-caret"></span>' +
-      (flavor === "party" ? '<span class="burst"></span>' : "");
-
-    if (flavor === "party") {
-      const burst = bubble.querySelector(".burst");
-      const colors = ["#5b5bf0", "#7c3aed", "#0ea5e9", "#10b981", "#f59e0b", "#ef4444"];
-      for (let i = 0; i < 10; i++) {
-        const p = document.createElement("i");
-        const ang = (i / 10) * Math.PI * 2;
-        p.style.setProperty("--bx", Math.round(Math.cos(ang) * (60 + Math.random() * 40)) + "px");
-        p.style.setProperty("--by", Math.round(Math.sin(ang) * (40 + Math.random() * 30) - 20) + "px");
-        p.style.setProperty("--br", Math.round(Math.random() * 500 - 250) + "deg");
-        p.style.background = colors[i % colors.length];
-        p.style.animationDelay = 0.15 + Math.random() * 0.15 + "s";
-        burst.appendChild(p);
-      }
-      if (canPlay()) boops();
-    }
-
-    const msgEl = bubble.querySelector(".ct-msg");
-    const caret = bubble.querySelector(".type-caret");
-    let i = 0;
-    const t = setInterval(() => {
-      if (my !== sayToken) return clearInterval(t);
-      msgEl.textContent = text.slice(0, ++i);
-      if (i >= text.length) {
-        clearInterval(t);
-        caret.remove();
-        setTimeout(() => {
-          if (my !== sayToken) return;
-          bubble.classList.remove("show");
-          setTimeout(() => {
-            if (my !== sayToken) return;
-            bubble.className = "fab-bubble";
-            bubble.textContent = "";
-            if (bot) bot.className = "ebot";
-            setForm("box");
-            window.__mascotSayUntil = 0;
-          }, 280);
-        }, hold);
-      }
-    }, 17);
-  };
-  // A toast can arrive while a previous one is still up — the token above
-  // makes the newest one win; the interval/timeouts of the old one bail out.
-  const cancelSay = () => {
-    sayToken++;
-    window.__mascotSayUntil = 0;
-    bubble.className = "fab-bubble";
-    bubble.textContent = "";
-    const bot = fab.querySelector(".ebot");
-    if (bot) bot.className = "ebot";
-  };
 
   // Run the scenes one after another, forever. Pause while the chat is open.
   // minuteFlipBusy is set while the minute-flip overlay scene is running so that
@@ -1397,11 +1374,9 @@ function mountMascot() {
   setForm("box");
   setTimeout(cycle, 1000);
 
-  // When the chat opens, calm down and stay a plain chat button — and if a
-  // toast announcement was mid-sentence, drop it cleanly.
+  // When the chat opens, calm down and stay a plain chat button.
   const obs = new MutationObserver(() => {
     if (isChatOpen()) {
-      cancelSay();
       clearMoves();
       showGhost(false);
       setForm("box");
@@ -1525,6 +1500,7 @@ function mountChat() {
       <span class="fab-mascot" aria-hidden="true"><span class="fm-rotor"></span>${mascotHTML("")}</span>
     </button>
     <section class="chat-panel" id="chatPanel" aria-live="polite" hidden>
+      <div class="chat-fx" aria-hidden="true"><i></i><i></i><i></i><b></b></div>
       <header class="chat-head">
         <div class="chat-head-main">
           <span class="chat-avatar mini-bot" id="chatAvatar" aria-hidden="true">
@@ -1563,6 +1539,14 @@ function mountChat() {
   const micBtn = document.getElementById("chatMic");
   const voiceBar = document.getElementById("chatVoice");
   const voiceLabel = document.getElementById("chatVoiceLabel");
+
+  // Voice mode floats messages over the glow with the history blurred; when
+  // the user scrolls back up to read, sharpen everything (.browsing) until
+  // they return to the live bottom edge.
+  log.addEventListener("scroll", () => {
+    const pinned = log.scrollHeight - log.scrollTop - log.clientHeight < 60;
+    log.classList.toggle("browsing", !pinned);
+  });
   let greeted = false;
   let lastUserText = "";
 
@@ -1630,26 +1614,89 @@ function mountChat() {
     }
   }
 
-  // Reveal an assistant reply one character at a time, like the mascot is
-  // writing it out on a board. Calls done() when the whole line is written.
+  // Reveal an assistant reply word by word, each word materialising out of a
+  // blur — the "live" feel in both typed chat and talk mode. (This replaced
+  // the old per-character typewriter + caret.) Calls done() at the end.
+  // Words are added as text nodes inside spans, so no escaping is needed.
   function typeOut(el, txt, msPerChar, done) {
+    el.innerHTML = "";
+    const spans = [];
+    String(txt)
+      .split(/(\s+)/)
+      .forEach((part) => {
+        if (!part) return;
+        if (/^\s+$/.test(part)) {
+          const breaks = part.split("\n").length - 1;
+          if (breaks) {
+            for (let n = 0; n < breaks; n++) el.appendChild(document.createElement("br"));
+          } else {
+            el.appendChild(document.createTextNode(" "));
+          }
+          return;
+        }
+        const s = document.createElement("span");
+        s.className = "lw";
+        s.textContent = part;
+        el.appendChild(s);
+        spans.push(s);
+      });
+    scrollToMsg(el, "assistant");
     let i = 0;
-    const paint = (withCaret) => {
-      const part = escapeHtml(txt.slice(0, i)).replace(/\n/g, "<br>");
-      el.innerHTML = withCaret ? part + '<span class="type-caret"></span>' : part;
-      scrollToMsg(el, "assistant");
-    };
-    paint(true);
-    const timer = setInterval(() => {
-      i++;
-      paint(i < txt.length);
-      if (i >= txt.length) {
-        clearInterval(timer);
-        paint(false);
+    (function step() {
+      if (i >= spans.length) {
+        scrollToMsg(el, "assistant");
         if (done) done();
+        return;
       }
-    }, msPerChar);
-    return timer;
+      const s = spans[i++];
+      s.classList.add("in");
+      // Scrolling on every word caused visible jank — every few is plenty.
+      if (i % 5 === 1) scrollToMsg(el, "assistant");
+      // Same overall pace as the old per-character reveal.
+      setTimeout(step, msPerChar * (s.textContent.length + 1));
+    })();
+  }
+
+  // Streamed twin of typeOut: append only the NEW words of `full` as blur-in
+  // spans, so live token streams animate exactly like the greeting. A partial
+  // trailing word waits for its next token unless `flush` is set. If the text
+  // was rewritten rather than extended, fall back to a plain repaint.
+  function appendLive(el, full, flush) {
+    const prev = el.__live || "";
+    if (!String(full).startsWith(prev)) {
+      el.__live = String(full);
+      el.innerHTML = escapeHtml(full).replace(/\n/g, "<br>");
+      return;
+    }
+    let delta = String(full).slice(prev.length);
+    if (!flush) {
+      const cut = Math.max(delta.lastIndexOf(" "), delta.lastIndexOf("\n"));
+      if (cut === -1) return;
+      delta = delta.slice(0, cut + 1);
+    }
+    if (!delta) return;
+    el.__live = prev + delta;
+    let batch = 0;
+    delta.split(/(\s+)/).forEach((part) => {
+      if (!part) return;
+      if (/^\s+$/.test(part)) {
+        const breaks = part.split("\n").length - 1;
+        if (breaks) {
+          for (let n = 0; n < breaks; n++) el.appendChild(document.createElement("br"));
+        } else {
+          el.appendChild(document.createTextNode(" "));
+        }
+        return;
+      }
+      const s = document.createElement("span");
+      s.className = "lw";
+      s.textContent = part;
+      // Words arriving together (a flushed sentence) cascade instead of
+      // popping in as one block.
+      s.style.transitionDelay = Math.min(batch++ * 28, 560) + "ms";
+      el.appendChild(s);
+      requestAnimationFrame(() => s.classList.add("in"));
+    });
   }
 
   // Snappy when typing text; a little slower in voice mode so the words appear
@@ -2202,7 +2249,7 @@ function mountChat() {
         voiceMascot = addAssistantBubble();
       }
       spokenText += (spokenText ? " " : "") + chunk;
-      voiceMascot.txt.innerHTML = escapeHtml(spokenText).replace(/\n/g, "<br>");
+      appendLive(voiceMascot.txt, spokenText, true);
       scrollToMsg(voiceMascot.row, "assistant");
     };
     const queueTts = (chunk) => {
@@ -2270,7 +2317,7 @@ function mountChat() {
                 bubbleBot = m.bot;
                 bubble = m.txt;
               }
-              bubble.innerHTML = escapeHtml(visibleText(fullText)).replace(/\n/g, "<br>");
+              appendLive(bubble, visibleText(fullText));
               log.scrollTop = log.scrollHeight;
             } else {
               // Speak+reveal one chunk at a time as generation continues.
@@ -2333,7 +2380,9 @@ function mountChat() {
             // shown text rather than the raw reply.
             const shown = message || "Okay.";
             history.push({ role: "assistant", content: shown });
-            bubble.innerHTML = escapeHtml(shown).replace(/\n/g, "<br>");
+            // Flush any held-back words; appendLive repaints plainly if the
+            // cleaned message differs from what streamed in.
+            appendLive(bubble, shown, true);
             log.scrollTop = log.scrollHeight;
           }
           if (action) executeAction(action, html);
@@ -2501,6 +2550,15 @@ function mountChat() {
   // each bar dances independently, like Gemini's waveform.
   const VIZ_BANDS = [[24, 48], [10, 24], [2, 10], [10, 24], [24, 48]];
 
+  // One 0..1 loudness value drives the "horizon glow" that rises from the
+  // panel floor in talk mode. Real analyser levels when available; a soft
+  // synthetic pulse when speech plays without one; decays to 0 otherwise.
+  let fxAmp = 0;
+  function fxSetAmp(target) {
+    fxAmp = target > fxAmp ? fxAmp + (target - fxAmp) * 0.45 : fxAmp * 0.86;
+    if (panel) panel.style.setProperty("--amp", fxAmp < 0.005 ? "0" : fxAmp.toFixed(3));
+  }
+
   function vizFrame() {
     vizRaf = requestAnimationFrame(vizFrame);
     if (!vizEl) return;
@@ -2509,7 +2567,14 @@ function mountChat() {
     const analyser = vizState === "speaking" && ttsLive ? ttsAnalyser : null;
     const live = !!(analyser && vizAC && vizAC.state === "running");
     vizEl.classList.toggle("live", live);
-    if (!live) return; // CSS keyframes take over for this state
+    if (!live) {
+      // Browser-voice fallback still speaks without an analyser — keep the
+      // glow moving; while listening/thinking the aurora breathes gently so
+      // talk mode always visibly glows; outside voice mode it sinks to 0.
+      const idle = voiceMode ? 0.12 + Math.sin(performance.now() / 850) * 0.06 : 0;
+      fxSetAmp(vizState === "speaking" ? 0.2 + Math.random() * 0.35 : idle);
+      return; // CSS keyframes take over the bars for this state
+    }
     if (!vizData) vizData = new Uint8Array(analyser.frequencyBinCount);
     analyser.getByteFrequencyData(vizData);
     for (let i = 0; i < vizBars.length; i++) {
@@ -2521,6 +2586,9 @@ function mountChat() {
       vizLevels[i] = target > vizLevels[i] ? target : vizLevels[i] * 0.8;
       vizBars[i].style.height = (5 + vizLevels[i] * 21).toFixed(1) + "px";
     }
+    // Real levels average low; lift and floor them so speech reads clearly.
+    const mean = vizLevels.reduce((a, b) => a + b, 0) / vizLevels.length;
+    fxSetAmp(Math.min(1, 0.12 + mean * 1.1));
   }
 
   function vizStart() {
@@ -2535,6 +2603,8 @@ function mountChat() {
       vizLevels[i] = 0;
       vizBars[i].style.height = "";
     }
+    fxAmp = 0;
+    if (panel) panel.style.setProperty("--amp", "0");
   }
 
   function setVoiceStatus(state) {
@@ -2999,6 +3069,32 @@ function mountChat() {
         addMsg(
           "assistant",
           "\u26a0\ufe0f I couldn't use the microphone. Please allow mic access in your browser, then tap the mic again."
+        );
+        return;
+      }
+      // Some browsers (Edge especially) reject en-IN outright. Retry once in
+      // en-US before giving up \u2014 onend restarts listening with the new lang.
+      if (ev.error === "language-not-supported" && recognition.lang !== "en-US") {
+        recognition.lang = "en-US";
+        return;
+      }
+      // Anything else fatal used to fail SILENTLY here \u2014 voice mode just sat
+      // "listening" forever (classic in Edge, whose recognition service often
+      // can't start sessions at all). Say so instead, and bow out cleanly.
+      if (
+        ev.error === "network" ||
+        ev.error === "audio-capture" ||
+        ev.error === "language-not-supported"
+      ) {
+        recognizing = false;
+        voiceMode = false;
+        stopSpeaking();
+        setVoiceStatus("");
+        addMsg(
+          "assistant",
+          "\u26a0\ufe0f Voice recognition couldn't start in this browser (" +
+            ev.error +
+            "). Google Chrome works best for talk mode \u2014 or check that a microphone is connected."
         );
       }
       // 'no-speech' / 'aborted' fall through; onend restarts listening.
