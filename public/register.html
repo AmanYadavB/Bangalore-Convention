@@ -114,7 +114,7 @@
           sel.innerHTML = '<option value="">Couldn\'t load categories</option>';
           const btn = document.querySelector('#reg-form button[type="submit"]');
           if (btn) btn.disabled = true;
-          toast("Couldn't load ticket categories. Please refresh the page.", "error");
+          toast("couldn't load the ticket categories — refresh the page and they'll show up", "error");
           return;
         }
         sel.innerHTML =

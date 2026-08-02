@@ -1101,50 +1101,10 @@ tbody tr:hover {
   background: linear-gradient(90deg, var(--amber), #d99e28);
 }
 
-/* ---------- Toast ---------- */
-.toast {
-  position: fixed;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%) translateY(20px);
-  background: var(--card);
-  border: 1px solid var(--border);
-  padding: 13px 20px;
-  border-radius: 12px;
-  box-shadow: var(--shadow);
-  opacity: 0;
-  transition: opacity 0.25s ease, transform 0.25s ease;
-  pointer-events: none;
-  /* Above the chat widget (z-index 60), which it used to tie with and get
-     tangled up in on phones. */
-  z-index: 70;
-  font-weight: 600;
-  /* Error text comes straight from the server and can be a full sentence.
-     Without a bound it grew past the viewport and was clipped on both sides. */
-  max-width: min(92vw, 420px);
-  box-sizing: border-box;
-  text-align: center;
-}
-
-.toast.show {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0);
-}
-
-.toast.error {
-  border-color: var(--red);
-  color: var(--red);
-}
-
-.toast.success {
-  border-color: var(--green);
-  color: var(--green);
-}
-
-.toast.info {
-  border-color: var(--amber);
-  color: var(--amber);
-}
+/* ---------- Toast ----------
+   The pill toast was replaced by the mascot corner toast (.chattoast, in the
+   mascot section near the end of this file): the robot pops out above its
+   chat button and says the message in its own speech bubble. ---------- */
 
 /* ---------- Misc ---------- */
 .section-head {
@@ -2734,164 +2694,353 @@ h3,
   .footer {
     padding: 28px 16px;
   }
+}
 
-  /* The toast sits centred at the bottom, exactly where the chat button
-     lives. Lift it clear on small screens. */
-  .toast {
-    bottom: 88px;
+/* ---------- Entrance reveals (site-wide "tilt tumble") ----------
+   The mobile menu's corner-burst spring, applied to page content: blocks
+   tumble in from the top-right with a small rotation, staggered, as they
+   enter the viewport. .rv/.rv-in are added ONLY by mountReveals() in
+   common.js and stripped again when each entrance finishes (so the card
+   :hover lifts keep working); with scripts off the classes never exist and
+   nothing stays hidden. */
+.rv {
+  opacity: 0;
+  transform: translate(46px, -46px) rotate(6deg) scale(0.6);
+}
+
+.rv.rv-in {
+  opacity: 1;
+  transform: none;
+  transition: transform 0.55s cubic-bezier(0.34, 1.45, 0.64, 1), opacity 0.3s ease;
+  transition-delay: calc(var(--rvi, 0) * 60ms);
+}
+
+/* The profile dropdown joins the same motion family: it tumbles out of the
+   avatar's corner each time it opens. (display toggles with .open, so a
+   keyframe animation replays on every open.) */
+.profile-menu.open {
+  transform-origin: top right;
+  animation: menu-tumble 0.4s cubic-bezier(0.34, 1.45, 0.64, 1);
+}
+
+@keyframes menu-tumble {
+  0% { opacity: 0; transform: translate(14px, -14px) rotate(5deg) scale(0.5); }
+  100% { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rv {
+    opacity: 1;
+    transform: none;
+  }
+  .rv.rv-in {
+    transition: none;
+  }
+  .profile-menu.open {
+    animation: none;
   }
 }
 
-
 /* ==========================================================================
-   MASCOT EMOTIONS — shared by toasts, confirm dialogs and the auth pages.
-   The base .mini-bot face gains optional parts (tears, arms) that only a
-   mood class reveals: happy, dance, sad, worried, wave.
+   THE MASCOT, EVERYWHERE — the full chat-button robot (antenna, blinking
+   eyes, gradient body, arms, dangling legs) reused across toasts, confirm
+   dialogs, the celebration card and the server-rendered auth pages.
+   Moods: happy, dance, sad, worried, wave. Scenes: scene-jump.
+   Markup comes from mascotHTML() in common.js (and the worker's copy).
    ========================================================================== */
 
-.mini-bot .mb-tear,
-.mini-bot .mb-arm {
-  display: none;
+.ebot {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 56px;
+  flex: 0 0 auto;
 }
 
-/* Smiles and frowns are the same filled arc, flipped. */
-.mini-bot.happy .mb-mouth,
-.mini-bot.dance .mb-mouth,
-.mini-bot.wave .mb-mouth {
-  height: 5px;
-  border-radius: 0 0 6px 6px;
-}
-
-.mini-bot.sad .mb-mouth {
-  height: 5px;
-  border-radius: 6px 6px 0 0;
-}
-
-.mini-bot.worried .mb-mouth {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-}
-
-/* Tears fall from under the eyes, over and over. */
-.mini-bot.sad .mb-tear {
-  display: block;
+.eb-antenna {
   position: absolute;
-  top: 14px;
-  width: 4px;
-  height: 6px;
-  border-radius: 50% 50% 60% 60%;
-  background: var(--accent-3);
-  opacity: 0;
-  animation: mbTear 1.5s ease-in infinite;
-}
-
-.mini-bot.sad .mb-tear.l { left: 8px; }
-.mini-bot.sad .mb-tear.r { right: 8px; animation-delay: 0.55s; }
-
-@keyframes mbTear {
-  0% { opacity: 0; transform: translateY(0); }
-  15% { opacity: 1; }
-  70% { opacity: 1; }
-  100% { opacity: 0; transform: translateY(9px); }
-}
-
-/* A single sweat drop for the worried face. */
-.mini-bot.worried .mb-tear.r {
-  display: block;
-  position: absolute;
-  top: 4px;
-  right: 2px;
-  width: 4px;
-  height: 6px;
-  border-radius: 50% 50% 60% 60%;
-  background: var(--accent-3);
-  animation: mbSweat 2.2s ease-in-out infinite;
-}
-
-@keyframes mbSweat {
-  0%, 100% { opacity: 0; transform: translateY(0); }
-  30%, 70% { opacity: 1; transform: translateY(2px); }
-}
-
-/* Little arms. Dance raises both; wave raises one and swings it. They sit
-   partly over the body edge (pivot at the bottom) so they read as attached. */
-.mini-bot .mb-arm {
-  position: absolute;
-  width: 4px;
-  height: 10px;
-  border-radius: 3px;
-  background: var(--accent-ink);
+  top: 1px;
+  left: 50%;
+  width: 2px;
+  height: 9px;
+  margin-left: -1px;
+  background: color-mix(in srgb, var(--accent) 60%, #fff);
   transform-origin: bottom center;
 }
 
-.mini-bot.dance .mb-arm { display: block; top: -4px; }
-.mini-bot.dance .mb-arm.l { left: -1px; transform: rotate(-28deg); animation: mbArmL 0.6s ease-in-out infinite; }
-.mini-bot.dance .mb-arm.r { right: -1px; transform: rotate(28deg); animation: mbArmR 0.6s ease-in-out infinite; }
-
-@keyframes mbArmL {
-  0%, 100% { transform: rotate(-28deg); }
-  50% { transform: rotate(-45deg); }
+.eb-antenna::after {
+  content: "";
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-2);
+  box-shadow: 0 0 8px 1px color-mix(in srgb, var(--accent-2) 70%, transparent);
+  animation: mascotBlink 2s infinite;
 }
 
-@keyframes mbArmR {
-  0%, 100% { transform: rotate(28deg); }
-  50% { transform: rotate(45deg); }
+.eb-head {
+  position: absolute;
+  top: 9px;
+  left: 4px;
+  width: 36px;
+  height: 26px;
+  border-radius: 10px;
+  background: linear-gradient(160deg, #eef2ff, #c7d2fe);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, #fff);
+  box-shadow: inset 0 -3px 6px rgba(99, 102, 241, 0.25), 0 3px 8px -3px rgba(30, 30, 60, 0.4);
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  padding-top: 7px;
 }
 
-.mini-bot.wave .mb-arm.r {
-  display: block;
-  top: -5px;
-  right: -1px;
-  animation: mbWave 0.9s ease-in-out infinite;
+.eb-eye {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-ink);
+  animation: mascotBlink 3.4s infinite;
 }
 
-@keyframes mbWave {
-  0%, 100% { transform: rotate(14deg); }
-  50% { transform: rotate(52deg); }
+.eb-mouth {
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 10px;
+  height: 2.5px;
+  border-radius: 3px;
+  background: var(--accent-ink);
 }
 
-/* Whole-body moods. */
-.mini-bot.happy { animation: mbBob 1.4s ease-in-out infinite; }
-.mini-bot.dance { animation: mbDance 0.6s ease-in-out infinite; }
-.mini-bot.sad { animation: mbDroop 2.6s ease-in-out infinite; }
-.mini-bot.worried { animation: mbShiver 2.4s ease-in-out infinite; }
-
-@keyframes mbDance {
-  0%, 100% { transform: rotate(-6deg) translateY(0); }
-  25% { transform: rotate(0deg) translateY(-3px); }
-  50% { transform: rotate(6deg) translateY(0); }
-  75% { transform: rotate(0deg) translateY(-3px); }
+.eb-body {
+  position: absolute;
+  top: 37px;
+  left: 7px;
+  width: 30px;
+  height: 15px;
+  border-radius: 8px 8px 6px 6px;
+  background: linear-gradient(160deg, var(--accent), var(--accent-2));
+  box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.3), 0 4px 10px -4px rgba(99, 102, 241, 0.6);
 }
 
-@keyframes mbDroop {
-  0%, 100% { transform: translateY(0) rotate(0deg); }
-  50% { transform: translateY(2px) rotate(-3deg); }
+.eb-arm {
+  position: absolute;
+  top: 38px;
+  width: 11px;
+  height: 3px;
+  border-radius: 2px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
 }
 
-@keyframes mbShiver {
-  0%, 92%, 100% { transform: rotate(0deg); }
-  94% { transform: rotate(-2.5deg); }
-  96% { transform: rotate(2.5deg); }
-  98% { transform: rotate(-1.5deg); }
+.eb-arm.l { left: -3px; transform-origin: right center; transform: rotate(8deg); }
+.eb-arm.r { right: -3px; transform-origin: left center; transform: rotate(-8deg); }
+
+.eb-legs {
+  position: absolute;
+  top: 51px;
+  left: 12px;
+  width: 20px;
+  height: 8px;
 }
 
-/* A centred pedestal that blows the tiny mascot up for dialogs and pages.
-   The scale lives on a wrapper so mood animations keep their own transform. */
+.eb-legs i {
+  position: absolute;
+  top: 0;
+  width: 5px;
+  height: 8px;
+  border-radius: 3px;
+  background: var(--accent-ink);
+}
+
+.eb-legs i:first-child { left: 0; animation: mascotDangle 1.4s ease-in-out infinite; }
+.eb-legs i:last-child { right: 0; animation: mascotDangle 1.4s ease-in-out infinite reverse; }
+
+.eb-tear {
+  position: absolute;
+  top: 22px;
+  width: 4.5px;
+  height: 7px;
+  border-radius: 50% 50% 60% 60%;
+  background: var(--accent-3);
+  opacity: 0;
+}
+
+.eb-tear.l { left: 10px; }
+.eb-tear.r { right: 10px; }
+
+.eb-sweat {
+  position: absolute;
+  top: 6px;
+  right: 0;
+  width: 4.5px;
+  height: 7px;
+  border-radius: 50% 50% 60% 60%;
+  background: var(--accent-3);
+  opacity: 0;
+}
+
+/* ---- HAPPY: light bounce, smile, relaxed arm sway ---- */
+.ebot.happy .eb-mouth { height: 5px; border-radius: 0 0 6px 6px; }
+.ebot.happy { animation: ebBob 1.3s ease-in-out infinite; }
+.ebot.happy .eb-arm.l { animation: ebSwayL 1.3s ease-in-out infinite; }
+.ebot.happy .eb-arm.r { animation: ebSwayR 1.3s ease-in-out infinite; }
+
+@keyframes ebBob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+
+@keyframes ebSwayL { 0%, 100% { transform: rotate(8deg); } 50% { transform: rotate(24deg); } }
+@keyframes ebSwayR { 0%, 100% { transform: rotate(-8deg); } 50% { transform: rotate(-24deg); } }
+
+/* ---- DANCE: groove bounce+tilt, arms swinging, legs kicking, antenna
+        strobing ---- */
+.ebot.dance .eb-mouth { height: 5px; border-radius: 0 0 6px 6px; }
+.ebot.dance { animation: ebGroove 0.62s ease-in-out infinite; }
+.ebot.dance .eb-arm.l { animation: ebDanceArmL 0.62s ease-in-out infinite; }
+.ebot.dance .eb-arm.r { animation: ebDanceArmR 0.62s ease-in-out infinite; }
+.ebot.dance .eb-legs i:first-child { animation: ebKick 0.62s ease-in-out infinite; }
+.ebot.dance .eb-legs i:last-child { animation: ebKick 0.62s ease-in-out infinite reverse; }
+.ebot.dance .eb-antenna::after { animation: ebFlash 0.31s linear infinite; }
+
+@keyframes ebGroove {
+  0%, 100% { transform: translateY(0) rotate(-5deg) scale(1.04, 0.94); }
+  25% { transform: translateY(-5px) rotate(0deg) scale(0.97, 1.05); }
+  50% { transform: translateY(0) rotate(5deg) scale(1.04, 0.94); }
+  75% { transform: translateY(-5px) rotate(0deg) scale(0.97, 1.05); }
+}
+
+@keyframes ebDanceArmL {
+  0%, 100% { transform: rotate(42deg); }
+  50% { transform: rotate(78deg) translateY(-2px); }
+}
+
+@keyframes ebDanceArmR {
+  0%, 100% { transform: rotate(-78deg) translateY(-2px); }
+  50% { transform: rotate(-42deg); }
+}
+
+@keyframes ebKick {
+  0%, 100% { transform: rotate(-24deg) translateY(0); }
+  50% { transform: rotate(20deg) translateY(-2px); }
+}
+
+@keyframes ebFlash {
+  0%, 100% { transform: translateX(-50%) scale(1); opacity: 1; }
+  50% { transform: translateX(-50%) scale(1.5); opacity: 0.6; }
+}
+
+/* ---- SAD: body droop, drooped antenna, heavy eyelids, frown, tears,
+        arms hanging limp ---- */
+.ebot.sad { animation: ebDroop 2.4s ease-in-out infinite; }
+.ebot.sad .eb-antenna { transform: rotate(-34deg); }
+.ebot.sad .eb-antenna::after { animation: none; opacity: 0.55; box-shadow: none; }
+.ebot.sad .eb-eye { height: 4px; margin-top: 3px; border-radius: 0 0 7px 7px; animation: none; }
+.ebot.sad .eb-mouth { height: 5px; border-radius: 6px 6px 0 0; }
+.ebot.sad .eb-arm.l { transform: rotate(64deg); }
+.ebot.sad .eb-arm.r { transform: rotate(-64deg); }
+.ebot.sad .eb-legs i { animation: none; }
+.ebot.sad .eb-tear { animation: ebTear 1.4s ease-in infinite; }
+.ebot.sad .eb-tear.r { animation-delay: 0.55s; }
+
+@keyframes ebDroop {
+  0%, 100% { transform: translateY(1px) rotate(-2deg); }
+  20% { transform: translateY(3px) rotate(-3deg); }
+  50% { transform: translateY(1px) rotate(1deg); }
+  70% { transform: translateY(3px) rotate(0deg); }
+}
+
+@keyframes ebTear {
+  0% { opacity: 0; transform: translateY(0) scale(0.7); }
+  18% { opacity: 1; transform: translateY(2px) scale(1); }
+  75% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(13px) scale(0.9); }
+}
+
+/* ---- WORRIED: shiver, darting eyes, o-mouth, sweat, jittery arms ---- */
+.ebot.worried { animation: ebShiver 1.1s ease-in-out infinite; }
+.ebot.worried .eb-eye { animation: ebDart 1.6s ease-in-out infinite; }
+.ebot.worried .eb-mouth { width: 6px; height: 6px; border-radius: 50%; }
+.ebot.worried .eb-arm.l { animation: ebJitterL 0.5s ease-in-out infinite; }
+.ebot.worried .eb-arm.r { animation: ebJitterR 0.5s ease-in-out infinite; }
+.ebot.worried .eb-sweat { animation: ebSweatDrop 1.8s ease-in-out infinite; }
+.ebot.worried .eb-antenna { animation: ebTwitch 1.1s ease-in-out infinite; }
+
+@keyframes ebShiver {
+  0%, 100% { transform: rotate(0) translateX(0); }
+  12% { transform: rotate(-2.5deg) translateX(-1px); }
+  25% { transform: rotate(2deg) translateX(1px); }
+  37% { transform: rotate(-1.8deg) translateX(-1px); }
+  50% { transform: rotate(1.4deg) translateX(1px); }
+  62% { transform: rotate(0) translateX(0); }
+}
+
+@keyframes ebDart {
+  0%, 26%, 100% { transform: translateX(0); }
+  33%, 46% { transform: translateX(-2.5px); }
+  58%, 74% { transform: translateX(2.5px); }
+}
+
+@keyframes ebJitterL { 0%, 100% { transform: rotate(-26deg); } 50% { transform: rotate(-38deg); } }
+@keyframes ebJitterR { 0%, 100% { transform: rotate(26deg); } 50% { transform: rotate(38deg); } }
+
+@keyframes ebSweatDrop {
+  0%, 100% { opacity: 0; transform: translateY(0); }
+  30%, 70% { opacity: 1; transform: translateY(3px); }
+}
+
+@keyframes ebTwitch {
+  0%, 100% { transform: rotate(0); }
+  30% { transform: rotate(9deg); }
+  60% { transform: rotate(-7deg); }
+}
+
+/* ---- WAVE: the corner bot's own big arm wave + happy bounce ---- */
+.ebot.wave .eb-mouth { height: 5px; border-radius: 0 0 6px 6px; }
+.ebot.wave { animation: ebBob 1.3s ease-in-out infinite; }
+.ebot.wave .eb-arm.r { animation: ebBigWave 0.42s ease-in-out infinite; }
+
+@keyframes ebBigWave {
+  0%, 100% { transform: rotate(-8deg); }
+  50% { transform: rotate(-58deg); }
+}
+
+/* ---- SCENE: victory jumps (paid registrations, big wins) ---- */
+.ebot.scene-jump { animation: ebJumpLoop 1s ease-in-out infinite; }
+.ebot.scene-jump .eb-mouth { height: 5px; border-radius: 0 0 6px 6px; }
+.ebot.scene-jump .eb-arm.l { animation: ebDanceArmL 1s ease-in-out infinite; }
+.ebot.scene-jump .eb-arm.r { animation: ebDanceArmR 1s ease-in-out infinite; }
+
+@keyframes ebJumpLoop {
+  0%, 100% { transform: translateY(0) scale(1.06, 0.9); }
+  35% { transform: translateY(-24px) scale(0.95, 1.07); }
+  55% { transform: translateY(-24px) scale(0.98, 1.02) rotate(6deg); }
+  80% { transform: translateY(0) scale(1.1, 0.86); }
+  90% { transform: translateY(-4px) scale(0.99, 1.02); }
+}
+
+/* ---- Centred pedestal used by dialogs, cards and auth pages ---- */
 .mascot-stage {
   display: flex;
   justify-content: center;
   align-items: center;
-  min-height: 92px;
+  min-height: 96px;
   position: relative;
 }
 
 .mascot-scale {
   display: inline-block;
-  transform: scale(2.6);
 }
 
-/* Confetti around a dancing mascot. */
+.mascot-scale .ebot { zoom: 1.3; }
+
+/* Confetti floating beside a dancing mascot. */
 .mascot-stage.party::before,
 .mascot-stage.party::after {
   position: absolute;
@@ -2900,38 +3049,156 @@ h3,
   animation: mbConfetti 1.2s ease-in-out infinite;
 }
 
-.mascot-stage.party::before { content: "🎉"; left: calc(50% - 74px); }
-.mascot-stage.party::after { content: "✨"; right: calc(50% - 74px); animation-delay: 0.4s; }
+.mascot-stage.party::before { content: "🎉"; left: calc(50% - 66px); }
+.mascot-stage.party::after { content: "✨"; right: calc(50% - 66px); animation-delay: 0.4s; }
 
 @keyframes mbConfetti {
   0%, 100% { transform: translateY(0) rotate(-8deg); opacity: 0.85; }
   50% { transform: translateY(-7px) rotate(8deg); opacity: 1; }
 }
 
-/* ---------- Toasts now carry the mascot's reaction ---------- */
-.toast {
+/* ---- Confetti rain inside a celebration card ---- */
+.confetti-box { position: relative; overflow: hidden; }
+
+.confetti-box i {
+  position: absolute;
+  top: -12px;
+  width: 7px;
+  height: 11px;
+  border-radius: 2px;
+  opacity: 0;
+  animation: confettiFall 2.6s linear infinite;
+}
+
+@keyframes confettiFall {
+  0% { opacity: 0; transform: translateY(-10px) rotate(0); }
+  8% { opacity: 1; }
+  100% { opacity: 0.15; transform: translateY(320px) rotate(560deg); }
+}
+
+/* ==========================================================================
+   TOAST — the robot leans out of its corner, right above the chat button,
+   and says the message in its own speech bubble (typewriter included).
+   Built by toast() in common.js.
+   ========================================================================== */
+
+.chattoast {
+  position: fixed;
+  right: 20px;
+  bottom: 88px;
+  z-index: 140;
   display: flex;
-  align-items: center;
-  gap: 11px;
-  text-align: left;
-  max-width: min(92vw, 440px);
+  flex-direction: column;
+  align-items: flex-end;
+  max-width: 300px;
+  pointer-events: none;
 }
 
-.toast .mini-bot {
-  flex: 0 0 auto;
-}
+/* Pages without the chat button (e.g. sign-in) — sit in the corner itself. */
+.chattoast.no-fab { bottom: 20px; }
 
-.toast .toast-msg {
+.chattoast .bubble {
+  position: relative;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  padding: 10px 14px 11px;
+  font-size: 13.5px;
+  line-height: 1.5;
   color: var(--text);
+  opacity: 0;
+  transform: translateY(10px) scale(0.75);
+  transform-origin: bottom right;
+  transition: opacity 0.26s ease, transform 0.3s cubic-bezier(0.34, 1.45, 0.64, 1);
 }
 
-.toast.error .toast-msg { color: var(--red); }
-.toast.success .toast-msg { color: var(--green); }
-.toast.info .toast-msg { color: var(--amber); }
-.toast.party { border-color: var(--green); }
-.toast.party .toast-msg { color: var(--green); }
+.chattoast .bubble::after {
+  content: "";
+  position: absolute;
+  bottom: -6px;
+  right: 22px;
+  width: 12px;
+  height: 12px;
+  transform: rotate(45deg);
+  background: var(--card);
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
 
-/* ---------- Mascot confirm dialog (replaces window.confirm) ---------- */
+.chattoast .ebot {
+  zoom: 0.78;
+  margin: 11px 16px 0 0;
+  opacity: 0;
+  transform: translateY(26px);
+  transition: opacity 0.24s ease, transform 0.34s cubic-bezier(0.34, 1.45, 0.64, 1);
+}
+
+.chattoast.show .bubble { opacity: 1; transform: none; transition-delay: 0.14s; }
+.chattoast.show .ebot { opacity: 1; transform: none; }
+.chattoast.hide .bubble { opacity: 0; transform: translateY(8px) scale(0.8); }
+.chattoast.hide .ebot { opacity: 0; transform: translateY(26px); }
+
+.chattoast .ct-title {
+  display: block;
+  font-weight: 800;
+  font-size: 14.5px;
+  margin-bottom: 2px;
+}
+
+.chattoast.party .ct-title {
+  background: linear-gradient(90deg, var(--accent), var(--accent-2), var(--accent-3));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.chattoast.party .bubble { border-color: color-mix(in srgb, var(--green) 40%, var(--border)); }
+.chattoast.error .bubble { border-color: color-mix(in srgb, var(--red) 40%, var(--border)); }
+
+.chattoast .type-caret {
+  display: inline-block;
+  width: 6px;
+  height: 12px;
+  background: var(--accent);
+  border-radius: 2px;
+  vertical-align: -1px;
+  animation: caretBlink 0.7s steps(1) infinite;
+}
+
+@keyframes caretBlink { 50% { opacity: 0; } }
+
+/* One-shot confetti burst out of the bubble on party toasts. */
+.chattoast .burst { position: absolute; inset: 0; pointer-events: none; }
+
+.chattoast .burst i {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 6px;
+  height: 9px;
+  border-radius: 2px;
+  opacity: 0;
+  animation: ctBurst 0.9s cubic-bezier(0.16, 0.8, 0.4, 1) forwards;
+}
+
+@keyframes ctBurst {
+  0% { opacity: 0; transform: translate(0, 0) rotate(0); }
+  12% { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--bx), var(--by)) rotate(var(--br)); }
+}
+
+@media (max-width: 720px) {
+  .chattoast { right: 12px; bottom: 150px; }
+  .chattoast.no-fab { bottom: 20px; }
+}
+
+/* ==========================================================================
+   CONFIRM DIALOG — mascot card. The robot ROLLS IN when the dialog opens,
+   and on a confirmed destructive action it turns sad and walks off before
+   the dialog closes (both handled by mascotConfirm in common.js).
+   ========================================================================== */
+
 .mconfirm-backdrop {
   position: fixed;
   inset: 0;
@@ -2962,6 +3229,25 @@ h3,
 }
 
 .mconfirm-backdrop.show .mconfirm { transform: none; }
+
+/* Entrance: the robot rolls in from the left, stops, hops once. */
+.mconfirm .mascot-scale { animation: ebRollInOnce 0.9s cubic-bezier(0.22, 0.9, 0.35, 1) both; }
+
+@keyframes ebRollInOnce {
+  0% { transform: translateX(-100px) rotate(-480deg); opacity: 0; }
+  45% { opacity: 1; }
+  62% { transform: translateX(0) rotate(0); }
+  78% { transform: translateY(-7px); }
+  100% { transform: none; opacity: 1; }
+}
+
+/* Exit after a confirmed delete: it turns away and walks off, heartbroken. */
+.mconfirm .mascot-scale.bye { animation: ebByeOnce 0.85s ease-in both; }
+
+@keyframes ebByeOnce {
+  0% { transform: none; opacity: 1; }
+  100% { transform: translateX(80px) rotate(-6deg); opacity: 0; }
+}
 
 .mconfirm h3 {
   margin: 2px 0 8px;

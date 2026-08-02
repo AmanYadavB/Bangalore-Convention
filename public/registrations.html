@@ -135,14 +135,14 @@
             const id = toggle.getAttribute("data-toggle");
             const cur = ALL.find((r) => r.id === id);
             // The row can be stale if the list reloaded underneath us.
-            if (!cur) return toast("That row is out of date — refresh the page.", "error");
+            if (!cur) return toast("that row changed behind your back — refresh the page for the fresh version", "error");
             const updated = await api(`/api/registrations/${id}`, {
               method: "PATCH",
               body: JSON.stringify({ paid: !cur.paid }),
             });
             cur.paid = updated.paid;
             render();
-            toast(updated.paid ? "Marked as paid" : "Marked as pending");
+            toast(updated.paid ? "marked as paid — the mascot heard a tiny cash register go off" : "marked as pending — the mascot is keeping one eye on that payment");
           } else if (del) {
             const id = del.getAttribute("data-del");
             if (!(await mascotConfirm({
@@ -155,7 +155,7 @@
             await api(`/api/registrations/${id}`, { method: "DELETE" });
             ALL = ALL.filter((r) => r.id !== id);
             render();
-            toast("Registration deleted");
+            toast("registration deleted — the mascot needs a minute");
           }
         } catch (err) {
           toast(err.message, "error");
@@ -164,7 +164,7 @@
 
       document.getElementById("export").addEventListener("click", () => {
         const rows = applyFilters();
-        if (!rows.length) return toast("Nothing to export", "error");
+        if (!rows.length) return toast("nothing to export — the list is empty. add or unfilter some registrations first", "error");
         // Excel and Sheets execute any cell beginning with = + - @ (or a
         // leading tab/CR) as a formula. A registrant can put anything in the
         // notes field, so prefix those with an apostrophe to neutralise them.

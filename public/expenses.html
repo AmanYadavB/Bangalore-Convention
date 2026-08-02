@@ -121,7 +121,7 @@
           const payload = Object.fromEntries(new FormData(form).entries());
           try {
             await api("/api/expenses", { method: "POST", body: JSON.stringify(payload) });
-            toast("Expense added");
+            toast("expense added — the mascot is guarding the receipt with its life");
             form.reset();
             loadExpenses();
           } catch (err) {
@@ -141,7 +141,7 @@
           }))) return;
           try {
             await api(`/api/expenses/${del.getAttribute("data-del")}`, { method: "DELETE" });
-            toast("Expense deleted");
+            toast("expense deleted — the mascot allowed itself exactly one tear");
             loadExpenses();
           } catch (err) {
             toast(err.message, "error");

@@ -192,10 +192,10 @@
         const password = document.getElementById("newPassword").value;
         const confirm = document.getElementById("confirmPassword").value;
         const currentPassword = document.getElementById("currentPassword").value;
-        if (!password) return toast("Type a password first", "error");
+        if (!password) return toast("bro the password box is empty — type something in there first", "error");
         if (password !== confirm) {
           document.getElementById("confirmPassword").focus();
-          return toast("Passwords don't match", "error");
+          return toast("those two passwords are not twins — make them match and try again", "error");
         }
         btn.disabled = true;
         try {
@@ -208,11 +208,11 @@
           document.getElementById("currentPassword").value = "";
           if (setupMode) {
             // Setup finished — carry on to wherever they were headed.
-            toast("Password saved — taking you in…", "party");
+            toast("password locked in!! dragging you inside rn — welcome home", "party");
             setTimeout(() => location.replace(nextDest), 1200);
             return;
           }
-          toast("Password saved — your other sessions were signed out", "party");
+          toast("new password saved — all your other sessions got signed out, it's just us now", "party");
           await refreshUser();
           paintMe();
           loadSessions();
@@ -267,7 +267,7 @@
               btn.disabled = true;
               try {
                 const res = await api("/api/auth/staff/" + encodeURIComponent(btn.getAttribute("data-del")), { method: "DELETE" });
-                toast(res.note ? "Deleted. " + res.note : "Account deleted");
+                toast("account deleted — a small funeral was held inside the button." + (res.note ? " " + res.note : ""));
                 loadStaff();
               } catch (err) {
                 toast(err.message, "error");
@@ -289,7 +289,7 @@
         }))) return;
         try {
           await api("/api/auth/sessions", { method: "DELETE" });
-          toast("Other sessions signed out");
+          toast("all other sessions signed out — this device is the last one standing");
           loadSessions();
         } catch (err) {
           toast(err.message, "error");

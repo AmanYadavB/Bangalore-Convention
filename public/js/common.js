@@ -65,21 +65,28 @@ async function api(path, options) {
     }
     throw new Error(data.error || "Please sign in.");
   }
-  if (!res.ok) throw new Error(data.error || "Something went wrong.");
+  if (!res.ok)
+    throw new Error(
+      data.error || "something broke and even the mascot doesn't know what — try that again in a sec"
+    );
   return data;
 }
 
 // ---- The mascot, in any of its moods --------------------------------------
-// One face, five feelings. Moods: happy, dance, sad, worried, wave.
-// Used by toasts, confirm dialogs and the auth pages so the little guy reacts
-// to everything that happens on the site.
+// The FULL chat-button robot (antenna, blinking eyes, gradient body, arms,
+// dangling legs). Moods: happy, dance, sad, worried, wave; scene-jump for
+// victory moments. Used by toasts, confirm dialogs, the celebration card and
+// the auth pages so the same character reacts to everything on the site.
 function mascotHTML(mood) {
   return (
-    '<span class="mini-bot emo ' + (mood || "happy") + '" aria-hidden="true">' +
-    '<i class="mb-eye"></i><i class="mb-eye"></i>' +
-    '<i class="mb-tear l"></i><i class="mb-tear r"></i>' +
-    '<i class="mb-arm l"></i><i class="mb-arm r"></i>' +
-    '<span class="mb-mouth"></span>' +
+    '<span class="ebot ' + (mood || "happy") + '" aria-hidden="true">' +
+    '<span class="eb-antenna"></span>' +
+    '<span class="eb-head"><i class="eb-eye"></i><i class="eb-eye"></i>' +
+    '<i class="eb-tear l"></i><i class="eb-tear r"></i><i class="eb-sweat"></i>' +
+    '<span class="eb-mouth"></span></span>' +
+    '<span class="eb-body"></span>' +
+    '<span class="eb-arm l"></span><span class="eb-arm r"></span>' +
+    '<span class="eb-legs"><i></i><i></i></span>' +
     "</span>"
   );
 }
@@ -92,23 +99,82 @@ function mascotStage(mood) {
   );
 }
 
+// Toast, the chatbot way: the robot pops up above its chat button, the
+// speech bubble springs open with a tail, and the message TYPES itself out.
+// Party news gets a gradient headline, a dancing robot and a confetti burst.
+// Then it ducks back down. Same signature as before: toast(message, type)
+// with type one of success (default) / error / info / party.
+let __toastEl = null;
+let __toastTimers = [];
+
 function toast(message, type = "success") {
-  let el = document.querySelector(".toast");
-  if (!el) {
-    el = document.createElement("div");
-    el.className = "toast";
-    document.body.appendChild(el);
-  }
-  el.className = "toast " + type;
-  // The mascot reacts to the news: happy for good, tears for bad, a nervous
-  // sweat for warnings, a full dance for the big wins ("party").
+  if (__toastEl) __toastEl.remove();
+  __toastTimers.forEach(clearTimeout);
+  __toastTimers = [];
+
   const mood =
     type === "error" ? "sad" : type === "info" ? "worried" : type === "party" ? "dance" : "happy";
-  el.innerHTML = mascotHTML(mood) + '<span class="toast-msg"></span>';
-  el.querySelector(".toast-msg").textContent = message;
+  const flavor = type === "party" ? "party" : type === "error" ? "error" : "";
+  const title = type === "party" ? "LET'S GOOOO!! 🎉" : "";
+
+  const el = document.createElement("div");
+  __toastEl = el;
+  el.className =
+    "chattoast " + flavor + (document.getElementById("chatFab") ? "" : " no-fab");
+  el.innerHTML =
+    '<div class="bubble">' +
+    (title ? '<b class="ct-title"></b>' : "") +
+    '<span class="ct-msg"></span><span class="type-caret"></span>' +
+    '<span class="burst"></span></div>' +
+    mascotHTML(mood);
+  if (title) el.querySelector(".ct-title").textContent = title;
+  document.body.appendChild(el);
   requestAnimationFrame(() => el.classList.add("show"));
-  clearTimeout(el._t);
-  el._t = setTimeout(() => el.classList.remove("show"), 2800);
+
+  // Party: a one-shot confetti burst out of the bubble.
+  if (flavor === "party") {
+    const burst = el.querySelector(".burst");
+    const colors = ["#5b5bf0", "#7c3aed", "#0ea5e9", "#10b981", "#f59e0b", "#ef4444"];
+    for (let i = 0; i < 10; i++) {
+      const p = document.createElement("i");
+      const ang = (i / 10) * Math.PI * 2;
+      p.style.setProperty("--bx", Math.round(Math.cos(ang) * (60 + Math.random() * 40)) + "px");
+      p.style.setProperty("--by", Math.round(Math.sin(ang) * (40 + Math.random() * 30) - 20) + "px");
+      p.style.setProperty("--br", Math.round(Math.random() * 500 - 250) + "deg");
+      p.style.background = colors[i % colors.length];
+      p.style.animationDelay = 0.15 + Math.random() * 0.15 + "s";
+      burst.appendChild(p);
+    }
+  }
+
+  // The message types itself out, exactly like the chatbot writing.
+  const msgEl = el.querySelector(".ct-msg");
+  const caret = el.querySelector(".type-caret");
+  const text = String(message || "");
+  let i = 0;
+  const tick = setInterval(() => {
+    if (el !== __toastEl) return clearInterval(tick);
+    msgEl.textContent = text.slice(0, ++i);
+    if (i >= text.length) {
+      clearInterval(tick);
+      caret.remove();
+      // Read time scales a little with message length, then it ducks away.
+      __toastTimers.push(
+        setTimeout(() => {
+          if (el !== __toastEl) return;
+          el.classList.add("hide");
+          __toastTimers.push(
+            setTimeout(() => {
+              if (el === __toastEl) {
+                el.remove();
+                __toastEl = null;
+              }
+            }, 380)
+          );
+        }, 2200 + Math.min(1800, text.length * 12))
+      );
+    }
+  }, 17);
 }
 
 // Mascot-fronted replacement for window.confirm(). Returns Promise<boolean>.
@@ -155,7 +221,21 @@ function mascotConfirm(opts) {
       if (e.target === wrap) done(false);
     });
     noBtn.addEventListener("click", () => done(false));
-    yesBtn.addEventListener("click", () => done(true));
+    yesBtn.addEventListener("click", () => {
+      if (opts.danger && !settled) {
+        // The robot takes the news personally: it turns sad and walks off
+        // before the dialog closes.
+        noBtn.disabled = yesBtn.disabled = true;
+        const stage = wrap.querySelector(".mascot-stage");
+        if (stage) {
+          stage.innerHTML =
+            '<span class="mascot-scale bye">' + mascotHTML("sad") + "</span>";
+        }
+        setTimeout(() => done(true), 800);
+      } else {
+        done(true);
+      }
+    });
     // Risky actions start focus on the safe way out.
     (opts.danger ? noBtn : yesBtn).focus();
   });
@@ -494,6 +574,82 @@ function enforcePasswordSetup(user) {
   return true;
 }
 
+// ---- Entrance reveals ----------------------------------------------------
+// The mobile menu's corner-burst spring is the site's motion language; page
+// content shares it: blocks tumble in from the top-right with a small
+// rotation, staggered, as they enter the viewport. The classes are applied
+// ONLY here — with scripts off they never exist, so nothing stays hidden.
+function mountReveals() {
+  if (mountReveals.__on) return;
+  mountReveals.__on = true;
+  if (!("IntersectionObserver" in window)) return;
+  if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+  // Hero children and grid cards stagger within their parent; each top-level
+  // container block reveals on its own as it scrolls in (no stagger, the
+  // scroll position provides the rhythm).
+  const GROUPS = [
+    { sel: ".hero > *:not(.hero-grid)", stagger: true },
+    { sel: ".grid > *", stagger: true },
+    { sel: ".reg-layout > *", stagger: true },
+    { sel: ".container > *:not(.grid):not(.reg-layout):not(script):not(style)", stagger: false },
+  ];
+
+  // Strip the classes once the entrance ends so the card :hover lifts (and
+  // anything else that transitions transform) work again afterwards.
+  const finish = (el) => {
+    el.classList.remove("rv", "rv-in");
+    el.style.removeProperty("--rvi");
+  };
+
+  const io = new IntersectionObserver(
+    (entries) => {
+      for (const en of entries) {
+        if (!en.isIntersecting) continue;
+        const el = en.target;
+        io.unobserve(el);
+        const idx = parseInt(el.style.getPropertyValue("--rvi"), 10) || 0;
+        el.classList.add("rv-in");
+        // A timeout instead of transitionend: it still fires if the element
+        // is display:none'd mid-flight, so nothing gets stuck invisible.
+        setTimeout(() => finish(el), 700 + idx * 60);
+      }
+    },
+    { rootMargin: "0px 0px -8% 0px", threshold: 0.05 }
+  );
+
+  const scan = () => {
+    for (const g of GROUPS) {
+      const counts = g.stagger ? new Map() : null;
+      document.querySelectorAll(g.sel).forEach((el) => {
+        if (el.__rv) return;
+        el.__rv = true;
+        let idx = 0;
+        if (counts) {
+          idx = counts.get(el.parentElement) || 0;
+          counts.set(el.parentElement, idx + 1);
+        }
+        el.style.setProperty("--rvi", Math.min(idx, 8));
+        el.classList.add("rv");
+        io.observe(el);
+      });
+    }
+  };
+  scan();
+
+  // Pages draw cards/tables after their API calls — catch those too. One
+  // rAF-debounced scan per DOM burst (the per-second countdown rebuild lands
+  // here as a no-op: its boxes belong to no group and #countdown stays tagged).
+  const mo = new MutationObserver(() => {
+    if (mountReveals.__raf) return;
+    mountReveals.__raf = requestAnimationFrame(() => {
+      mountReveals.__raf = 0;
+      scan();
+    });
+  });
+  mo.observe(document.body, { childList: true, subtree: true });
+}
+
 // opts.chat === false suppresses the chat widget. The login page passes it:
 // a floating mascot that overlaps the password field is not what you want on
 // a sign-in screen.
@@ -505,6 +661,7 @@ function mountNav(active, opts) {
   CURRENT_USER = readUserHint();
   paintNav(active, options);
   if (options.chat !== false) mountChat();
+  mountReveals();
 
   // Compare against what was just painted. (This used to compare against the
   // hint AFTER refreshUser had overwritten it — fresh against fresh, always

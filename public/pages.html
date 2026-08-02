@@ -112,7 +112,7 @@
               btn.disabled = true;
               try {
                 await api("/api/knowledge/" + encodeURIComponent(id), { method: "DELETE" });
-                toast("Removed");
+                toast("gone — the AI already forgot it ever knew that");
                 loadFeed();
               } catch (err) {
                 btn.disabled = false;
@@ -183,8 +183,8 @@
             // dropping the tail of what was pasted.
             toast(
               res && res.truncated
-                ? "Fed to the AI — trimmed to the first " + res.storedChars.toLocaleString() + " characters"
-                : "Fed to the AI"
+                ? "fed to the AI — it got full after the first " + res.storedChars.toLocaleString() + " characters, trimmed the rest"
+                : "fed to the AI — it chewed, swallowed, and got a little smarter"
             );
             loadFeed();
           } catch (err) {
