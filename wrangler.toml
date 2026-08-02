@@ -84,7 +84,7 @@ DEVELOPER_EMAILS = "amankumaryadavasasmd@gmail.com"
 
 # The organising committee: registrations, dashboard, expenses, reflections.
 # Comma-separated, e.g. "asha@example.com, ravi@example.com"
-STAFF_EMAILS = ""
+STAFF_EMAILS = "amankumaryadav96250@gmail.com"
 
 # Google OAuth client id (public — the secret is set with `wrangler secret put`).
 # Create at console.cloud.google.com -> APIs & Services -> Credentials ->
