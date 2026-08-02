@@ -1761,9 +1761,9 @@ body.chat-open .chat-widget {
     grid-template-columns: 1fr;
   }
   .hero {
-    /* E1 breathing room: the bottom padding keeps the cycling category card
-       and its dots clear of the fixed chat mascot in the corner. */
-    padding: 44px 16px 96px;
+    /* The E1 breathing room shrank back when the spotlight card left the
+       hero — a small cushion keeps the CTA buttons clear of the mascot. */
+    padding: 44px 16px 32px;
   }
   .hero h1 {
     font-size: 28px;

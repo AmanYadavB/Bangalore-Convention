@@ -29,12 +29,10 @@
         <a class="btn ghost" href="register.html" id="viewPricingBtn">View Pricing</a>
       </div>
 
-      <!-- The registration categories: one compact card cycling through
-           them, tumbling on each change. Tap → register, preselected. -->
-      <div class="price-spot" id="priceSpot" hidden>
-        <a class="spot-card" id="spotCard" href="register.html"></a>
-        <div class="spot-dots" id="spotDots" aria-hidden="true"></div>
-      </div>
+      <!-- (The cycling category spotlight that lived here is removed for
+           now — pricing is reachable via the View Pricing burst and the
+           Register page. Its CSS (.price-spot/.spot-*) is kept, so putting
+           it back is just markup + the small JS block.) -->
     </section>
 
     <div class="container">
@@ -143,45 +141,17 @@
         "linear-gradient(140deg,#fb7185,#f59e0b)",
       ];
 
-      // Price spotlight (hero) + the "View Pricing" burst overlay, both fed
-      // by one pricing fetch. Tap anything → register, preselected.
+      // The "View Pricing" burst overlay, fed by the pricing fetch. (The
+      // hero spotlight card that also used this data is removed for now.)
       (async () => {
         let pricing;
         try {
           pricing = await api("/api/pricing");
         } catch (e) {
-          return; // pricing unavailable — no spotlight, and the View Pricing
-                  // link simply navigates like it always did
+          return; // pricing unavailable — the View Pricing link simply
+                  // navigates like it always did
         }
         if (!Array.isArray(pricing) || !pricing.length) return;
-
-        // ---- spotlight ----
-        const wrap = document.getElementById("priceSpot");
-        const card = document.getElementById("spotCard");
-        const dots = document.getElementById("spotDots");
-        wrap.hidden = false;
-        dots.innerHTML = pricing.map(() => "<i></i>").join("");
-
-        let si = 0;
-        function show(n) {
-          si = n;
-          const c = pricing[n];
-          card.href = "register.html?category=" + encodeURIComponent(c.id);
-          card.innerHTML =
-            `<span class="spot-ico" aria-hidden="true">${CAT_ICONS[n % CAT_ICONS.length]}</span>` +
-            `<span class="spot-txt"><b>${escapeHtml(c.name)}</b><small>${escapeHtml(
-              c.description || ""
-            )}</small></span>` +
-            `<span class="spot-price">${money(c.price)}</span>`;
-          card.classList.remove("anim");
-          void card.offsetWidth; // restart the tumble
-          card.classList.add("anim");
-          dots.querySelectorAll("i").forEach((d, j) => d.classList.toggle("on", j === n));
-        }
-        show(0);
-        setInterval(() => {
-          if (!document.hidden) show((si + 1) % pricing.length);
-        }, 3000);
         const burst = document.getElementById("pburst");
         const grid = document.getElementById("pburstGrid");
         const vpBtn = document.getElementById("viewPricingBtn");
