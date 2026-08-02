@@ -3459,6 +3459,144 @@ select.dd-native {
   .reg-steps .reg-ln { min-width: 6px; }
 }
 
+/* ================= Expenses: EX1 quick-add ledger ================= */
+.exp-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 12px;
+  margin: 0 0 14px;
+}
+
+.exp-total {
+  font-size: 27px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--red);
+}
+
+.exp-substats { font-size: 12.5px; text-align: right; }
+
+.exp-qadd {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  padding: 8px;
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 14px;
+}
+
+.exp-qadd input,
+.exp-qadd select {
+  border-radius: 999px;
+  padding: 10px 14px;
+}
+
+.exp-qadd .q-title { flex: 1 1 180px; min-width: 0; }
+.exp-qadd .q-amt { width: 110px; }
+.exp-qadd .dd { flex: 0 1 190px; min-width: 150px; }
+.exp-qadd .dd-btn { border-radius: 999px; padding: 10px 14px; }
+.exp-qadd .btn.primary.small { border-radius: 999px; }
+
+.q-more {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--card-2);
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.q-more.on { color: var(--accent); border-color: var(--accent); }
+
+.q-extra {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex-basis: 100%;
+  padding: 2px 4px 4px;
+}
+
+.q-extra #notes { flex: 1 1 200px; min-width: 0; }
+
+.exp-ledger {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.exp-ledger.pop .exp-row {
+  animation: wiz-tum 0.4s cubic-bezier(0.34, 1.45, 0.64, 1) both;
+  animation-delay: calc(var(--i, 0) * 35ms);
+}
+
+.exp-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  grid-template-areas: "main meta amt";
+  gap: 12px;
+  align-items: center;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  padding: 11px 14px;
+  box-shadow: var(--shadow-sm);
+}
+
+.exp-main { grid-area: main; min-width: 0; }
+.exp-main b { font-size: 14px; }
+.exp-main small { display: block; color: var(--muted); font-size: 11.5px; }
+
+.exp-meta { grid-area: meta; display: flex; align-items: center; gap: 10px; }
+
+.cat-chip {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--card-2);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.exp-amt {
+  grid-area: amt;
+  font-weight: 800;
+  color: var(--red);
+  white-space: nowrap;
+  font-size: 15px;
+}
+
+.exp-date { font-size: 12px; white-space: nowrap; }
+
+/* Desktop: Delete stays out of the way until the row is hovered. */
+.exp-del { opacity: 0; transition: opacity 0.15s ease; }
+.exp-row:hover .exp-del { opacity: 1; }
+
+@media (max-width: 700px) {
+  .exp-row {
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "main amt"
+      "meta meta";
+    row-gap: 9px;
+  }
+  .exp-meta { width: 100%; }
+  .exp-meta .exp-del { margin-left: auto; opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .exp-ledger.pop .exp-row { animation: none; }
+}
+
 /* ================= Dashboard: DB1 bento board ================= */
 .bento {
   display: grid;

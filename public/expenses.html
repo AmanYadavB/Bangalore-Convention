@@ -14,68 +14,36 @@
       <h1 class="page-title">Expenses</h1>
       <p class="page-sub">Record and track every rupee spent for the convention.</p>
 
-      <div class="grid cols-4" id="exp-stats">
+      <!-- EX1 quick-add ledger: running total, a one-line add bar (date &
+           notes tucked behind ＋), and slim ledger rows below. -->
+      <div class="exp-head">
+        <span><span class="muted" style="font-size: 12.5px">Total spent</span><br>
+          <b class="exp-total" id="expTotal">₹0</b></span>
+        <span class="exp-substats muted" id="expSub">Loading…</span>
+      </div>
+
+      <form class="exp-qadd" id="exp-form">
+        <input id="title" name="title" class="q-title" required placeholder="What did we pay for?" autocomplete="off" />
+        <select id="category" name="category">
+          <option>Venue</option>
+          <option>Food &amp; Catering</option>
+          <option>Accommodation</option>
+          <option>Printing &amp; Stationery</option>
+          <option>Sound &amp; Stage</option>
+          <option>Transport</option>
+          <option>Miscellaneous</option>
+        </select>
+        <input id="amount" name="amount" class="q-amt" type="number" min="1" step="1" required placeholder="₹ 0" />
+        <button class="btn primary small" type="submit">Add</button>
+        <button class="q-more" id="qMore" type="button" title="Add a date or note" aria-expanded="false">＋</button>
+        <div class="q-extra" id="qExtra" hidden>
+          <input id="date" name="date" type="date" title="Date (defaults to today)" />
+          <input id="notes" name="notes" placeholder="Notes / vendor (optional)" />
+        </div>
+      </form>
+
+      <div class="exp-ledger" id="expLedger">
         <div class="empty">Loading…</div>
-      </div>
-
-      <div class="section-head">
-        <h2>Add Expense</h2>
-      </div>
-      <div class="card">
-        <form id="exp-form">
-          <div class="form-grid">
-            <div class="field">
-              <label for="title">Expense Title *</label>
-              <input id="title" name="title" required placeholder="e.g. Hall booking" />
-            </div>
-            <div class="field">
-              <label for="category">Category</label>
-              <select id="category" name="category">
-                <option>Venue</option>
-                <option>Food &amp; Catering</option>
-                <option>Accommodation</option>
-                <option>Printing &amp; Stationery</option>
-                <option>Sound &amp; Stage</option>
-                <option>Transport</option>
-                <option>Miscellaneous</option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="amount">Amount (₹) *</label>
-              <input id="amount" name="amount" type="number" min="1" step="1" required placeholder="0" />
-            </div>
-            <div class="field">
-              <label for="date">Date</label>
-              <input id="date" name="date" type="date" />
-            </div>
-            <div class="field full">
-              <label for="notes">Notes</label>
-              <input id="notes" name="notes" placeholder="Optional details / vendor" />
-            </div>
-          </div>
-          <div class="form-footer">
-            <span class="muted">Expenses reduce the available balance.</span>
-            <button class="btn primary" type="submit">Add Expense</button>
-          </div>
-        </form>
-      </div>
-
-      <div class="table-wrap" style="margin-top: 18px">
-        <table>
-          <thead>
-            <tr>
-              <th>Title</th>
-              <th>Category</th>
-              <th>Amount</th>
-              <th>Date</th>
-              <th>Notes</th>
-              <th class="col-actions"></th>
-            </tr>
-          </thead>
-          <tbody id="exp-rows">
-            <tr><td colspan="6" class="empty">Loading…</td></tr>
-          </tbody>
-        </table>
       </div>
     </div>
 
@@ -86,34 +54,54 @@
       mountNav("expenses");
 
       {
+        let firstPaint = true;
+
         async function loadExpenses() {
           const list = (await api("/api/expenses")).sort(
             (a, b) => new Date(b.date) - new Date(a.date)
           );
 
           const total = list.reduce((s, e) => s + (e.amount || 0), 0);
-          document.getElementById("exp-stats").innerHTML =
-            `<div class="card stat"><div class="label">Total Expenses</div><div class="value red">${money(total)}</div></div>` +
-            `<div class="card stat"><div class="label">Entries</div><div class="value">${list.length}</div></div>`;
+          const weekAgo = Date.now() - 7 * 864e5;
+          const thisWeek = list
+            .filter((e) => new Date(e.date).getTime() >= weekAgo)
+            .reduce((s, e) => s + (e.amount || 0), 0);
+          document.getElementById("expTotal").textContent = money(total);
+          document.getElementById("expSub").innerHTML =
+            `${list.length} ${list.length === 1 ? "entry" : "entries"} · ${money(thisWeek)} this week`;
 
-          const tbody = document.getElementById("exp-rows");
+          const ledger = document.getElementById("expLedger");
           if (!list.length) {
-            tbody.innerHTML = '<tr><td colspan="6" class="empty">No expenses yet. Add your first one above.</td></tr>';
+            ledger.innerHTML = '<div class="empty">No expenses yet. Add your first one above.</div>';
             return;
           }
-          tbody.innerHTML = list
+          ledger.classList.toggle("pop", firstPaint);
+          ledger.innerHTML = list
             .map(
-              (e) => `<tr>
-                <td><b>${escapeHtml(e.title)}</b></td>
-                <td>${escapeHtml(e.category)}</td>
-                <td>${money(e.amount)}</td>
-                <td class="muted">${formatDate(e.date)}</td>
-                <td class="muted">${escapeHtml(e.notes) || "—"}</td>
-                <td><button class="btn danger" data-del="${e.id}">Delete</button></td>
-              </tr>`
+              (e, i) => `<div class="exp-row" style="--i:${Math.min(i, 10)}">
+                <span class="exp-main"><b>${escapeHtml(e.title)}</b>${
+                  e.notes ? `<small>${escapeHtml(e.notes)}</small>` : ""
+                }</span>
+                <span class="exp-meta">
+                  <span class="cat-chip">${escapeHtml(e.category)}</span>
+                  <span class="exp-date muted">${formatDate(e.date)}</span>
+                  <button class="btn danger small exp-del" data-del="${e.id}" type="button">Delete</button>
+                </span>
+                <span class="exp-amt">−${money(e.amount)}</span>
+              </div>`
             )
             .join("");
+          firstPaint = false;
         }
+
+        // ＋ tucks the optional date & notes behind the one-line bar.
+        const qMore = document.getElementById("qMore");
+        const qExtra = document.getElementById("qExtra");
+        qMore.addEventListener("click", () => {
+          qExtra.hidden = !qExtra.hidden;
+          qMore.classList.toggle("on", !qExtra.hidden);
+          qMore.setAttribute("aria-expanded", qExtra.hidden ? "false" : "true");
+        });
 
         document.getElementById("exp-form").addEventListener("submit", async (e) => {
           e.preventDefault();
@@ -123,13 +111,15 @@
             await api("/api/expenses", { method: "POST", body: JSON.stringify(payload) });
             toast("expense added — the mascot is guarding the receipt with its life");
             form.reset();
+            qExtra.hidden = true;
+            qMore.classList.remove("on");
             loadExpenses();
           } catch (err) {
             toast(err.message, "error");
           }
         });
 
-        document.getElementById("exp-rows").addEventListener("click", async (e) => {
+        document.getElementById("expLedger").addEventListener("click", async (e) => {
           const del = e.target.closest("[data-del]");
           if (!del) return;
           if (!(await mascotConfirm({
