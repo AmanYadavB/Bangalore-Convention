@@ -220,19 +220,40 @@ const NAV_LINKS = [
   { href: "expenses.html", label: "Expenses", key: "expenses", need: "staff" },
   { href: "ops.html", label: "Ops", key: "ops", need: "developer" },
   { href: "pages.html", label: "Feed AI", key: "pages", need: "developer" },
-  { href: "account.html", label: "Account", key: "account", need: "staff" },
+  // account.html is reached through the profile menu in the corner, not a
+  // nav link — that's where people look for it.
 ];
 
 function renderNav(active, opts) {
-  // opts.links === false renders the shell only (brand, theme, sign out).
+  // opts.links === false renders the shell only (brand, theme, profile).
   // Used by the forced password-setup screen: offering links the setup guard
   // would instantly bounce back is worse than offering none.
-  const links =
-    opts && opts.links === false ? [] : NAV_LINKS.filter((l) => !l.need || hasRole(l.need));
+  const bare = opts && opts.links === false;
+  const links = bare ? [] : NAV_LINKS.filter((l) => !l.need || hasRole(l.need));
+  const user = currentUser();
 
+  // Signed out: a Sign in button among the links. Signed in: the usual
+  // corner profile chip — an avatar opening a small menu (account, sign out).
   const authBtn = isSignedIn()
-    ? `<button class="btn small auth-btn" id="authBtn" type="button">Sign out</button>`
+    ? ""
     : `<a class="btn primary small auth-btn" id="authBtn" href="login.html">Sign in</a>`;
+
+  const profile = isSignedIn()
+    ? `<div class="nav-profile">
+      <button class="avatar-btn" id="profileBtn" type="button" aria-haspopup="menu"
+              aria-expanded="false" title="${escapeHtml(user.email)}">${escapeHtml(
+        (user.email || "?").charAt(0).toUpperCase()
+      )}</button>
+      <div class="profile-menu" id="profileMenu" role="menu">
+        <div class="profile-head">
+          <b class="profile-email">${escapeHtml(user.email)}</b>
+          <span class="profile-role">${user.role === "developer" ? "Developer" : "Committee"}</span>
+        </div>
+        <a class="profile-item" role="menuitem" href="account.html">Your account</a>
+        <button class="profile-item" role="menuitem" id="logoutBtn" type="button">Sign out</button>
+      </div>
+    </div>`
+    : "";
 
   return `
   <nav class="nav">
@@ -243,6 +264,7 @@ function renderNav(active, opts) {
       </span>
     </a>
     <button class="theme-toggle" id="themeToggle" type="button" title="Switch theme" aria-label="Switch theme">\u2600\uFE0F</button>
+    ${profile}${bare ? "" : `
     <button class="nav-toggle" id="navToggle" type="button" title="Menu" aria-label="Menu" aria-expanded="false">
       <span></span><span></span><span></span>
     </button>
@@ -254,7 +276,7 @@ function renderNav(active, opts) {
         )
         .join("")}
       ${authBtn}
-    </div>
+    </div>`}
   </nav>`;
 }
 
@@ -269,10 +291,35 @@ function paintNav(active, opts) {
   const themeBtn = document.getElementById("themeToggle");
   if (themeBtn) themeBtn.addEventListener("click", toggleTheme);
 
-  // Signed out, the auth control is a plain <a> to the login page, so there is
-  // nothing to wire. Signed in, it is a button that ends the session.
-  const authBtn = document.getElementById("authBtn");
-  if (authBtn && authBtn.tagName === "BUTTON") authBtn.addEventListener("click", logout);
+  // Profile menu: avatar toggles it, any click elsewhere (or Escape) closes
+  // it. The document-level closers are replaced on each repaint so they never
+  // stack up.
+  const profileBtn = document.getElementById("profileBtn");
+  const profileMenu = document.getElementById("profileMenu");
+  if (profileBtn && profileMenu) {
+    profileBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const open = profileMenu.classList.toggle("open");
+      profileBtn.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+    profileMenu.addEventListener("click", (e) => e.stopPropagation());
+    const logoutBtn = document.getElementById("logoutBtn");
+    if (logoutBtn) logoutBtn.addEventListener("click", logout);
+  }
+  const closeProfileMenu = () => {
+    const m = document.getElementById("profileMenu");
+    const b = document.getElementById("profileBtn");
+    if (m) m.classList.remove("open");
+    if (b) b.setAttribute("aria-expanded", "false");
+  };
+  if (document.__profileCloser) document.removeEventListener("click", document.__profileCloser);
+  document.__profileCloser = closeProfileMenu;
+  document.addEventListener("click", document.__profileCloser);
+  if (document.__profileEsc) document.removeEventListener("keydown", document.__profileEsc);
+  document.__profileEsc = (e) => {
+    if (e.key === "Escape") closeProfileMenu();
+  };
+  document.addEventListener("keydown", document.__profileEsc);
 
   const navToggle = document.getElementById("navToggle");
   const navLinks = document.getElementById("navLinks");
@@ -335,7 +382,9 @@ function mountNav(active, opts) {
   const painted = JSON.stringify(CURRENT_USER);
   refreshUser().then((user) => {
     if (enforcePasswordSetup(user)) return;
-    if (JSON.stringify(user) !== painted || !document.getElementById("authBtn")) {
+    // Signed out the corner control is #authBtn; signed in it's #profileBtn.
+    const hasControl = document.getElementById("authBtn") || document.getElementById("profileBtn");
+    if (JSON.stringify(user) !== painted || !hasControl) {
       paintNav(active, options);
     }
     document.dispatchEvent(new CustomEvent("bc:user", { detail: user }));

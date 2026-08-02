@@ -234,6 +234,91 @@ a:hover {
   order: 3;
 }
 
+/* ---------- Profile chip (signed in) ---------- */
+/* Sits at the corner, outside the collapsible links, so it stays visible on
+   phones without opening the hamburger. */
+.nav-profile {
+  position: relative;
+  order: 4;
+}
+
+.avatar-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: linear-gradient(140deg, var(--accent-3), var(--accent) 55%, var(--accent-2));
+  color: #fff;
+  font: inherit;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: transform 0.06s ease, box-shadow 0.2s ease;
+}
+
+.avatar-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.profile-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 10px);
+  min-width: 230px;
+  padding: 6px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 14px 34px -10px rgba(0, 0, 0, 0.4);
+  display: none;
+  z-index: 30;
+}
+
+.profile-menu.open {
+  display: block;
+}
+
+.profile-head {
+  padding: 8px 12px 10px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 6px;
+}
+
+.profile-email {
+  display: block;
+  font-size: 13.5px;
+  overflow-wrap: anywhere;
+}
+
+.profile-role {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.profile-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border: 0;
+  background: none;
+  border-radius: calc(var(--radius-sm) - 4px);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.profile-item:hover {
+  background: var(--card-2);
+  color: var(--text);
+}
+
 .nav-toggle {
   display: none;
   order: 4;

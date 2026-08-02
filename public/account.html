@@ -293,6 +293,12 @@
           location.replace("account.html");
           return;
         }
+        // The reverse: arrived at the plain account page while a password is
+        // still owed (e.g. via the profile menu) — that IS the setup step.
+        if (!setupMode && needsPasswordSetup(me)) {
+          location.replace("account.html?setup=1");
+          return;
+        }
         paintMe();
         if (setupMode) {
           document.getElementById("newPassword").focus();
