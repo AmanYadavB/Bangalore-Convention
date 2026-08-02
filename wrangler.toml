@@ -141,7 +141,9 @@ CF_ACCOUNT_ID = "8d7633c4e9136784b6f1f567c35728ad"
 #   npx wrangler secret put WHATSAPP_APP_SECRET    (App Settings -> Basic -> App secret)
 WHATSAPP_PHONE_ID = "1168920729645898"
 # Must match the language you picked when creating the template ("en" vs "en_US").
-WHATSAPP_TEMPLATE_LANG = "en"
+# Proven by live test 2026-08-03: sends with "en" fail 132001 "does not exist
+# in en" - the template was approved as English (US).
+WHATSAPP_TEMPLATE_LANG = "en_US"
 # Public WhatsApp Channel for the daily reflections. Paste the "Share link" from
 # the channel (WhatsApp -> Updates -> your channel -> Channel info -> Share link).
 # Until this is set, the follow button on reflections.html stays hidden.
