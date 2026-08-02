@@ -2129,7 +2129,7 @@ function emailMascot(mood) {
     'px"></div>';
 
   return (
-    '<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto"><tr>' +
+    '<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;width:auto"><tr>' +
     '<td style="vertical-align:top;padding-right:5px">' +
     (M.confetti ? '<div style="font-size:17px;line-height:1;margin:0 0 3px">🎉</div>' : "") +
     arm(M.armL) +

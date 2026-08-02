@@ -8,8 +8,10 @@ function currentTheme() {
 function applyTheme(name) {
   document.documentElement.setAttribute("data-theme", name);
   localStorage.setItem("theme", name);
-  const btn = document.getElementById("themeToggle");
-  if (btn) btn.textContent = name === "daylight" ? "\uD83C\uDF19" : "\u2600\uFE0F";
+  // The theme control is the brand logo itself; the small corner badge on it
+  // shows the theme a tap would switch TO.
+  const hint = document.querySelector("#themeToggle .theme-hint");
+  if (hint) hint.textContent = name === "daylight" ? "\uD83C\uDF19" : "\u2600\uFE0F";
 }
 
 function toggleTheme() {
@@ -289,15 +291,16 @@ function goToLogin() {
 // The `need` field mirrors the server's PROTECTED_PAGES table in
 // shared/auth-core.mjs. Hiding a link is a convenience, not a boundary: the
 // Worker refuses the page itself if the role is insufficient.
+// The icon only shows in the mobile overlay menu; desktop links stay text.
 const NAV_LINKS = [
-  { href: "index.html", label: "Home", key: "home" },
-  { href: "register.html", label: "Register", key: "register" },
-  { href: "reflections.html", label: "Reflections", key: "reflections", need: "developer" },
-  { href: "registrations.html", label: "Registrations", key: "registrations", need: "staff" },
-  { href: "dashboard.html", label: "Dashboard", key: "dashboard", need: "staff" },
-  { href: "expenses.html", label: "Expenses", key: "expenses", need: "staff" },
-  { href: "ops.html", label: "Ops", key: "ops", need: "developer" },
-  { href: "pages.html", label: "Feed AI", key: "pages", need: "developer" },
+  { href: "index.html", label: "Home", key: "home", icon: "🏠" },
+  { href: "register.html", label: "Register", key: "register", icon: "📝" },
+  { href: "reflections.html", label: "Reflections", key: "reflections", need: "developer", icon: "📖" },
+  { href: "registrations.html", label: "Registrations", key: "registrations", need: "staff", icon: "🧾" },
+  { href: "dashboard.html", label: "Dashboard", key: "dashboard", need: "staff", icon: "📊" },
+  { href: "expenses.html", label: "Expenses", key: "expenses", need: "staff", icon: "💸" },
+  { href: "ops.html", label: "Ops", key: "ops", need: "developer", icon: "🛠️" },
+  { href: "pages.html", label: "Feed AI", key: "pages", need: "developer", icon: "🤖" },
   // account.html is reached through the profile menu in the corner, not a
   // nav link — that's where people look for it.
 ];
@@ -333,29 +336,50 @@ function renderNav(active, opts) {
     </div>`
     : "";
 
+  // The same links render twice: as plain text in the bar (desktop) and as
+  // circular icons on the frosted overlay (mobile). CSS shows exactly one.
+  const linkItems = (withIcons) =>
+    links
+      .map(
+        (l, i) =>
+          `<a class="link ${l.key === active ? "active" : ""}"${
+            withIcons ? ` style="--i:${i}"` : ""
+          } href="${l.href}">${
+            withIcons
+              ? `<span class="link-ico" aria-hidden="true">${l.icon}</span><span class="link-label">${l.label}</span>`
+              : l.label
+          }</a>`
+      )
+      .join("");
+
+  const overlayAuth = isSignedIn()
+    ? ""
+    : `<a class="link" style="--i:${links.length}" href="login.html"><span class="link-ico" aria-hidden="true">🔑</span><span class="link-label">Sign in</span></a>`;
+
   return `
   <nav class="nav">
-    <a class="brand" href="index.html">
-      <span class="logo"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="12" cy="12" r="9.2" stroke="rgba(255,255,255,0.9)" stroke-width="1.5"/><polygon points="12,6 17,15.5 7,15.5" stroke="#fff" stroke-width="1.6" stroke-linejoin="round" fill="none"/></svg></span>
-      <span class="brand-name"><b>Bangalore Convention</b>
+    <span class="brand">
+      <button class="logo" id="themeToggle" type="button" title="Tap to switch theme" aria-label="Switch between light and dark theme">
+        <svg viewBox="0 0 24 24" width="21" height="21" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="12" cy="12" r="9.2" stroke="rgba(255,255,255,0.9)" stroke-width="1.5"/><polygon points="12,6 17,15.5 7,15.5" stroke="#fff" stroke-width="1.6" stroke-linejoin="round" fill="none"/></svg>
+        <span class="theme-hint" aria-hidden="true"></span>
+      </button>
+      <a class="brand-name" href="index.html"><b>Bangalore Convention</b>
         <small>Unity · Service · Recovery</small>
-      </span>
-    </a>
-    <button class="theme-toggle" id="themeToggle" type="button" title="Switch theme" aria-label="Switch theme">\u2600\uFE0F</button>
+      </a>
+    </span>
     ${profile}${bare ? "" : `
     <button class="nav-toggle" id="navToggle" type="button" title="Menu" aria-label="Menu" aria-expanded="false">
       <span></span><span></span><span></span>
     </button>
     <div class="nav-links" id="navLinks">
-      ${links
-        .map(
-          (l) =>
-            `<a class="link ${l.key === active ? "active" : ""}" href="${l.href}">${l.label}</a>`
-        )
-        .join("")}
+      ${linkItems(false)}
       ${authBtn}
     </div>`}
-  </nav>`;
+  </nav>${bare ? "" : `
+  <div class="nav-overlay" id="navOverlay">
+    ${linkItems(true)}
+    ${overlayAuth}
+  </div>`}`;
 }
 
 // Draw the nav and wire its controls. Safe to call twice — refreshUser()
@@ -367,7 +391,13 @@ function paintNav(active, opts) {
   holder.innerHTML = renderNav(active, opts);
 
   const themeBtn = document.getElementById("themeToggle");
-  if (themeBtn) themeBtn.addEventListener("click", toggleTheme);
+  if (themeBtn)
+    themeBtn.addEventListener("click", () => {
+      toggleTheme();
+      themeBtn.classList.remove("theme-flip");
+      void themeBtn.offsetWidth; // restart the spin on quick repeat taps
+      themeBtn.classList.add("theme-flip");
+    });
 
   // Profile menu: avatar toggles it, any click elsewhere (or Escape) closes
   // it. The document-level closers are replaced on each repaint so they never
@@ -395,25 +425,47 @@ function paintNav(active, opts) {
   document.addEventListener("click", document.__profileCloser);
   if (document.__profileEsc) document.removeEventListener("keydown", document.__profileEsc);
   document.__profileEsc = (e) => {
-    if (e.key === "Escape") closeProfileMenu();
+    if (e.key !== "Escape") return;
+    closeProfileMenu();
+    const ov = document.getElementById("navOverlay");
+    const nt = document.getElementById("navToggle");
+    if (ov) ov.classList.remove("open");
+    if (nt) {
+      nt.classList.remove("open");
+      nt.setAttribute("aria-expanded", "false");
+    }
   };
   document.addEventListener("keydown", document.__profileEsc);
 
+  // Mobile menu = the frosted "corner burst" overlay. The inline .nav-links
+  // list is desktop-only now; it no longer opens or closes at all (the old
+  // in-flow version grew the sticky nav and shoved the whole page down).
   const navToggle = document.getElementById("navToggle");
-  const navLinks = document.getElementById("navLinks");
-  if (navToggle && navLinks) {
-    navToggle.addEventListener("click", () => {
-      const open = navLinks.classList.toggle("open");
+  const navOverlay = document.getElementById("navOverlay");
+  if (navToggle && navOverlay) {
+    // Aim every icon's flight at the hamburger corner. offsetLeft/offsetTop
+    // ignore CSS transforms, and the hidden overlay is still laid out
+    // (visibility, not display), so this measures the true resting spots.
+    const aimAtCorner = () => {
+      const cornerX = navOverlay.clientWidth - 38;
+      const cornerY = 34; // hamburger centre; the overlay covers the viewport
+      navOverlay.querySelectorAll("a").forEach((a) => {
+        a.style.setProperty("--fx", cornerX - (a.offsetLeft + a.offsetWidth / 2) + "px");
+        a.style.setProperty("--fy", cornerY - (a.offsetTop + a.offsetHeight / 2) + "px");
+      });
+    };
+    const setMenu = (open) => {
+      if (open) aimAtCorner();
+      navOverlay.classList.toggle("open", open);
       navToggle.classList.toggle("open", open);
       navToggle.setAttribute("aria-expanded", open ? "true" : "false");
+    };
+    navToggle.addEventListener("click", () => setMenu(!navOverlay.classList.contains("open")));
+    // A tap on the frost itself (not on a link) closes; picking a link also
+    // closes so the menu isn't still open when you navigate back.
+    navOverlay.addEventListener("click", (e) => {
+      if (e.target === navOverlay || e.target.closest("a")) setMenu(false);
     });
-    navLinks.querySelectorAll("a").forEach((a) =>
-      a.addEventListener("click", () => {
-        navLinks.classList.remove("open");
-        navToggle.classList.remove("open");
-        navToggle.setAttribute("aria-expanded", "false");
-      })
-    );
   }
 
   applyTheme(currentTheme());

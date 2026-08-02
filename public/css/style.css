@@ -155,12 +155,73 @@ a:hover {
   width: 42px;
   height: 42px;
   border-radius: 13px;
+  border: 0;
+  padding: 0;
+  position: relative;
+  cursor: pointer;
   background: linear-gradient(140deg, var(--accent-3), var(--accent) 55%, var(--accent-2));
   display: grid;
   place-items: center;
   flex-shrink: 0;
   color: #fff;
   box-shadow: 0 6px 16px -4px color-mix(in srgb, var(--accent) 55%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  transition: transform 0.18s ease;
+}
+
+/* The logo IS the theme toggle. The pulsing badge, the hover wiggle and the
+   tooltip all hint at it; a tap spins it a full turn while the theme flips. */
+.brand .logo:hover {
+  transform: rotate(-10deg) scale(1.07);
+}
+
+.brand .logo:active {
+  transform: scale(0.93);
+}
+
+.brand .logo .theme-hint {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  background: var(--card);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  font-size: 10px;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  animation: theme-hint-pulse 2.8s ease-in-out infinite;
+}
+
+@keyframes theme-hint-pulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 transparent; }
+  50% { transform: scale(1.22); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent); }
+}
+
+.brand .logo.theme-flip {
+  animation: theme-flip 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes theme-flip {
+  0% { transform: rotate(0) scale(1); }
+  50% { transform: rotate(180deg) scale(0.8); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand .logo .theme-hint,
+  .brand .logo.theme-flip {
+    animation: none;
+  }
+  .nav-overlay,
+  .nav-overlay a.link {
+    transition-duration: 0.01s;
+  }
+  .nav-overlay.open a.link {
+    transition-delay: 0s;
+  }
 }
 
 .brand small {
@@ -171,6 +232,13 @@ a:hover {
   letter-spacing: 1px;
   text-transform: uppercase;
   margin-top: 2px;
+}
+
+/* The name is a plain link to Home; the logo beside it flips the theme. */
+.brand-name,
+.brand-name:hover {
+  color: var(--text);
+  min-width: 0;
 }
 
 .brand-name b {
@@ -201,28 +269,6 @@ a:hover {
   box-shadow: inset 0 0 0 1px var(--border);
 }
 
-.theme-toggle {
-  /* 44px is the accessible minimum for a touch target; this was 40. */
-  width: 44px;
-  height: 44px;
-  border-radius: 11px;
-  border: 1px solid var(--border);
-  background: var(--card);
-  color: var(--text);
-  font-size: 16px;
-  cursor: pointer;
-  display: grid;
-  place-items: center;
-  line-height: 1;
-  transition: background 0.2s ease, transform 0.06s ease, box-shadow 0.2s ease;
-}
-
-.theme-toggle:hover {
-  background: var(--card-2);
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-sm);
-}
-
 .nav-links {
   display: flex;
   align-items: center;
@@ -230,8 +276,10 @@ a:hover {
   order: 2;
 }
 
-.theme-toggle {
-  order: 3;
+/* The frosted mobile menu; desktop never shows it. Its full styling lives in
+   the max-width: 720px block below. */
+.nav-overlay {
+  display: none;
 }
 
 /* ---------- Profile chip (signed in) ---------- */
@@ -1634,36 +1682,98 @@ tbody tr:hover {
   .nav {
     padding: 12px 16px;
     gap: 6px;
+    /* One row, always: the brand truncates instead of pushing the hamburger
+       (or the avatar) onto a second line. */
+    flex-wrap: nowrap;
+    /* Above the frosted menu overlay (64) and the chat widget (60), so the
+       bar and its ✕ stay crisp and tappable while the menu is open. */
+    z-index: 66;
   }
   .brand {
     font-size: 16px;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+  .brand-name b {
+    display: block;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
   .nav-toggle {
     display: flex;
   }
+  /* The old in-flow link list grew the sticky nav and shoved the whole page
+     down; mobile now uses the .nav-overlay "corner burst" menu instead. */
   .nav-links {
-    order: 5;
-    width: 100%;
     display: none;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 4px;
-    margin-top: 8px;
   }
-  .nav-links.open {
-    display: flex;
-  }
-  .nav a.link {
-    display: block;
-    padding: 12px 14px;
-    font-size: 15px;
-  }
-  .nav-links .auth-btn {
-    margin-top: 6px;
-    width: 100%;
+  /* Corner-burst launcher: the page frosts over and every link flies out of
+     the hamburger corner (--fx/--fy are set by paintNav) into a grid of
+     circular icons pinned just below the bar. Nothing in the page moves. */
+  .nav-overlay {
+    display: grid;
+    position: fixed;
+    inset: 0;
+    z-index: 64;
+    grid-template-columns: repeat(3, auto);
     justify-content: center;
-    padding: 13px;
-    font-size: 15px;
+    align-content: start;
+    padding: 88px 16px 24px;
+    gap: 26px 30px;
+    background: color-mix(in srgb, var(--bg) 86%, transparent);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.25s ease, visibility 0s linear 0.25s;
+  }
+  .nav-overlay.open {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transition: opacity 0.25s ease;
+  }
+  .nav-overlay a.link {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 0;
+    color: var(--text);
+    font-weight: 600;
+    opacity: 0;
+    transform: translate(var(--fx, 120px), var(--fy, -120px)) scale(0.2);
+    transition: transform 0.5s cubic-bezier(0.34, 1.45, 0.64, 1), opacity 0.2s ease;
+    transition-delay: 0ms;
+  }
+  .nav-overlay.open a.link {
+    opacity: 1;
+    transform: none;
+    transition-delay: calc(var(--i, 0) * 45ms);
+  }
+  .nav-overlay .link-ico {
+    width: 54px;
+    height: 54px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    font-size: 22px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-sm);
+  }
+  .nav-overlay .link-label {
+    font-size: 11px;
+  }
+  .nav-overlay a.link.active .link-ico {
+    background: linear-gradient(140deg, var(--accent-3), var(--accent) 55%, var(--accent-2));
+    border-color: transparent;
+    color: #fff;
+  }
+  .nav-overlay a.link.active .link-label {
+    color: var(--accent);
   }
   .container {
     padding: 22px 16px 48px;
@@ -2704,34 +2814,35 @@ h3,
   30%, 70% { opacity: 1; transform: translateY(2px); }
 }
 
-/* Little arms. Dance raises both; wave raises one and swings it. */
+/* Little arms. Dance raises both; wave raises one and swings it. They sit
+   partly over the body edge (pivot at the bottom) so they read as attached. */
 .mini-bot .mb-arm {
   position: absolute;
   width: 4px;
-  height: 9px;
+  height: 10px;
   border-radius: 3px;
   background: var(--accent-ink);
+  transform-origin: bottom center;
 }
 
-.mini-bot.dance .mb-arm { display: block; top: -5px; }
-.mini-bot.dance .mb-arm.l { left: -5px; transform: rotate(-24deg); animation: mbArmL 0.6s ease-in-out infinite; }
-.mini-bot.dance .mb-arm.r { right: -5px; transform: rotate(24deg); animation: mbArmR 0.6s ease-in-out infinite; }
+.mini-bot.dance .mb-arm { display: block; top: -4px; }
+.mini-bot.dance .mb-arm.l { left: -1px; transform: rotate(-28deg); animation: mbArmL 0.6s ease-in-out infinite; }
+.mini-bot.dance .mb-arm.r { right: -1px; transform: rotate(28deg); animation: mbArmR 0.6s ease-in-out infinite; }
 
 @keyframes mbArmL {
-  0%, 100% { transform: rotate(-24deg) translateY(0); }
-  50% { transform: rotate(-40deg) translateY(-2px); }
+  0%, 100% { transform: rotate(-28deg); }
+  50% { transform: rotate(-45deg); }
 }
 
 @keyframes mbArmR {
-  0%, 100% { transform: rotate(24deg) translateY(0); }
-  50% { transform: rotate(40deg) translateY(-2px); }
+  0%, 100% { transform: rotate(28deg); }
+  50% { transform: rotate(45deg); }
 }
 
 .mini-bot.wave .mb-arm.r {
   display: block;
-  top: -6px;
-  right: -5px;
-  transform-origin: bottom center;
+  top: -5px;
+  right: -1px;
   animation: mbWave 0.9s ease-in-out infinite;
 }
 
