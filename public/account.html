@@ -19,8 +19,10 @@
           <h2 style="margin: 0">Password</h2>
         </div>
         <p class="muted" id="pwIntro" style="margin-top: 0">
-          Optional. You can keep signing in with Google or an emailed link — a
-          password is just a third way in, useful when email is slow.
+          This is how you sign in: type your email on the sign-in page and
+          it asks for this password. If you ever forget it, choose
+          "email me a sign-in link instead" there. Google sign-in works
+          either way.
         </p>
         <form id="pwForm" class="form-grid">
           <div class="field full" id="currentField" hidden>
@@ -128,6 +130,16 @@
         });
       }
 
+      // Session methods are stored as short internal names; show real words.
+      function methodLabel(m) {
+        return {
+          magic: "Email link",
+          code: "Email code",
+          password: "Password",
+          google: "Google",
+        }[m] || (m || "—");
+      }
+
       function shortDevice(ua) {
         const s = String(ua || "");
         if (/iPhone|iPad/i.test(s)) return "iPhone / iPad";
@@ -162,7 +174,7 @@
           }
           rows.innerHTML = list.map(function (s) {
             return "<tr>" +
-              "<td>" + escapeHtml(s.method || "—") +
+              "<td>" + escapeHtml(methodLabel(s.method)) +
                 (s.current ? ' <span class="muted">(this one)</span>' : "") + "</td>" +
               "<td>" + escapeHtml(when(s.createdAt)) + "</td>" +
               "<td>" + escapeHtml(when(s.lastSeenAt)) + "</td>" +
