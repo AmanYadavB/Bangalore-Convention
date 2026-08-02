@@ -67,6 +67,29 @@ async function api(path, options) {
   return data;
 }
 
+// ---- The mascot, in any of its moods --------------------------------------
+// One face, five feelings. Moods: happy, dance, sad, worried, wave.
+// Used by toasts, confirm dialogs and the auth pages so the little guy reacts
+// to everything that happens on the site.
+function mascotHTML(mood) {
+  return (
+    '<span class="mini-bot emo ' + (mood || "happy") + '" aria-hidden="true">' +
+    '<i class="mb-eye"></i><i class="mb-eye"></i>' +
+    '<i class="mb-tear l"></i><i class="mb-tear r"></i>' +
+    '<i class="mb-arm l"></i><i class="mb-arm r"></i>' +
+    '<span class="mb-mouth"></span>' +
+    "</span>"
+  );
+}
+
+// The big centred version for dialogs and full pages (confetti when dancing).
+function mascotStage(mood) {
+  return (
+    '<span class="mascot-stage' + (mood === "dance" ? " party" : "") + '">' +
+    '<span class="mascot-scale">' + mascotHTML(mood) + "</span></span>"
+  );
+}
+
 function toast(message, type = "success") {
   let el = document.querySelector(".toast");
   if (!el) {
@@ -75,10 +98,65 @@ function toast(message, type = "success") {
     document.body.appendChild(el);
   }
   el.className = "toast " + type;
-  el.textContent = message;
+  // The mascot reacts to the news: happy for good, tears for bad, a nervous
+  // sweat for warnings, a full dance for the big wins ("party").
+  const mood =
+    type === "error" ? "sad" : type === "info" ? "worried" : type === "party" ? "dance" : "happy";
+  el.innerHTML = mascotHTML(mood) + '<span class="toast-msg"></span>';
+  el.querySelector(".toast-msg").textContent = message;
   requestAnimationFrame(() => el.classList.add("show"));
   clearTimeout(el._t);
   el._t = setTimeout(() => el.classList.remove("show"), 2800);
+}
+
+// Mascot-fronted replacement for window.confirm(). Returns Promise<boolean>.
+//   mascotConfirm({ title, message, mood, confirmText, cancelText, danger })
+// The mascot sets the emotional stakes: "worried" for risky things, "sad"
+// for deletions it will genuinely miss.
+function mascotConfirm(opts) {
+  opts = opts || {};
+  return new Promise((resolve) => {
+    const wrap = document.createElement("div");
+    wrap.className = "mconfirm-backdrop";
+    wrap.innerHTML =
+      '<div class="mconfirm" role="dialog" aria-modal="true">' +
+      mascotStage(opts.mood || "worried") +
+      "<h3></h3><p></p>" +
+      '<div class="mconfirm-actions">' +
+      '<button type="button" class="btn ghost" data-act="no"></button>' +
+      '<button type="button" class="btn ' +
+      (opts.danger ? "danger" : "primary") +
+      '" data-act="yes"></button>' +
+      "</div></div>";
+    wrap.querySelector("h3").textContent = opts.title || "Are you sure?";
+    wrap.querySelector("p").textContent = opts.message || "";
+    const noBtn = wrap.querySelector('[data-act="no"]');
+    const yesBtn = wrap.querySelector('[data-act="yes"]');
+    noBtn.textContent = opts.cancelText || "Cancel";
+    yesBtn.textContent = opts.confirmText || "Yes, go ahead";
+    document.body.appendChild(wrap);
+    requestAnimationFrame(() => wrap.classList.add("show"));
+    let settled = false;
+    const done = (ok) => {
+      if (settled) return;
+      settled = true;
+      document.removeEventListener("keydown", onKey);
+      wrap.classList.remove("show");
+      setTimeout(() => wrap.remove(), 220);
+      resolve(ok);
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") done(false);
+    };
+    document.addEventListener("keydown", onKey);
+    wrap.addEventListener("click", (e) => {
+      if (e.target === wrap) done(false);
+    });
+    noBtn.addEventListener("click", () => done(false));
+    yesBtn.addEventListener("click", () => done(true));
+    // Risky actions start focus on the safe way out.
+    (opts.danger ? noBtn : yesBtn).focus();
+  });
 }
 
 function escapeHtml(str) {

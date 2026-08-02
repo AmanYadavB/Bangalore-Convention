@@ -2632,3 +2632,244 @@ h3,
   }
 }
 
+
+/* ==========================================================================
+   MASCOT EMOTIONS — shared by toasts, confirm dialogs and the auth pages.
+   The base .mini-bot face gains optional parts (tears, arms) that only a
+   mood class reveals: happy, dance, sad, worried, wave.
+   ========================================================================== */
+
+.mini-bot .mb-tear,
+.mini-bot .mb-arm {
+  display: none;
+}
+
+/* Smiles and frowns are the same filled arc, flipped. */
+.mini-bot.happy .mb-mouth,
+.mini-bot.dance .mb-mouth,
+.mini-bot.wave .mb-mouth {
+  height: 5px;
+  border-radius: 0 0 6px 6px;
+}
+
+.mini-bot.sad .mb-mouth {
+  height: 5px;
+  border-radius: 6px 6px 0 0;
+}
+
+.mini-bot.worried .mb-mouth {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+}
+
+/* Tears fall from under the eyes, over and over. */
+.mini-bot.sad .mb-tear {
+  display: block;
+  position: absolute;
+  top: 14px;
+  width: 4px;
+  height: 6px;
+  border-radius: 50% 50% 60% 60%;
+  background: var(--accent-3);
+  opacity: 0;
+  animation: mbTear 1.5s ease-in infinite;
+}
+
+.mini-bot.sad .mb-tear.l { left: 8px; }
+.mini-bot.sad .mb-tear.r { right: 8px; animation-delay: 0.55s; }
+
+@keyframes mbTear {
+  0% { opacity: 0; transform: translateY(0); }
+  15% { opacity: 1; }
+  70% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(9px); }
+}
+
+/* A single sweat drop for the worried face. */
+.mini-bot.worried .mb-tear.r {
+  display: block;
+  position: absolute;
+  top: 4px;
+  right: 2px;
+  width: 4px;
+  height: 6px;
+  border-radius: 50% 50% 60% 60%;
+  background: var(--accent-3);
+  animation: mbSweat 2.2s ease-in-out infinite;
+}
+
+@keyframes mbSweat {
+  0%, 100% { opacity: 0; transform: translateY(0); }
+  30%, 70% { opacity: 1; transform: translateY(2px); }
+}
+
+/* Little arms. Dance raises both; wave raises one and swings it. */
+.mini-bot .mb-arm {
+  position: absolute;
+  width: 4px;
+  height: 9px;
+  border-radius: 3px;
+  background: var(--accent-ink);
+}
+
+.mini-bot.dance .mb-arm { display: block; top: -5px; }
+.mini-bot.dance .mb-arm.l { left: -5px; transform: rotate(-24deg); animation: mbArmL 0.6s ease-in-out infinite; }
+.mini-bot.dance .mb-arm.r { right: -5px; transform: rotate(24deg); animation: mbArmR 0.6s ease-in-out infinite; }
+
+@keyframes mbArmL {
+  0%, 100% { transform: rotate(-24deg) translateY(0); }
+  50% { transform: rotate(-40deg) translateY(-2px); }
+}
+
+@keyframes mbArmR {
+  0%, 100% { transform: rotate(24deg) translateY(0); }
+  50% { transform: rotate(40deg) translateY(-2px); }
+}
+
+.mini-bot.wave .mb-arm.r {
+  display: block;
+  top: -6px;
+  right: -5px;
+  transform-origin: bottom center;
+  animation: mbWave 0.9s ease-in-out infinite;
+}
+
+@keyframes mbWave {
+  0%, 100% { transform: rotate(14deg); }
+  50% { transform: rotate(52deg); }
+}
+
+/* Whole-body moods. */
+.mini-bot.happy { animation: mbBob 1.4s ease-in-out infinite; }
+.mini-bot.dance { animation: mbDance 0.6s ease-in-out infinite; }
+.mini-bot.sad { animation: mbDroop 2.6s ease-in-out infinite; }
+.mini-bot.worried { animation: mbShiver 2.4s ease-in-out infinite; }
+
+@keyframes mbDance {
+  0%, 100% { transform: rotate(-6deg) translateY(0); }
+  25% { transform: rotate(0deg) translateY(-3px); }
+  50% { transform: rotate(6deg) translateY(0); }
+  75% { transform: rotate(0deg) translateY(-3px); }
+}
+
+@keyframes mbDroop {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(2px) rotate(-3deg); }
+}
+
+@keyframes mbShiver {
+  0%, 92%, 100% { transform: rotate(0deg); }
+  94% { transform: rotate(-2.5deg); }
+  96% { transform: rotate(2.5deg); }
+  98% { transform: rotate(-1.5deg); }
+}
+
+/* A centred pedestal that blows the tiny mascot up for dialogs and pages.
+   The scale lives on a wrapper so mood animations keep their own transform. */
+.mascot-stage {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 92px;
+  position: relative;
+}
+
+.mascot-scale {
+  display: inline-block;
+  transform: scale(2.6);
+}
+
+/* Confetti around a dancing mascot. */
+.mascot-stage.party::before,
+.mascot-stage.party::after {
+  position: absolute;
+  top: 8px;
+  font-size: 18px;
+  animation: mbConfetti 1.2s ease-in-out infinite;
+}
+
+.mascot-stage.party::before { content: "🎉"; left: calc(50% - 74px); }
+.mascot-stage.party::after { content: "✨"; right: calc(50% - 74px); animation-delay: 0.4s; }
+
+@keyframes mbConfetti {
+  0%, 100% { transform: translateY(0) rotate(-8deg); opacity: 0.85; }
+  50% { transform: translateY(-7px) rotate(8deg); opacity: 1; }
+}
+
+/* ---------- Toasts now carry the mascot's reaction ---------- */
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  text-align: left;
+  max-width: min(92vw, 440px);
+}
+
+.toast .mini-bot {
+  flex: 0 0 auto;
+}
+
+.toast .toast-msg {
+  color: var(--text);
+}
+
+.toast.error .toast-msg { color: var(--red); }
+.toast.success .toast-msg { color: var(--green); }
+.toast.info .toast-msg { color: var(--amber); }
+.toast.party { border-color: var(--green); }
+.toast.party .toast-msg { color: var(--green); }
+
+/* ---------- Mascot confirm dialog (replaces window.confirm) ---------- */
+.mconfirm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(9, 12, 26, 0.55);
+  backdrop-filter: blur(3px);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.mconfirm-backdrop.show { opacity: 1; }
+
+.mconfirm {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+  padding: 20px 24px 20px;
+  width: 100%;
+  max-width: 390px;
+  text-align: center;
+  transform: translateY(16px) scale(0.96);
+  transition: transform 0.22s ease;
+}
+
+.mconfirm-backdrop.show .mconfirm { transform: none; }
+
+.mconfirm h3 {
+  margin: 2px 0 8px;
+  font-size: 18px;
+}
+
+.mconfirm p {
+  margin: 0 0 18px;
+  color: var(--muted);
+  font-size: 14.5px;
+  line-height: 1.55;
+  overflow-wrap: break-word;
+}
+
+.mconfirm-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.mconfirm-actions .btn { min-width: 118px; }

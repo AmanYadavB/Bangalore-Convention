@@ -132,7 +132,13 @@
         document.getElementById("exp-rows").addEventListener("click", async (e) => {
           const del = e.target.closest("[data-del]");
           if (!del) return;
-          if (!confirm("Delete this expense?")) return;
+          if (!(await mascotConfirm({
+            mood: "sad",
+            danger: true,
+            title: "Delete this expense?",
+            message: "It comes off the totals right away. The mascot hates losing receipts.",
+            confirmText: "Delete it",
+          }))) return;
           try {
             await api(`/api/expenses/${del.getAttribute("data-del")}`, { method: "DELETE" });
             toast("Expense deleted");

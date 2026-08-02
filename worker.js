@@ -749,13 +749,29 @@ function jsonWithCookies(obj, cookies, status = 200) {
 
 // Minimal self-contained page for the flows that must not depend on the app
 // shell (magic-link and invite interstitials, which run pre-session).
-function authShellPage(title, bodyHtml, status = 200) {
+// The same mascot the site uses everywhere, in the given mood, for pages this
+// worker renders itself. These load /css/style.css, so the browser-side mood
+// classes (and their animations) all work here.
+function mascotStageHtml(mood) {
+  if (!mood) return "";
+  return (
+    `<div class="mascot-stage${mood === "dance" ? " party" : ""}"><span class="mascot-scale">` +
+    `<span class="mini-bot emo ${mood}" aria-hidden="true">` +
+    '<i class="mb-eye"></i><i class="mb-eye"></i>' +
+    '<i class="mb-tear l"></i><i class="mb-tear r"></i>' +
+    '<i class="mb-arm l"></i><i class="mb-arm r"></i>' +
+    '<span class="mb-mouth"></span>' +
+    "</span></span></div>"
+  );
+}
+
+function authShellPage(title, bodyHtml, status = 200, mood = "") {
   return new Response(
     `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${esc(title)}</title><link rel="stylesheet" href="/css/style.css">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml"></head>
-<body><div class="container"><div class="card auth-card">${bodyHtml}</div></div></body></html>`,
+<body><div class="container"><div class="card auth-card">${mascotStageHtml(mood)}${bodyHtml}</div></div></body></html>`,
     { status, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "private, no-store" } }
   );
 }
@@ -972,18 +988,19 @@ async function handleAuth(request, env, ctx, parts, url) {
       // and nothing the caller supplied is echoed into the message. That is
       // what keeps this from being an open relay.
       const link = `${authOrigin(env, request)}/api/auth/magic/consume?token=${encodeURIComponent(token)}`;
-      const html = `
-        <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px">
-          <h2 style="margin:0 0 12px">Approve your sign-in</h2>
-          <p style="color:#555;line-height:1.6">Tap the button to approve the sign-in you just asked for. It works once and expires in 15 minutes.</p>
-          <p style="margin:26px 0"><a href="${link}" style="background:#4f46e5;color:#fff;padding:13px 26px;border-radius:10px;text-decoration:none;font-weight:600;display:inline-block">Approve sign-in</a></p>
-          <p style="color:#555;line-height:1.6;margin-top:30px">
-            It doesn't matter where this opens — even in your mail app's own
-            browser. The page where you asked to sign in notices the approval
-            and signs in there by itself.
-          </p>
-          <p style="color:#777;font-size:13px;line-height:1.6">If you didn't ask to sign in, ignore this email. Nobody can reach your account without this link.</p>
-        </div>`;
+      const html = mascotEmail({
+        mood: "wave",
+        title: "Approve your sign-in",
+        intro:
+          "The little mascot is waving you in — tap the button to approve the sign-in you just asked for. It works once and expires in 15 minutes.",
+        button: { href: link, label: "Approve sign-in" },
+        bodyHtml:
+          '<p style="color:#4b5563;line-height:1.65;text-align:center;margin:16px 0 0">' +
+          "It doesn't matter where this opens — even in your mail app's own browser. " +
+          "The page where you asked to sign in notices the approval and signs in there by itself.</p>",
+        note:
+          "Didn't ask to sign in? Just ignore this email — nobody can reach your account without it, and the mascot will keep guarding the door.",
+      });
       if (env.AUTH_LOG_LINKS === "1" || !env.MAILCHANNELS_API_KEY) {
         console.log("[auth] magic link for " + staff.email + ": " + link);
       }
@@ -1084,9 +1101,10 @@ async function handleAuth(request, env, ctx, parts, url) {
       return authShellPage(
         "Link expired",
         `<h2 style="margin-top:0">This link has expired</h2>
-         <p class="muted">Sign-in links last 15 minutes and work only once.</p>
+         <p class="muted">Sign-in links last 15 minutes and work only once. The mascot is a little sad about it too.</p>
          <a class="btn primary" href="/login.html">Request a new link</a>`,
-        410
+        410,
+        "sad"
       );
     }
 
@@ -1096,7 +1114,9 @@ async function handleAuth(request, env, ctx, parts, url) {
       return authShellPage(
         "Sign-in approved",
         `<h2 style="margin-top:0">Sign-in approved &#10003;</h2>
-         <p class="muted">Go back to the page where you asked to sign in — it signs in there by itself. You can close this window.</p>`
+         <p class="muted">Go back to the page where you asked to sign in — it signs in there by itself. You can close this window.</p>`,
+        200,
+        "dance"
       );
     }
 
@@ -1109,7 +1129,9 @@ async function handleAuth(request, env, ctx, parts, url) {
          <input type="hidden" name="csrf" value="${esc(row.csrf)}">
          <button class="btn primary" type="submit" style="width:100%">Approve sign-in</button>
        </form>
-       <p class="muted" style="font-size:13px;margin-bottom:0">If you didn't request this, close this page — nothing has happened yet.</p>`
+       <p class="muted" style="font-size:13px;margin-bottom:0">If you didn't request this, close this page — nothing has happened yet.</p>`,
+      200,
+      "wave"
     );
   }
 
@@ -1152,7 +1174,9 @@ async function handleAuth(request, env, ctx, parts, url) {
       return authShellPage(
         "Sign-in approved",
         `<h2 style="margin-top:0">Sign-in approved &#10003;</h2>
-         <p class="muted">Go back to the page where you asked to sign in — it signs in there by itself within a few seconds. You can close this window.</p>`
+         <p class="muted">Go back to the page where you asked to sign in — it signs in there by itself within a few seconds. You can close this window.</p>`,
+        200,
+        "dance"
       );
     }
 
@@ -1436,6 +1460,9 @@ async function handleAuth(request, env, ctx, parts, url) {
       return json({ error: "That password has appeared in a public data breach. Please choose another." }, 400);
     }
 
+    // s.staff was read before the update, so this still reflects the old state.
+    const isChange = Boolean(s.staff.password_hash);
+
     let hash;
     try {
       hash = await hashPassword(env, password);
@@ -1452,10 +1479,45 @@ async function handleAuth(request, env, ctx, parts, url) {
     await revokeAllSessions(env, s.staff.id, s.session.id);
     const created = await rotateSession(env, s.session.id, s.staff, s.session.method, request);
     audit(env, ctx, auditFrom(request, {
-      type: s.staff.password_hash ? "password_changed" : "password_set",
+      type: isChange ? "password_changed" : "password_set",
       staffId: s.staff.id,
       email: s.staff.email,
     }));
+
+    // Tell the owner by email — celebration for a first password, a calm
+    // security note for a change. Fire-and-forget: mail trouble must never
+    // fail the request that already succeeded.
+    const when = istClock();
+    const mailHtml = isChange
+      ? mascotEmail({
+          mood: "happy",
+          title: "Your password was changed",
+          intro:
+            "Your Convention password was changed on " + when + " (IST). " +
+            "Every other signed-in device was signed out, so only the person who changed it is still in.",
+          note:
+            "Wasn't you? Go to the sign-in page, choose “email me a sign-in link”, set a fresh password, and tell the organising committee.",
+        })
+      : mascotEmail({
+          mood: "dance",
+          title: "Password set — you're all locked in!",
+          intro:
+            "Your account got its password on " + when + " (IST). The mascot did a little dance about it.",
+          bodyHtml:
+            '<p style="color:#4b5563;line-height:1.65;text-align:center;margin:16px 0 0">' +
+            "From now on you can sign in with your email and this password. " +
+            "If you ever forget it, the sign-in page can always email you a link instead.</p>",
+          note: "Wasn't you? Tell the organising committee straight away.",
+        });
+    const mailWork = sendMail(
+      env,
+      s.staff.email,
+      isChange ? "Your Convention password was changed" : "Your Convention password is set 🎉",
+      mailHtml,
+      { toName: s.staff.name || "" }
+    );
+    if (ctx && ctx.waitUntil) ctx.waitUntil(mailWork);
+
     return jsonWithCookies({ ok: true }, sessionCookieHeaders(env, created));
   }
 
@@ -1543,6 +1605,25 @@ async function handleAuth(request, env, ctx, parts, url) {
       email: target.email,
       detail: "deleted by " + s.staff.email,
     }));
+
+    // The person deserves to know — and the mascot is heartbroken about it.
+    // Fire-and-forget so a mail hiccup never fails the delete itself.
+    const byeWork = sendMail(
+      env,
+      target.email,
+      "Your Convention account was removed",
+      mascotEmail({
+        mood: "sad",
+        title: "Your account was removed",
+        intro:
+          "Your staff access on the Convention site was removed on " + istClock() +
+          " (IST). You've been signed out everywhere and your password was cleared.",
+        note:
+          "Think this was a mistake? Reach out to the organising committee and they can let you back in. The mascot is honestly a bit heartbroken about this one.",
+      }),
+      { toName: target.name || "" }
+    );
+    if (ctx && ctx.waitUntil) ctx.waitUntil(byeWork);
 
     const stillListed = resolveRoleFromConfig(env, target.email);
     return json({
@@ -2001,6 +2082,133 @@ async function getWorkersAiNeurons(env) {
     }
   }
   return { ok: false, note: "AI analytics not available on this account/token" };
+}
+
+// ---------------------------------------------------------------------------
+// MASCOT EMAIL KIT — the site mascot, drawn with plain divs and inline styles
+// so it survives real email clients: Gmail strips <style>, keyframes,
+// position:absolute AND inline SVG, so the face is built from stacked and
+// inline-block boxes only. Moods: happy, dance, sad, worried, wave.
+function emailMascot(mood) {
+  const M =
+    {
+      dance: { mouth: "smile", armL: "up", armR: "up", tears: false, confetti: true },
+      happy: { mouth: "smile", armL: "down", armR: "down", tears: false },
+      wave: { mouth: "smile", armL: "down", armR: "up", tears: false },
+      sad: { mouth: "frown", armL: "low", armR: "low", tears: true },
+      worried: { mouth: "oh", armL: "down", armR: "down", tears: false },
+    }[mood] || { mouth: "smile", armL: "down", armR: "down" };
+
+  const ink = "#312e81";
+  const shellBg = "#dbe3fd";
+  const shellEdge = "#a5b4fc";
+
+  const mouthStyle =
+    M.mouth === "frown"
+      ? "width:20px;height:9px;border-radius:20px 20px 0 0;"
+      : M.mouth === "oh"
+      ? "width:10px;height:10px;border-radius:10px;"
+      : "width:20px;height:9px;border-radius:0 0 20px 20px;";
+
+  const eye =
+    '<span style="display:inline-block;width:9px;height:9px;border-radius:9px;background:' +
+    ink +
+    ';margin:0 9px"></span>';
+  const tear =
+    '<span style="display:inline-block;width:7px;height:11px;border-radius:7px 7px 8px 8px;background:#38bdf8;margin:0 15px"></span>';
+
+  // Arms live in side cells; "up" = raised high (dancing/waving), "low" = hanging.
+  const armTop = { up: 2, down: 30, low: 40 };
+  const arm = (pos) =>
+    '<div style="width:9px;height:30px;border-radius:8px;background:' +
+    shellBg +
+    ";border:2px solid " +
+    shellEdge +
+    ";margin-top:" +
+    (armTop[pos] == null ? 30 : armTop[pos]) +
+    'px"></div>';
+
+  return (
+    '<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto"><tr>' +
+    '<td style="vertical-align:top;padding-right:5px">' +
+    (M.confetti ? '<div style="font-size:17px;line-height:1;margin:0 0 3px">🎉</div>' : "") +
+    arm(M.armL) +
+    "</td>" +
+    "<td>" +
+    // antenna ball + stem, then the face
+    '<div style="width:10px;height:10px;border-radius:10px;background:' + shellEdge + ';margin:0 auto"></div>' +
+    '<div style="width:4px;height:8px;background:' + shellEdge + ';margin:0 auto 2px"></div>' +
+    '<div style="width:88px;height:76px;border-radius:26px;background:' +
+    shellBg +
+    ";background-image:linear-gradient(160deg,#eef2ff," +
+    shellBg +
+    ");border:2px solid " +
+    shellEdge +
+    '">' +
+    '<div style="padding-top:20px;text-align:center;line-height:0">' + eye + eye + "</div>" +
+    (M.tears
+      ? '<div style="text-align:center;line-height:0;margin-top:4px">' + tear + tear + "</div>"
+      : "") +
+    '<div style="margin:' +
+    (M.tears ? 4 : 12) +
+    "px auto 0;background:" +
+    ink +
+    ";" +
+    mouthStyle +
+    '"></div>' +
+    "</div>" +
+    "</td>" +
+    '<td style="vertical-align:top;padding-left:5px">' +
+    (M.confetti ? '<div style="font-size:17px;line-height:1;margin:0 0 3px">✨</div>' : "") +
+    arm(M.armR) +
+    "</td>" +
+    "</tr></table>"
+  );
+}
+
+// Shared shell for every mail the site sends a person: soft background, one
+// white rounded card, the mascot on top reacting to the news, then the words.
+function mascotEmail({ mood = "happy", title, intro, bodyHtml = "", button, note }) {
+  const btn = button
+    ? '<p style="margin:26px 0 8px;text-align:center"><a href="' +
+      button.href +
+      '" style="background:#4f46e5;color:#ffffff;padding:13px 28px;border-radius:12px;text-decoration:none;font-weight:600;display:inline-block">' +
+      button.label +
+      "</a></p>"
+    : "";
+  return (
+    '<div style="background:#eef1fb;padding:34px 12px">' +
+    '<div style="max-width:520px;margin:0 auto;background:#ffffff;border:1px solid #e2e6f8;border-radius:20px;padding:32px 34px 26px;font-family:system-ui,-apple-system,\'Segoe UI\',Roboto,sans-serif;color:#1f2937">' +
+    emailMascot(mood) +
+    '<h2 style="margin:20px 0 10px;text-align:center;color:#111827;font-size:21px">' +
+    title +
+    "</h2>" +
+    '<p style="color:#4b5563;line-height:1.65;text-align:center;margin:0">' +
+    intro +
+    "</p>" +
+    bodyHtml +
+    btn +
+    (note
+      ? '<p style="color:#8a91a8;font-size:13px;line-height:1.6;margin:18px 0 0;text-align:center">' +
+        note +
+        "</p>"
+      : "") +
+    "</div>" +
+    '<p style="max-width:520px;margin:14px auto 0;text-align:center;color:#9aa1b9;font-size:12px;font-family:system-ui,sans-serif">Bangalore Convention 2027 · delivered by the site\'s little mascot 🤖</p>' +
+    "</div>"
+  );
+}
+
+// When something security-relevant happens, say when it happened in the
+// reader's own clock (event times on this site are IST).
+function istClock() {
+  return new Date().toLocaleString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 // General mail sender. Magic links need to reach an arbitrary staff address,

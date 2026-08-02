@@ -102,7 +102,13 @@
           rows.querySelectorAll("[data-del]").forEach((btn) =>
             btn.addEventListener("click", async () => {
               const id = btn.getAttribute("data-del");
-              if (!confirm("Remove this from the AI's knowledge?")) return;
+              if (!(await mascotConfirm({
+                mood: "worried",
+                danger: true,
+                title: "Make the AI forget this?",
+                message: "It stops using this knowledge immediately — it can't answer from what it can't remember.",
+                confirmText: "Remove it",
+              }))) return;
               btn.disabled = true;
               try {
                 await api("/api/knowledge/" + encodeURIComponent(id), { method: "DELETE" });

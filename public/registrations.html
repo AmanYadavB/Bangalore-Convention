@@ -145,7 +145,13 @@
             toast(updated.paid ? "Marked as paid" : "Marked as pending");
           } else if (del) {
             const id = del.getAttribute("data-del");
-            if (!confirm("Delete this registration?")) return;
+            if (!(await mascotConfirm({
+              mood: "sad",
+              danger: true,
+              title: "Delete this registration?",
+              message: "Their booking disappears from the list and the totals. This can't be undone.",
+              confirmText: "Delete it",
+            }))) return;
             await api(`/api/registrations/${id}`, { method: "DELETE" });
             ALL = ALL.filter((r) => r.id !== id);
             render();

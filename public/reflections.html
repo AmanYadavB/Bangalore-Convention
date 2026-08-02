@@ -292,7 +292,13 @@
       }
 
       async function removeReflection(r) {
-        if (!confirm("Delete this reflection?")) return;
+        if (!(await mascotConfirm({
+          mood: "sad",
+          danger: true,
+          title: "Delete this reflection?",
+          message: "It disappears from the archive for everyone. The mascot will shed a small tear.",
+          confirmText: "Delete it",
+        }))) return;
         try {
           await api("/api/reflections/" + r.id, { method: "DELETE" });
           toast("Reflection deleted");
@@ -355,7 +361,12 @@
             sendBtn.type = "button";
             sendBtn.textContent = "Send broadcast now";
             sendBtn.addEventListener("click", async () => {
-              if (!confirm("Send this to REFLECTION_RECIPIENTS now? This costs money per recipient.")) return;
+              if (!(await mascotConfirm({
+                mood: "worried",
+                title: "Send the broadcast now?",
+                message: "This goes to every REFLECTION_RECIPIENTS address immediately, and it costs money per recipient.",
+                confirmText: "Send it now",
+              }))) return;
               sendBtn.disabled = true;
               try {
                 const res = await api("/api/reflections/send", {

@@ -208,11 +208,11 @@
           document.getElementById("currentPassword").value = "";
           if (setupMode) {
             // Setup finished — carry on to wherever they were headed.
-            toast("Password saved — taking you in…");
-            setTimeout(() => location.replace(nextDest), 900);
+            toast("Password saved — taking you in…", "party");
+            setTimeout(() => location.replace(nextDest), 1200);
             return;
           }
-          toast("Password saved — your other sessions were signed out");
+          toast("Password saved — your other sessions were signed out", "party");
           await refreshUser();
           paintMe();
           loadSessions();
@@ -257,7 +257,13 @@
           rows.querySelectorAll("[data-del]").forEach(function (btn) {
             btn.addEventListener("click", async function () {
               const email = btn.getAttribute("data-email");
-              if (!confirm("Delete " + email + "? They are signed out everywhere and their password is cleared.")) return;
+              if (!(await mascotConfirm({
+                mood: "sad",
+                danger: true,
+                title: "Delete " + email + "?",
+                message: "They're signed out everywhere and their password is cleared. The mascot will genuinely miss them.",
+                confirmText: "Delete account",
+              }))) return;
               btn.disabled = true;
               try {
                 const res = await api("/api/auth/staff/" + encodeURIComponent(btn.getAttribute("data-del")), { method: "DELETE" });
@@ -275,7 +281,12 @@
       }
 
       document.getElementById("revokeOthers").addEventListener("click", async function () {
-        if (!confirm("Sign out every other device?")) return;
+        if (!(await mascotConfirm({
+          mood: "worried",
+          title: "Sign out everywhere else?",
+          message: "Every device except this one gets signed out right away.",
+          confirmText: "Sign them out",
+        }))) return;
         try {
           await api("/api/auth/sessions", { method: "DELETE" });
           toast("Other sessions signed out");
