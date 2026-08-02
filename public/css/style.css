@@ -116,30 +116,18 @@ a:hover {
 }
 
 /* ---------- Nav ---------- */
+/* N4 · minimal hairline: flat ground, one thin border, no glass, no glow. */
 .nav {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 14px 28px;
-  background: var(--nav-bg);
-  -webkit-backdrop-filter: saturate(160%) blur(14px);
-  backdrop-filter: saturate(160%) blur(14px);
-  border-bottom: none;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
   z-index: 20;
   flex-wrap: wrap;
-}
-
-.nav::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--accent) 25%, var(--accent-2) 50%, var(--accent-3) 75%, transparent);
-  opacity: 0.55;
 }
 
 .brand {
@@ -156,7 +144,7 @@ a:hover {
 .brand .logo {
   width: 42px;
   height: 42px;
-  border-radius: 13px;
+  border-radius: 10px;
   border: 0;
   padding: 0;
   position: relative;
@@ -244,31 +232,30 @@ a:hover {
 }
 
 .brand-name b {
-  background: linear-gradient(120deg, var(--accent-3), var(--accent), var(--accent-2));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  font-weight: 700;
+  color: var(--text);
+  font-weight: 800;
+  letter-spacing: -0.01em;
 }
 
 .nav a.link {
-  padding: 8px 14px;
-  border-radius: 10px;
+  padding: 8px 11px;
   color: var(--muted);
-  font-weight: 600;
-  font-size: 13.5px;
-  transition: color 0.15s ease, background 0.15s ease;
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  transition: color 0.15s ease;
 }
 
 .nav a.link:hover {
   color: var(--text);
-  background: var(--card-2);
+  background: none;
 }
 
 .nav a.link.active {
-  color: var(--text);
-  background: var(--card-2);
-  box-shadow: inset 0 0 0 1px var(--border);
+  color: var(--accent);
+  background: none;
+  box-shadow: none;
 }
 
 .nav-links {
@@ -379,9 +366,10 @@ a:hover {
   width: 44px;
   height: 44px;
   padding: 0;
-  border: 1px solid var(--border);
+  /* N4 mobile: just the three lines — no box around the hamburger. */
+  border: 0;
   border-radius: 10px;
-  background: var(--card);
+  background: transparent;
   cursor: pointer;
 }
 
@@ -1221,14 +1209,33 @@ body.chat-open .chat-widget {
   display: none;
 }
 
+/* H3: calm card header with a thin gradient accent line instead of the
+   loud blue-purple gradient block. */
 .chat-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
   padding: 14px 16px;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
-  color: #fff;
+  background: var(--card);
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  position: relative;
+}
+
+.chat-head::after {
+  content: "";
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--accent-3), var(--accent), var(--accent-2));
+}
+
+.chat-head small {
+  color: var(--muted);
 }
 
 .chat-head strong {
@@ -1245,9 +1252,9 @@ body.chat-open .chat-widget {
 
 .chat-close {
   flex-shrink: 0;
-  border: none;
-  background: rgba(255, 255, 255, 0.18);
-  color: #fff;
+  border: 1px solid var(--border);
+  background: var(--card-2);
+  color: var(--text);
   /* Was 28px — the smallest tap target on the site, and the one people reach
      for fastest when they want the chat panel gone. */
   width: 36px;
@@ -1260,7 +1267,7 @@ body.chat-open .chat-widget {
 }
 
 .chat-close:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: var(--border);
 }
 
 .chat-log {
@@ -1754,7 +1761,9 @@ body.chat-open .chat-widget {
     grid-template-columns: 1fr;
   }
   .hero {
-    padding: 44px 16px 22px;
+    /* E1 breathing room: the bottom padding keeps the cycling category card
+       and its dots clear of the fixed chat mascot in the corner. */
+    padding: 44px 16px 96px;
   }
   .hero h1 {
     font-size: 28px;
@@ -2495,20 +2504,8 @@ body.chat-open .chat-widget {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.22), transparent 45%);
   pointer-events: none;
 }
-/* Active nav link gets a subtle gradient underline for a refined feel. */
-.nav a.link.active {
-  position: relative;
-}
-.nav a.link.active::after {
-  content: "";
-  position: absolute;
-  left: 14px;
-  right: 14px;
-  bottom: 3px;
-  height: 2px;
-  border-radius: 2px;
-  background: linear-gradient(90deg, var(--accent), var(--accent-2));
-}
+/* (The old gradient underline on the active nav link left with the N4
+   minimal bar — the accent colour alone marks the active page now.) */
 /* Cards lift gently and their border warms on hover for an interactive feel. */
 .card {
   transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
@@ -2761,6 +2758,7 @@ h3,
 
 .spot-dots i.on { background: var(--accent); }
 
+
 /* ---------- Animated dropdowns ----------
    Native <select> menus can't be animated, so mountDropdowns() in common.js
    gives every select (outside the chat widget) a styled twin that opens with
@@ -2907,7 +2905,10 @@ select.dd-native {
   display: none;
 }
 
-.chat-panel.voice-open .chat-fx {
+/* Glow while talk mode is on, AND whenever the bot is audibly speaking —
+   the greeting included (A1). It vanishes the moment the audio ends. */
+.chat-panel.voice-open .chat-fx,
+.chat-panel.bot-speaking .chat-fx {
   display: block;
 }
 
@@ -2958,7 +2959,8 @@ select.dd-native {
 /* The log and the voice bar normally paint opaque --bg-2, which sat right on
    top of the glow and hid it completely. In talk mode they go glassy so the
    aurora shows through. */
-.chat-panel.voice-open .chat-log {
+.chat-panel.voice-open .chat-log,
+.chat-panel.bot-speaking .chat-log {
   background: transparent;
 }
 
@@ -2977,13 +2979,14 @@ select.dd-native {
   transition: filter 0.45s ease, opacity 0.45s ease;
 }
 
-/* Thin blur — recessed but still readable without scrolling back. */
-.chat-log:not(.browsing) > :nth-last-child(2) {
+/* Thin blur — recessed but still readable without scrolling back.
+   TALK MODE ONLY: typed chat keeps a completely normal, unblurred log. */
+.chat-panel.voice-open .chat-log:not(.browsing) > :nth-last-child(2) {
   filter: blur(0.8px);
   opacity: 0.78;
 }
 
-.chat-log:not(.browsing) > :nth-last-child(n + 3) {
+.chat-panel.voice-open .chat-log:not(.browsing) > :nth-last-child(n + 3) {
   filter: blur(1.4px);
   opacity: 0.6;
 }
@@ -2992,16 +2995,16 @@ select.dd-native {
   .chat-msg { transition: none; }
 }
 
-/* ---------- Live blurred text (assistant replies, both modes) ---------- */
+/* ---------- Live text (assistant replies, both modes) ----------
+   T-b: each word soft-fades in on a steady beat. No blur, no movement —
+   the cleanest read while still feeling alive. */
 .chat-log .lw {
   opacity: 0;
-  filter: blur(6px);
-  transition: opacity 0.25s ease, filter 0.35s ease;
+  transition: opacity 0.22s ease;
 }
 
 .chat-log .lw.in {
   opacity: 1;
-  filter: blur(0);
 }
 
 /* ---------- Memories: the living photo wall (home page) ---------- */
@@ -3306,6 +3309,51 @@ select.dd-native {
   .mem-wall.pop .mem-tile { animation: none; opacity: 1; }
   .mem-inner, .mem-fig, .pb-card { transition: none; }
   .pburst.open .pb-card { opacity: 1; transform: none; }
+}
+
+/* N4: the Sign in button in the bar is a quiet outlined chip, not a filled
+   gradient pill. Lives at the end of the file so it wins over .btn.primary
+   and its sheen overlay. */
+.nav-links .auth-btn {
+  background: none;
+  background-image: none;
+  color: var(--text);
+  border: 1.5px solid var(--text);
+  border-radius: 4px;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 1px;
+  font-weight: 700;
+  padding: 8px 14px;
+  box-shadow: none;
+}
+
+.nav-links .auth-btn::after {
+  display: none;
+}
+
+.nav-links .auth-btn:hover {
+  background: var(--text);
+  color: var(--bg);
+  transform: none;
+  box-shadow: none;
+}
+
+/* G-a: on phones the wall becomes a tight two-column masonry instead of a
+   single plain stack (three 220px columns never fit a phone). Lives after
+   the base .mem-wall rule so the shorthand doesn't override it. */
+@media (max-width: 640px) {
+  .mem-wall {
+    columns: 2;
+    column-gap: 8px;
+  }
+  .mem-tile {
+    margin-bottom: 8px;
+  }
+  .mem-cap {
+    font-size: 10px;
+    padding: 14px 8px 7px;
+  }
 }
 
 /* ==========================================================================
@@ -3690,6 +3738,15 @@ select.dd-native {
   transform: translateX(calc(-100% - 44px));
 }
 .toastcard.quiet.in { transform: none; }
+
+/* Mobile keyboard open: the bottom is behind the keyboard, so the card drops
+   in from the top of the VISIBLE viewport instead (top set inline by
+   toast(), tracked as the keyboard moves). */
+.toastcard.top {
+  bottom: auto;
+  transform: translateY(calc(-100% - 70px));
+}
+.toastcard.top.in { transform: none; }
 
 .toastcard .rider {
   position: absolute;

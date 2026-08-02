@@ -29,11 +29,11 @@
         <a class="btn ghost" href="register.html" id="viewPricingBtn">View Pricing</a>
       </div>
 
-      <!-- Programme wisdom, one line at a time. Pricing lives behind the
-           View Pricing burst and on the Register page. -->
-      <div class="price-spot" id="sloganSpot">
-        <div class="spot-card slogan-card" id="sloganCard"></div>
-        <div class="spot-dots" id="sloganDots" aria-hidden="true"></div>
+      <!-- The registration categories: one compact card cycling through
+           them, tumbling on each change. Tap → register, preselected. -->
+      <div class="price-spot" id="priceSpot" hidden>
+        <a class="spot-card" id="spotCard" href="register.html"></a>
+        <div class="spot-dots" id="spotDots" aria-hidden="true"></div>
       </div>
     </section>
 
@@ -137,27 +137,36 @@
         "linear-gradient(140deg,#fb7185,#f59e0b)",
       ];
 
-      // AA one-liners cycling in the hero, each arriving with the tumble.
-      (() => {
-        const SLOGANS = [
-          ["🌅", "One day at a time"],
-          ["🕊️", "Easy does it"],
-          ["🧭", "First things first"],
-          ["🌿", "Live and let live"],
-          ["🎈", "Keep it simple"],
-          ["⛅", "This too shall pass"],
-          ["🙏", "Let go and let God"],
-          ["👣", "Progress, not perfection"],
-        ];
-        const card = document.getElementById("sloganCard");
-        const dots = document.getElementById("sloganDots");
-        dots.innerHTML = SLOGANS.map(() => "<i></i>").join("");
-        let i = 0;
+      // Price spotlight (hero) + the "View Pricing" burst overlay, both fed
+      // by one pricing fetch. Tap anything → register, preselected.
+      (async () => {
+        let pricing;
+        try {
+          pricing = await api("/api/pricing");
+        } catch (e) {
+          return; // pricing unavailable — no spotlight, and the View Pricing
+                  // link simply navigates like it always did
+        }
+        if (!Array.isArray(pricing) || !pricing.length) return;
+
+        // ---- spotlight ----
+        const wrap = document.getElementById("priceSpot");
+        const card = document.getElementById("spotCard");
+        const dots = document.getElementById("spotDots");
+        wrap.hidden = false;
+        dots.innerHTML = pricing.map(() => "<i></i>").join("");
+
+        let si = 0;
         function show(n) {
-          i = n;
+          si = n;
+          const c = pricing[n];
+          card.href = "register.html?category=" + encodeURIComponent(c.id);
           card.innerHTML =
-            `<span class="spot-ico" aria-hidden="true">${SLOGANS[n][0]}</span>` +
-            `<span class="slogan-text">${SLOGANS[n][1]}</span>`;
+            `<span class="spot-ico" aria-hidden="true">${CAT_ICONS[n % CAT_ICONS.length]}</span>` +
+            `<span class="spot-txt"><b>${escapeHtml(c.name)}</b><small>${escapeHtml(
+              c.description || ""
+            )}</small></span>` +
+            `<span class="spot-price">${money(c.price)}</span>`;
           card.classList.remove("anim");
           void card.offsetWidth; // restart the tumble
           card.classList.add("anim");
@@ -165,20 +174,8 @@
         }
         show(0);
         setInterval(() => {
-          if (!document.hidden) show((i + 1) % SLOGANS.length);
-        }, 3200);
-      })();
-
-      // "View Pricing" burst overlay (P2d: spring pop + pointer tilt).
-      (async () => {
-        let pricing;
-        try {
-          pricing = await api("/api/pricing");
-        } catch (e) {
-          return; // pricing unavailable — the View Pricing link simply
-                  // navigates to the register page like it always did
-        }
-        if (!Array.isArray(pricing) || !pricing.length) return;
+          if (!document.hidden) show((si + 1) % pricing.length);
+        }, 3000);
         const burst = document.getElementById("pburst");
         const grid = document.getElementById("pburstGrid");
         const vpBtn = document.getElementById("viewPricingBtn");

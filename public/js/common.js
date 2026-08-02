@@ -153,8 +153,28 @@ function __toastShow(text, type) {
     requestAnimationFrame(() => dim.classList.add("on"));
   }
 
+  // Snappy: fast type, short hold — the card is a moment, not a billboard.
+  const typeSpeed = 10;
+  const holdMs = 1500 + Math.min(900, text.length * 5) + (type === "party" ? 500 : 0);
+
   const card = document.createElement("div");
   card.className = "toastcard " + T.cls + (chatOpen ? " quiet" : "");
+
+  // Mobile keyboard open: the bottom of the screen doesn't exist — pin the
+  // card to the top of the VISIBLE viewport instead (tracked while it moves).
+  const vv = window.visualViewport;
+  const kbOpen = vv && vv.height < window.innerHeight - 120;
+  let placeTop = null;
+  if (kbOpen) {
+    card.classList.remove("quiet");
+    card.classList.add("top");
+    placeTop = () => {
+      card.style.top = (vv.offsetTop + 58) + "px";
+    };
+    placeTop();
+    vv.addEventListener("resize", placeTop);
+    vv.addEventListener("scroll", placeTop);
+  }
   card.innerHTML =
     (rider ? '<span class="rider">' + mascotHTML(T.mood) + "</span>" : "") +
     (T.title ? '<b class="ct-title"></b>' : "") +
@@ -164,6 +184,9 @@ function __toastShow(text, type) {
     "</div></div>" +
     '<div class="life"></div>';
   if (T.title) card.querySelector(".ct-title").textContent = T.title;
+  // The life-bar drains over the card's ACTUAL time on screen.
+  card.querySelector(".life").style.animationDuration =
+    text.length * typeSpeed + holdMs + 250 + "ms";
   document.body.appendChild(card);
   setTimeout(() => card.classList.add("in"), 30);
 
@@ -190,6 +213,10 @@ function __toastShow(text, type) {
 
   const cleanup = () => {
     card.remove();
+    if (placeTop && vv) {
+      vv.removeEventListener("resize", placeTop);
+      vv.removeEventListener("scroll", placeTop);
+    }
     if (dim) {
       dim.classList.remove("on");
       setTimeout(() => dim.remove(), 350);
@@ -220,9 +247,9 @@ function __toastShow(text, type) {
       clearInterval(typeTimer);
       const c = card.querySelector(".type-caret");
       if (c) c.remove();
-      timers.push(setTimeout(() => exit(false), 2600 + Math.min(1600, text.length * 8)));
+      timers.push(setTimeout(() => exit(false), holdMs));
     }
-  }, 17);
+  }, typeSpeed);
 
   __toast = {
     my,
@@ -1641,6 +1668,9 @@ function mountChat() {
         spans.push(s);
       });
     scrollToMsg(el, "assistant");
+    // A steady per-word beat reads much smoother than gaps proportional to
+    // each word's length (which felt stuttery on long words).
+    const perWord = Math.max(45, Math.min(120, msPerChar * 5));
     let i = 0;
     (function step() {
       if (i >= spans.length) {
@@ -1648,12 +1678,10 @@ function mountChat() {
         if (done) done();
         return;
       }
-      const s = spans[i++];
-      s.classList.add("in");
+      spans[i++].classList.add("in");
       // Scrolling on every word caused visible jank — every few is plenty.
       if (i % 5 === 1) scrollToMsg(el, "assistant");
-      // Same overall pace as the old per-character reveal.
-      setTimeout(step, msPerChar * (s.textContent.length + 1));
+      setTimeout(step, perWord);
     })();
   }
 
@@ -1786,21 +1814,25 @@ function mountChat() {
       } else {
         greeting = prewarmGreetingText; // use the pre-warmed text
       }
-      // Speak the greeting and show it as text. Mic stays off — user taps it to start.
-      if (!isSignedIn()) {
-        if (canListen && !recognition) initRecognition();
-        processing = false;
-        finalBuffer = "";
-        lastInterim = "";
-        if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
-        typeReply(greeting, true);
-        // speak() owns speaking/speakId/afterSpeak. Handing it the pre-warmed
-        // first chunk means the voice starts right away instead of after a
-        // full round trip to the TTS service.
-        speak(greeting, null, prewarmAudioP);
-      } else {
-        typeReply(greeting, false);
-      }
+      // Speak the greeting and show it as text. Mic stays off — user taps it
+      // to start. The words wait for the panel's tumble to finish — both
+      // animating at once is what made the greeting look janky.
+      setTimeout(() => {
+        if (!isSignedIn()) {
+          if (canListen && !recognition) initRecognition();
+          processing = false;
+          finalBuffer = "";
+          lastInterim = "";
+          if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
+          typeReply(greeting, true);
+          // speak() owns speaking/speakId/afterSpeak. Handing it the pre-warmed
+          // first chunk means the voice starts right away instead of after a
+          // full round trip to the TTS service.
+          speak(greeting, null, prewarmAudioP);
+        } else {
+          typeReply(greeting, false);
+        }
+      }, 430);
     }
     if (window.visualViewport) {
       window.visualViewport.addEventListener("resize", fitPanel);
@@ -2625,6 +2657,9 @@ function mountChat() {
       // Soft ambient glow on the whole panel while talk mode is on.
       panel.classList.toggle("voice-open", voiceMode);
       panel.classList.toggle("voice-speaking", voiceMode && state === "speaking");
+      // A1: the glow also runs whenever the bot is AUDIBLY speaking — the
+      // greeting included — and dies out when the audio ends.
+      panel.classList.toggle("bot-speaking", state === "speaking");
     }
     if (!voiceBar) return;
     voiceBar.hidden = !voiceMode;
@@ -2708,6 +2743,7 @@ function mountChat() {
     speakId++; // invalidate any in-flight chunk playback from a previous turn
     pauseListening(); // mic off while we talk
     setVoiceStatus("speaking");
+    vizStart(); // drive the glow while the voice plays (greeting included)
     // Safety net: reveal text if audio hasn't started yet (Aura-2 is slower
     // than local TTS, so 4.5 s gives it time to respond before we give up).
     const capTimer = setTimeout(startOnce, 4500);
@@ -2846,8 +2882,9 @@ function mountChat() {
       } catch (e) {}
       const audio = new Audio("data:audio/mp3;base64," + audio64);
       currentAudio = audio;
-      // Talk mode: drive the visualizer bars with this clip's real levels.
-      if (voiceMode) vizAttachAudio(audio);
+      // Drive the visualizer bars and the glow with this clip's REAL levels —
+      // in talk mode and for spoken greetings alike.
+      vizAttachAudio(audio);
       audio.onplay = () => onStart && onStart();
       audio.onended = () => resolve();
       audio.onerror = () => resolve();
@@ -2926,7 +2963,10 @@ function mountChat() {
         if (voiceMode && !speaking && !processing) startListening();
       }, 250);
     } else {
+      // Outside talk mode the loop only existed for this speech — stop it so
+      // the glow fully settles and costs nothing.
       setVoiceStatus("");
+      vizStop();
     }
   }
 
@@ -2953,6 +2993,9 @@ function mountChat() {
       setTimeout(() => {
         if (voiceMode && !speaking && !processing) startListening();
       }, 200);
+    } else {
+      setVoiceStatus("");
+      vizStop();
     }
   }
 
