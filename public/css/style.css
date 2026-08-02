@@ -2233,30 +2233,39 @@ tbody tr:hover {
    (magic-link confirm, invite accept) which reuse .auth-card.
    ========================================================================== */
 
+/* Kept tight on the vertical axis on purpose: the whole sign-in card — nav,
+   Google, tabs and form — must fit a laptop viewport WITHOUT scrolling. */
 .auth-card {
   max-width: 430px;
-  margin: 46px auto;
-  padding: 30px 28px 26px;
+  margin: 18px auto;
+  padding: 22px 24px 20px;
+}
+
+/* The login page itself: trim the container's tall default bottom padding so
+   the page height stays inside the viewport. */
+.container:has(> .auth-card) {
+  padding-top: 16px;
+  padding-bottom: 24px;
 }
 
 .auth-title {
   font-family: var(--font-display);
-  font-size: 26px;
-  margin: 0 0 6px;
+  font-size: 24px;
+  margin: 0 0 4px;
   letter-spacing: -0.02em;
 }
 
 .auth-sub {
-  margin: 0 0 22px;
+  margin: 0 0 14px;
   font-size: 14px;
-  line-height: 1.6;
+  line-height: 1.55;
 }
 
 /* Feedback lines. --red is the palette token; --danger has never existed. */
 .auth-error,
 .auth-notice {
-  margin: 0 0 18px;
-  padding: 11px 14px;
+  margin: 0 0 12px;
+  padding: 9px 12px;
   border-radius: var(--radius-sm);
   font-size: 14px;
   line-height: 1.5;
@@ -2285,7 +2294,7 @@ tbody tr:hover {
   border: 1px solid var(--border);
   color: var(--text);
   font-weight: 600;
-  min-height: 46px;
+  min-height: 44px;
 }
 .google-btn:hover {
   background: var(--card);
@@ -2299,7 +2308,7 @@ tbody tr:hover {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin: 20px 0;
+  margin: 14px 0;
   color: var(--muted);
   font-size: 12px;
   text-transform: uppercase;
@@ -2320,12 +2329,12 @@ tbody tr:hover {
   background: var(--bg-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  margin-bottom: 20px;
+  margin-bottom: 14px;
 }
 .auth-tab {
   flex: 1;
-  min-height: 44px;
-  padding: 11px 10px;
+  min-height: 40px;
+  padding: 9px 10px;
   border: 0;
   border-radius: calc(var(--radius-sm) - 4px);
   background: transparent;
@@ -2348,28 +2357,56 @@ tbody tr:hover {
 .auth-form {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
 }
 
 .auth-submit {
   width: 100%;
-  min-height: 46px;
+  min-height: 44px;
 }
 
 .auth-hint {
-  margin: 2px 0 0;
+  margin: 0;
   font-size: 13px;
   line-height: 1.55;
 }
 
-/* Sign-in code: wide tracking so six digits are easy to read back from an
-   email, and a monospace face so 0/O and 1/l cannot be confused. */
-.code-input {
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  font-size: 22px;
-  letter-spacing: 0.32em;
+/* Waiting for the emailed link to be approved: the login page polls the
+   server and signs itself in, so all this state has to do is look alive. */
+.auth-wait {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   text-align: center;
-  padding: 14px 12px;
+  gap: 10px;
+  padding: 10px 0 4px;
+}
+.auth-wait-title {
+  font-weight: 700;
+  font-size: 17px;
+  margin: 0;
+}
+.auth-wait .muted {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.auth-wait .btn {
+  margin-top: 6px;
+}
+.auth-spinner {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  animation: authSpin 0.9s linear infinite;
+}
+@keyframes authSpin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .auth-spinner { animation: none; }
 }
 
 /* -------- Professional polish -------- */

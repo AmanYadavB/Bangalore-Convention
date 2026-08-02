@@ -179,7 +179,12 @@ async function refreshUser() {
       headers: { Accept: "application/json" },
     });
     const data = await res.json().catch(() => ({}));
-    CURRENT_USER = data && data.authenticated ? data.user : null;
+    // sessionMethod rides along so the password-setup guard can tell an
+    // email-link session (no other way back in) from Google or password ones.
+    CURRENT_USER =
+      data && data.authenticated
+        ? { ...data.user, sessionMethod: data.sessionMethod || "" }
+        : null;
     writeUserHint(CURRENT_USER);
   } catch {
     // Network failure: keep whatever we had rather than flapping the nav.
@@ -285,6 +290,24 @@ function paintNav(active) {
   applyTheme(currentTheme());
 }
 
+// A session minted from an emailed link belongs to someone with no password
+// yet — the email was their only way in. Until they set one, every page
+// funnels them to the account page. ("code" is the retired type-a-code flow;
+// sessions minted by it may still be alive.)
+function needsPasswordSetup(user) {
+  return Boolean(
+    user && !user.hasPassword && (user.sessionMethod === "magic" || user.sessionMethod === "code")
+  );
+}
+
+function enforcePasswordSetup(user) {
+  if (!needsPasswordSetup(user)) return false;
+  const page = (location.pathname.split("/").pop() || "index.html").toLowerCase();
+  if (page === "account.html" || page === "login.html") return false;
+  location.replace("account.html?setup=1");
+  return true;
+}
+
 // opts.chat === false suppresses the chat widget. The login page passes it:
 // a floating mascot that overlaps the password field is not what you want on
 // a sign-in screen.
@@ -297,9 +320,13 @@ function mountNav(active, opts) {
   paintNav(active);
   if (options.chat !== false) mountChat();
 
+  // Compare against what was just painted. (This used to compare against the
+  // hint AFTER refreshUser had overwritten it — fresh against fresh, always
+  // equal — so the nav kept showing "Sign in" until the next page load.)
+  const painted = JSON.stringify(CURRENT_USER);
   refreshUser().then((user) => {
-    const before = JSON.stringify(readUserHint());
-    if (JSON.stringify(user) !== before || !document.getElementById("authBtn")) {
+    if (enforcePasswordSetup(user)) return;
+    if (JSON.stringify(user) !== painted || !document.getElementById("authBtn")) {
       paintNav(active);
     }
     document.dispatchEvent(new CustomEvent("bc:user", { detail: user }));

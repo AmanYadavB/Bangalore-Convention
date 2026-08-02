@@ -335,7 +335,8 @@ const AUTH_DDL = [
      bind_id TEXT NOT NULL DEFAULT '',
      created_at INTEGER NOT NULL,
      expires_at INTEGER NOT NULL,
-     used_at INTEGER
+     used_at INTEGER,
+     approved_at INTEGER
    )`,
   `CREATE TABLE IF NOT EXISTS oauth_tx (
      state TEXT PRIMARY KEY,
@@ -369,8 +370,9 @@ const AUTH_DDL = [
 // will not add them to an existing database, so they are applied separately
 // and the "duplicate column" error is the expected no-op on later boots.
 const AUTH_MIGRATIONS = [
-  "ALTER TABLE magic_token ADD COLUMN code_hash TEXT NOT NULL DEFAULT ''",
-  "ALTER TABLE magic_token ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0",
+  // code_hash/attempts are leftovers from the retired type-a-code flow; they
+  // stay in old databases but nothing reads or writes them anymore.
+  "ALTER TABLE magic_token ADD COLUMN approved_at INTEGER",
 ];
 
 async function ensureAuthTables(env) {
@@ -387,16 +389,6 @@ async function ensureAuthTables(env) {
     }
   }
   authTablesReady = true;
-}
-
-// A 6-digit code that can be typed into the browser the person is ALREADY
-// looking at. This exists because mail apps on phones open links in an
-// isolated in-app webview: the link signs you in inside Gmail's browser, and
-// your real browser stays signed out. Typing the code puts the session where
-// the person actually is.
-function sixDigitCode() {
-  const n = crypto.getRandomValues(new Uint32Array(1))[0] % 1000000;
-  return String(n).padStart(6, "0");
 }
 
 const clientIp = (request) => request.headers.get("CF-Connecting-IP") || "";
@@ -917,9 +909,13 @@ async function handleAuth(request, env, ctx, parts, url) {
     const email = normalizeEmail(body.email);
     const next = safeNext(body.next);
 
-    // ALWAYS the same response — known, unknown, disabled, or rate-limited.
-    // Any variation here is a staff-directory enumeration oracle.
-    const uniform = json({ ok: true });
+    // The wait token lets THIS tab poll /magic/wait until the emailed link is
+    // approved. It is minted for every request — known, unknown, disabled, or
+    // rate-limited — so the response is uniform and cannot be used to probe
+    // for staff addresses. For an unknown email no row is ever written, so
+    // its wait token simply polls "pending" until the page gives up.
+    const bindId = randomToken(16);
+    const uniform = json({ ok: true, wait: bindId });
 
     if (!isValidEmail(email)) return uniform;
 
@@ -947,14 +943,12 @@ async function handleAuth(request, env, ctx, parts, url) {
       const token = randomToken(32);
       const tokenHash = await sha256Hex(token);
       const csrf = randomToken(16);
-      const bindId = randomToken(16);
-      const code = sixDigitCode();
       const now = Date.now();
       await env.CONVENTION_DB.prepare(
-        `INSERT INTO magic_token (token_hash, email, purpose, next, csrf, bind_id, created_at, expires_at, code_hash)
-         VALUES (?, ?, 'login', ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO magic_token (token_hash, email, purpose, next, csrf, bind_id, created_at, expires_at)
+         VALUES (?, ?, 'login', ?, ?, ?, ?, ?)`
       )
-        .bind(tokenHash, staff.email, next, csrf, bindId, now, now + MAGIC_TTL_MS, await sha256Hex(code))
+        .bind(tokenHash, staff.email, next, csrf, bindId, now, now + MAGIC_TTL_MS)
         .run();
 
       // Recipient comes from the DATABASE ROW, never from the request body,
@@ -963,22 +957,20 @@ async function handleAuth(request, env, ctx, parts, url) {
       const link = `${authOrigin(env, request)}/api/auth/magic/consume?token=${encodeURIComponent(token)}`;
       const html = `
         <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px">
-          <h2 style="margin:0 0 12px">Sign in to Bangalore Convention</h2>
-          <p style="color:#555;line-height:1.6">Tap the button to sign in. It works once and expires in 15 minutes.</p>
-          <p style="margin:26px 0"><a href="${link}" style="background:#4f46e5;color:#fff;padding:13px 26px;border-radius:10px;text-decoration:none;font-weight:600;display:inline-block">Sign in</a></p>
+          <h2 style="margin:0 0 12px">Approve your sign-in</h2>
+          <p style="color:#555;line-height:1.6">Tap the button to approve the sign-in you just asked for. It works once and expires in 15 minutes.</p>
+          <p style="margin:26px 0"><a href="${link}" style="background:#4f46e5;color:#fff;padding:13px 26px;border-radius:10px;text-decoration:none;font-weight:600;display:inline-block">Approve sign-in</a></p>
           <p style="color:#555;line-height:1.6;margin-top:30px">
-            <b>On a phone?</b> Mail apps sometimes open links in their own mini-browser,
-            which signs you in there instead of in your normal browser. If that happens,
-            go back to the sign-in page you already have open and type this code:
+            It doesn't matter where this opens — even in your mail app's own
+            browser. The page where you asked to sign in notices the approval
+            and signs in there by itself.
           </p>
-          <p style="font-size:32px;font-weight:700;letter-spacing:8px;font-family:ui-monospace,Menlo,Consolas,monospace;margin:14px 0;color:#111">${code}</p>
-          <p style="color:#777;font-size:13px;line-height:1.6">If you didn't ask to sign in, ignore this email. Nobody can reach your account without the link or the code.</p>
+          <p style="color:#777;font-size:13px;line-height:1.6">If you didn't ask to sign in, ignore this email. Nobody can reach your account without this link.</p>
         </div>`;
       if (env.AUTH_LOG_LINKS === "1" || !env.MAILCHANNELS_API_KEY) {
         console.log("[auth] magic link for " + staff.email + ": " + link);
-        console.log("[auth] sign-in code for " + staff.email + ": " + code);
       }
-      const sent = await sendMail(env, staff.email, "Your sign-in link", html, { toName: staff.name || "" });
+      const sent = await sendMail(env, staff.email, "Approve your sign-in", html, { toName: staff.name || "" });
       await audit(env, ctx, auditFrom(request, {
         type: "magic_sent",
         staffId: staff.id,
@@ -992,73 +984,69 @@ async function handleAuth(request, env, ctx, parts, url) {
     return uniform;
   }
 
-  // ---- Sign-in code ------------------------------------------------------
-  // The same credential as the emailed link, redeemed in whichever browser the
-  // person is actually sitting in front of. This is the answer to "the link
-  // doesn't work on my phone": mail apps open links in an isolated in-app
-  // browser, so the link's session never reaches the real one.
-  if (action === "magic" && sub === "code" && method === "POST") {
+  // ---- Magic link: wait for approval -------------------------------------
+  // Polled by the login page after /magic/start. The session is minted HERE,
+  // in the browser the person is actually sitting in front of — the emailed
+  // link only flips approved_at. This is the answer to "the link doesn't work
+  // on my phone": mail apps open links in an isolated in-app browser, so a
+  // session minted there would never reach the real one.
+  //
+  // Everything that is not an approved, unclaimed, unexpired token answers
+  // "pending" — including wait tokens that never matched a row and rows that
+  // have expired. Answering "expired" only for real accounts would reopen the
+  // enumeration oracle; the login page keeps its own 15-minute clock instead.
+  if (action === "magic" && sub === "wait" && method === "POST") {
     const ip = clientIp(request) || "unknown";
-    const email = normalizeEmail(body.email);
-    const code = String(body.code || "").replace(/\D/g, "");
-    const generic = { error: "That code isn't right, or it has expired. Request a new one." };
+    // Generous — one waiting tab polls every ~3s for up to 15 minutes — but
+    // bounded so the endpoint cannot be used as a free D1 read loop.
+    const rl = await rateLimit(env, "wait:ip", ip, 1200, 15 * 60);
+    if (!rl.allowed) return tooManyRequests(rl.retryAfter);
 
-    // Throttle hard — six digits is only a million combinations.
-    const perIp = await rateLimit(env, "code:ip", ip, 10, 15 * 60);
-    if (!perIp.allowed) {
-      audit(env, ctx, auditFrom(request, { type: "rate_limited", outcome: "deny", detail: "magic code" }));
-      return tooManyRequests(perIp.retryAfter);
-    }
-    if (!isValidEmail(email) || code.length !== 6) return json(generic, 400);
+    const wait = String(body.wait || "");
+    const pending = json({ status: "pending" });
+    if (!wait || wait.length > 64) return pending;
 
     const row = await env.CONVENTION_DB.prepare(
       `SELECT * FROM magic_token
-       WHERE email = ? AND used_at IS NULL AND expires_at > ? AND code_hash != ''
-       ORDER BY created_at DESC LIMIT 1`
+       WHERE bind_id = ? AND used_at IS NULL AND approved_at IS NOT NULL AND expires_at > ?
+       LIMIT 1`
     )
-      .bind(email, Date.now())
+      .bind(wait, Date.now())
       .first();
+    if (!row) return pending;
 
-    if (!row) {
-      audit(env, ctx, auditFrom(request, { type: "magic_code_invalid", outcome: "deny" }));
-      return json(generic, 401);
-    }
-
-    // Five wrong guesses burns the code, so an attacker cannot keep trying
-    // against one live token.
-    if (Number(row.attempts || 0) >= 5) {
-      await env.CONVENTION_DB.prepare("UPDATE magic_token SET used_at = ? WHERE token_hash = ?")
-        .bind(Date.now(), row.token_hash)
-        .run();
-      audit(env, ctx, auditFrom(request, { type: "magic_code_invalid", email, outcome: "deny", detail: "attempts exhausted" }));
-      return json(generic, 401);
-    }
-
-    if (!timingEqualStr(await sha256Hex(code), row.code_hash)) {
-      await env.CONVENTION_DB.prepare("UPDATE magic_token SET attempts = attempts + 1 WHERE token_hash = ?")
-        .bind(row.token_hash)
-        .run();
-      audit(env, ctx, auditFrom(request, { type: "magic_code_invalid", email, outcome: "deny", detail: "wrong code" }));
-      return json(generic, 401);
-    }
-
-    // Single-use, same conditional-update guarantee as the link.
+    // Single-use, same conditional-update guarantee as the link itself.
     const claim = await env.CONVENTION_DB.prepare(
       "UPDATE magic_token SET used_at = ? WHERE token_hash = ? AND used_at IS NULL"
     )
       .bind(Date.now(), row.token_hash)
       .run();
-    if (!claim.meta || claim.meta.changes !== 1) return json(generic, 401);
+    if (!claim.meta || claim.meta.changes !== 1) return pending;
 
     let staff = await staffByEmail(env, row.email);
     if (!staff) staff = await staffForEmail(env, ctx, row.email, request);
     if (!staff || staff.status === "disabled") return json({ error: "That account can't sign in." }, 403);
 
+    if (staff.status === "invited") {
+      await env.CONVENTION_DB.prepare("UPDATE staff SET status = 'active', updated_at = ? WHERE id = ?")
+        .bind(Date.now(), staff.id)
+        .run();
+      staff = await staffById(env, staff.id);
+    }
+
     await clearLoginFailures(env, staff.id);
-    const created = await createSession(env, staff, "code", request);
-    audit(env, ctx, auditFrom(request, { type: "magic_consumed", staffId: staff.id, email: staff.email, detail: "code" }));
+    const created = await createSession(env, staff, "magic", request);
+    audit(env, ctx, auditFrom(request, { type: "magic_consumed", staffId: staff.id, email: staff.email, detail: "approved remotely" }));
     return jsonWithCookies(
-      { ok: true, user: publicStaff(staff), next: safeNext(row.next) },
+      {
+        ok: true,
+        status: "approved",
+        user: publicStaff(staff),
+        next: safeNext(row.next),
+        // No password yet means the emailed link is their only way in; the
+        // client routes them to the account page to set one before anything else.
+        setupRequired: !staff.password_hash,
+      },
       sessionCookieHeaders(env, created)
     );
   }
@@ -1085,14 +1073,24 @@ async function handleAuth(request, env, ctx, parts, url) {
       );
     }
 
+    // Link already approved but the waiting tab hasn't claimed it yet —
+    // re-opening the email link shouldn't look like an error.
+    if (row.approved_at) {
+      return authShellPage(
+        "Sign-in approved",
+        `<h2 style="margin-top:0">Sign-in approved &#10003;</h2>
+         <p class="muted">Go back to the page where you asked to sign in — it signs in there by itself. You can close this window.</p>`
+      );
+    }
+
     return authShellPage(
-      "Confirm sign-in",
-      `<h2 style="margin-top:0">Confirm sign-in</h2>
-       <p class="muted">You're signing in as <b>${esc(row.email)}</b>.</p>
+      "Approve sign-in",
+      `<h2 style="margin-top:0">Approve sign-in</h2>
+       <p class="muted">You're approving a sign-in for <b>${esc(row.email)}</b>.</p>
        <form method="POST" action="/api/auth/magic/confirm">
          <input type="hidden" name="token" value="${esc(token)}">
          <input type="hidden" name="csrf" value="${esc(row.csrf)}">
-         <button class="btn primary" type="submit" style="width:100%">Confirm sign-in</button>
+         <button class="btn primary" type="submit" style="width:100%">Approve sign-in</button>
        </form>
        <p class="muted" style="font-size:13px;margin-bottom:0">If you didn't request this, close this page — nothing has happened yet.</p>`
     );
@@ -1114,8 +1112,37 @@ async function handleAuth(request, env, ctx, parts, url) {
       return loginRedirect(env, request, "expired");
     }
 
-    // Single-use, enforced by D1's strong consistency: exactly one caller can
-    // flip used_at from NULL, and changes tells us whether it was us.
+    // Emailed links carry a bind_id tying them to the tab that requested
+    // them. Confirming such a link only APPROVES it — the waiting tab polls
+    // /magic/wait, claims the token and mints the session over there. No
+    // session is created in this window, so it doesn't matter that mail apps
+    // open links in an isolated in-app browser.
+    if (row.bind_id) {
+      const staff = await staffByEmail(env, row.email);
+      if (!staff || staff.status === "disabled") return loginRedirect(env, request, "not_staff");
+
+      const approve = await env.CONVENTION_DB.prepare(
+        "UPDATE magic_token SET approved_at = ? WHERE token_hash = ? AND used_at IS NULL AND approved_at IS NULL"
+      )
+        .bind(Date.now(), tokenHash)
+        .run();
+      if (!approve.meta || approve.meta.changes !== 1) {
+        audit(env, ctx, auditFrom(request, { type: "magic_invalid", outcome: "deny", detail: "already approved or used" }));
+        return loginRedirect(env, request, "expired");
+      }
+
+      audit(env, ctx, auditFrom(request, { type: "magic_approved", staffId: staff.id, email: staff.email }));
+      return authShellPage(
+        "Sign-in approved",
+        `<h2 style="margin-top:0">Sign-in approved &#10003;</h2>
+         <p class="muted">Go back to the page where you asked to sign in — it signs in there by itself within a few seconds. You can close this window.</p>`
+      );
+    }
+
+    // No bind_id: break-glass links (and other tokens minted outside the
+    // login page) have no waiting tab, so the only useful place to sign in
+    // is right here. Single-use, enforced by D1's strong consistency:
+    // exactly one caller can flip used_at from NULL.
     const claim = await env.CONVENTION_DB.prepare(
       "UPDATE magic_token SET used_at = ? WHERE token_hash = ? AND used_at IS NULL"
     )

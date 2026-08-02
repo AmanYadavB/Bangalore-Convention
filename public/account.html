@@ -14,11 +14,16 @@
       <h1 class="page-title">Your account</h1>
       <p class="page-sub" id="whoami">Loading…</p>
 
+      <p id="setupBanner" class="auth-notice" hidden>
+        You're signed in — one last step. Create a password below and you're
+        done; next time you can sign in with it directly, no email needed.
+      </p>
+
       <div class="card">
         <div class="section-head" style="margin: 0 0 14px">
           <h2 style="margin: 0">Password</h2>
         </div>
-        <p class="muted" style="margin-top: 0">
+        <p class="muted" id="pwIntro" style="margin-top: 0">
           Optional. You can keep signing in with Google or an emailed link — a
           password is just a third way in, useful when email is slow.
         </p>
@@ -75,6 +80,20 @@
     <script src="js/common.js"></script>
     <script>
       mountNav("account");
+
+      // ?setup=1 — arrived straight from an email-link sign-in with no
+      // password yet. The nav guard in common.js keeps such users on this
+      // page until one is saved; ?next= is where to go once it is.
+      const params = new URLSearchParams(location.search);
+      const setupMode = params.get("setup") === "1";
+      let nextDest = params.get("next") || "";
+      if (!/^\/(?!\/)/.test(nextDest)) nextDest = "/index.html";
+
+      if (setupMode) {
+        document.getElementById("setupBanner").hidden = false;
+        document.getElementById("pwIntro").textContent =
+          "Pick a password of at least 12 characters. You'll use it together with your email the next time you sign in.";
+      }
 
       function when(ts) {
         if (!ts) return "—";
@@ -143,6 +162,12 @@
           });
           document.getElementById("newPassword").value = "";
           document.getElementById("currentPassword").value = "";
+          if (setupMode) {
+            // Setup finished — carry on to wherever they were headed.
+            toast("Password saved — taking you in…");
+            setTimeout(() => location.replace(nextDest), 900);
+            return;
+          }
           toast("Password saved — your other sessions were signed out");
           await refreshUser();
           paintMe();
@@ -169,6 +194,7 @@
         await requireUser();
         paintMe();
         loadSessions();
+        if (setupMode) document.getElementById("newPassword").focus();
       })();
     </script>
   </body>
