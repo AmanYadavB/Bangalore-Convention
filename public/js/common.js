@@ -1052,7 +1052,7 @@ function mountMascot() {
   function toMascot() {
     setForm("bot");
     if (canPlay()) boops();
-    if (Math.random() < 0.6) say(null, 1800);
+    if (Math.random() < 0.35) say(null, 1800);
     return 1000;
   }
   function toBox() {
@@ -1061,12 +1061,13 @@ function mountMascot() {
     return 1000;
   }
   function idleBox() {
-    // A touch longer than before (was 4.5–7.5s) — calmer, not sleepy.
-    return 6500 + Math.random() * 4500;
+    // Long rests: the mascot appears, does ONE thing, then stays a quiet
+    // chat bubble for a good while (18–32s) before its next appearance.
+    return 18000 + Math.random() * 14000;
   }
   function wave() {
     fab.classList.add("waving");
-    if (Math.random() < 0.7) say("hello there! \uD83D\uDC4B", 2200);
+    if (Math.random() < 0.45) say("hello there! \uD83D\uDC4B", 2200);
     if (canPlay() && Math.random() < 0.5) boops();
     setTimeout(() => fab.classList.remove("waving"), 2600);
     return 2900;
@@ -1144,20 +1145,19 @@ function mountMascot() {
       setTimeout(step, dur);
     })();
   }
-  // Every scene stays in the show — grow and the flight included — the
-  // rotation is just a touch calmer: one antic fewer, grow and the flight a
-  // little less often, one extra rest per cycle.
+  // Every scene stays in the show — grow and the flight included — but each
+  // appearance is ONE act: morph, a single move (occasionally the flight or
+  // the grow instead), morph back, then a long rest. No back-to-back antics.
   function cycle() {
     chain(
       [
         toMascot,
-        antic,
-        antic,
-        () => (Math.random() < 0.35 ? grow() : antic()),
-        toBox,
-        idleBox,
-        toMascot,
-        () => (Math.random() < 0.65 ? takeOff() : antic()),
+        () => {
+          const r = Math.random();
+          if (r < 0.1) return grow();
+          if (r < 0.28) return takeOff();
+          return antic();
+        },
         toBox,
         idleBox,
       ],
