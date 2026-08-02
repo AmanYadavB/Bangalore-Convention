@@ -43,7 +43,7 @@
         </form>
       </div>
 
-      <div class="card">
+      <div class="card" id="sessionsCard">
         <div class="section-head" style="margin: 0 0 14px">
           <h2 style="margin: 0">Where you're signed in</h2>
           <button class="btn ghost small" id="revokeOthers" type="button">Sign out everywhere else</button>
@@ -65,7 +65,7 @@
         </div>
       </div>
 
-      <div class="card">
+      <div class="card" id="accessCard">
         <div class="section-head" style="margin: 0 0 14px">
           <h2 style="margin: 0">Access</h2>
         </div>
@@ -96,8 +96,6 @@
 
     <script src="js/common.js"></script>
     <script>
-      mountNav("account");
-
       // ?setup=1 — arrived straight from an email-link sign-in with no
       // password yet. The nav guard in common.js keeps such users on this
       // page until one is saved; ?next= is where to go once it is.
@@ -106,10 +104,17 @@
       let nextDest = params.get("next") || "";
       if (!/^\/(?!\/)/.test(nextDest)) nextDest = "/index.html";
 
+      // Setup is a single forced step, so the page shows ONLY that step: no
+      // nav links (the guard would bounce every one of them straight back
+      // here), no chat mascot, no session/access cards.
+      mountNav("account", setupMode ? { links: false, chat: false } : undefined);
+
       if (setupMode) {
         document.getElementById("setupBanner").hidden = false;
         document.getElementById("pwIntro").textContent =
           "Pick a password of at least 12 characters. You'll use it together with your email the next time you sign in.";
+        document.getElementById("sessionsCard").hidden = true;
+        document.getElementById("accessCard").hidden = true;
       }
 
       function when(ts) {
@@ -259,11 +264,20 @@
       });
 
       (async function () {
-        await requireUser();
+        const me = await requireUser();
+        // Stale bookmark or manual ?setup=1 with a password already set:
+        // there is nothing to set up — show the normal account page.
+        if (setupMode && me && me.hasPassword) {
+          location.replace("account.html");
+          return;
+        }
         paintMe();
+        if (setupMode) {
+          document.getElementById("newPassword").focus();
+          return; // the other cards are hidden — don't fetch for them
+        }
         loadSessions();
         loadStaff();
-        if (setupMode) document.getElementById("newPassword").focus();
       })();
     </script>
   </body>

@@ -223,8 +223,12 @@ const NAV_LINKS = [
   { href: "account.html", label: "Account", key: "account", need: "staff" },
 ];
 
-function renderNav(active) {
-  const links = NAV_LINKS.filter((l) => !l.need || hasRole(l.need));
+function renderNav(active, opts) {
+  // opts.links === false renders the shell only (brand, theme, sign out).
+  // Used by the forced password-setup screen: offering links the setup guard
+  // would instantly bounce back is worse than offering none.
+  const links =
+    opts && opts.links === false ? [] : NAV_LINKS.filter((l) => !l.need || hasRole(l.need));
 
   const authBtn = isSignedIn()
     ? `<button class="btn small auth-btn" id="authBtn" type="button">Sign out</button>`
@@ -256,11 +260,11 @@ function renderNav(active) {
 
 // Draw the nav and wire its controls. Safe to call twice — refreshUser()
 // re-renders once the server has confirmed who we are.
-function paintNav(active) {
+function paintNav(active, opts) {
   document.documentElement.setAttribute("data-role", isSignedIn() ? CURRENT_USER.role : "guest");
   const holder = document.getElementById("nav");
   if (!holder) return;
-  holder.innerHTML = renderNav(active);
+  holder.innerHTML = renderNav(active, opts);
 
   const themeBtn = document.getElementById("themeToggle");
   if (themeBtn) themeBtn.addEventListener("click", toggleTheme);
@@ -322,7 +326,7 @@ function mountNav(active, opts) {
   // Paint immediately from the session-scoped hint so the nav does not flash
   // the signed-out menu, then reconcile with the server.
   CURRENT_USER = readUserHint();
-  paintNav(active);
+  paintNav(active, options);
   if (options.chat !== false) mountChat();
 
   // Compare against what was just painted. (This used to compare against the
@@ -332,7 +336,7 @@ function mountNav(active, opts) {
   refreshUser().then((user) => {
     if (enforcePasswordSetup(user)) return;
     if (JSON.stringify(user) !== painted || !document.getElementById("authBtn")) {
-      paintNav(active);
+      paintNav(active, options);
     }
     document.dispatchEvent(new CustomEvent("bc:user", { detail: user }));
   });
