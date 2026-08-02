@@ -915,9 +915,26 @@ async function handleAuth(request, env, ctx, parts, url) {
     // for staff addresses. For an unknown email no row is ever written, so
     // its wait token simply polls "pending" until the page gives up.
     const bindId = randomToken(16);
-    const uniform = json({ ok: true, wait: bindId });
+    const uniform = json({ ok: true, mode: "link", wait: bindId });
 
     if (!isValidEmail(email)) return uniform;
+
+    // Email-first sign-in: the page sends just the address and the server
+    // answers how to continue. An active account WITH a password types it —
+    // no email goes out unless the client asks explicitly (force: the
+    // "email me a link instead" fallback for a forgotten password). Every
+    // other case — no password, unknown, disabled — falls through to the
+    // uniform link flow, so the one thing this branch reveals is "this
+    // committee member uses a password"; accepted, with its own rate limit,
+    // in exchange for a one-field sign-in screen.
+    if (body.force !== true) {
+      const probeRl = await rateLimit(env, "probe:ip", ip, 30, 15 * 60);
+      if (!probeRl.allowed) return uniform;
+      const existing = await staffByEmail(env, email);
+      if (existing && existing.status === "active" && existing.password_hash) {
+        return json({ ok: true, mode: "password" });
+      }
+    }
 
     const emailKey = (await sha256Hex(email)).slice(0, 32);
     const perEmail = await rateLimit(env, "magic:email", emailKey, 3, 60 * 60);

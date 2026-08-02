@@ -35,20 +35,23 @@
 
         <div class="auth-sep"><span>or</span></div>
 
-        <div class="auth-tabs" role="tablist">
-          <button class="auth-tab active" id="tabLink" type="button" role="tab" aria-selected="true">Email me a link</button>
-          <button class="auth-tab" id="tabPassword" type="button" role="tab" aria-selected="false">Use a password</button>
-        </div>
-
-        <!-- Magic link -->
-        <form id="magicForm" class="auth-form">
+        <!-- ONE flow: type your email, the server answers how you sign in.
+             A password field appears only for accounts that have set one;
+             everyone else gets the emailed approval link straight away. -->
+        <form id="loginForm" class="auth-form">
           <div class="field full">
-            <label for="magicEmail">Email address</label>
-            <input type="email" id="magicEmail" name="email" required autocomplete="email"
+            <label for="loginEmail">Email address</label>
+            <input type="email" id="loginEmail" name="email" required autocomplete="email"
                    inputmode="email" placeholder="you@example.com" />
           </div>
-          <button class="btn primary auth-submit" type="submit" id="magicBtn">Send sign-in link</button>
-          <p class="muted auth-hint">We'll email you an approval link. Open it anywhere — this page signs in by itself.</p>
+          <div class="field full" id="passwordField" hidden>
+            <label for="loginPassword">Password</label>
+            <input type="password" id="loginPassword" name="password" autocomplete="current-password" />
+          </div>
+          <button class="btn primary auth-submit" type="submit" id="loginBtn">Continue</button>
+          <p class="muted auth-hint" id="linkInstead" hidden>
+            Forgot it? <a href="#" id="sendLinkBtn">Email me a sign-in link instead</a>
+          </p>
         </form>
 
         <!-- Shown after the email is sent: this tab polls the server until the
@@ -66,24 +69,6 @@
           </p>
           <button class="btn ghost small" id="waitCancel" type="button">Use a different email</button>
         </div>
-
-        <!-- Password -->
-        <form id="passwordForm" class="auth-form" hidden>
-          <div class="field full">
-            <label for="pwEmail">Email address</label>
-            <input type="email" id="pwEmail" name="email" required autocomplete="email"
-                   inputmode="email" placeholder="you@example.com" />
-          </div>
-          <div class="field full">
-            <label for="pwPassword">Password</label>
-            <input type="password" id="pwPassword" name="password" required autocomplete="current-password" />
-          </div>
-          <button class="btn primary auth-submit" type="submit" id="pwBtn">Sign in</button>
-          <p class="muted auth-hint">
-            No password yet? Use a sign-in link above — you can set a password
-            once you're in.
-          </p>
-        </form>
       </div>
     </main>
 
@@ -129,29 +114,35 @@
         document.getElementById("googleBtn").href =
           "/api/auth/google/start" + (next ? "?next=" + encodeURIComponent(next) : "");
 
-        // ---- Tabs ----
-        var tabLink = document.getElementById("tabLink");
-        var tabPassword = document.getElementById("tabPassword");
-        var magicForm = document.getElementById("magicForm");
-        var passwordForm = document.getElementById("passwordForm");
+        // ---- One email-first form ----
+        var loginForm = document.getElementById("loginForm");
+        var emailInput = document.getElementById("loginEmail");
+        var passwordField = document.getElementById("passwordField");
+        var passwordInput = document.getElementById("loginPassword");
+        var loginBtn = document.getElementById("loginBtn");
+        var linkInstead = document.getElementById("linkInstead");
 
-        function selectTab(which) {
-          var linkActive = which === "link";
-          tabLink.classList.toggle("active", linkActive);
-          tabPassword.classList.toggle("active", !linkActive);
-          tabLink.setAttribute("aria-selected", linkActive ? "true" : "false");
-          tabPassword.setAttribute("aria-selected", linkActive ? "false" : "true");
-          magicForm.hidden = !linkActive;
-          passwordForm.hidden = linkActive;
+        // "probe" = we only have an email; "password" = the server said this
+        // account signs in with one.
+        var mode = "probe";
+        function setMode(m) {
+          mode = m;
+          var pw = m === "password";
+          passwordField.hidden = !pw;
+          linkInstead.hidden = !pw;
+          loginBtn.textContent = pw ? "Sign in" : "Continue";
+          if (!pw) passwordInput.value = "";
         }
-        tabLink.addEventListener("click", function () { selectTab("link"); });
-        tabPassword.addEventListener("click", function () { selectTab("password"); });
 
-        // ---- Magic link: request, then wait for the approval ----
-        // After the email goes out, this tab polls /api/auth/magic/wait. The
-        // emailed link only APPROVES the sign-in — the session is minted here,
-        // the moment a poll comes back "approved". So it doesn't matter where
-        // the link gets opened (mail-app mini-browsers included).
+        // Editing the address invalidates what we learned about it.
+        emailInput.addEventListener("input", function () {
+          if (mode === "password") setMode("probe");
+        });
+
+        // ---- Waiting for the emailed link to be approved ----
+        // The emailed link only APPROVES the sign-in — the session is minted
+        // here, the moment a poll comes back "approved". So it doesn't matter
+        // where the link gets opened (mail-app mini-browsers included).
         var waitPanel = document.getElementById("waitPanel");
         var waitTimer = null;
         var waitDeadline = 0;
@@ -161,11 +152,9 @@
         function setWaiting(on) {
           document.getElementById("googleBtn").hidden = on;
           document.querySelector(".auth-sep").hidden = on;
-          document.querySelector(".auth-tabs").hidden = on;
-          magicForm.hidden = on;
-          passwordForm.hidden = true;
+          loginForm.hidden = on;
           waitPanel.hidden = !on;
-          if (!on) selectTab("link");
+          if (!on) setMode("probe");
         }
 
         function stopWaiting() {
@@ -221,54 +210,73 @@
           showError("");
         });
 
-        magicForm.addEventListener("submit", async function (ev) {
+        // Ask the server to email a link, then wait for its approval.
+        // force:true skips the has-a-password check — the fallback for
+        // someone who has a password but forgot it.
+        async function requestLink(email, force) {
+          var res = await api("/api/auth/magic/start", {
+            method: "POST",
+            body: JSON.stringify({ email: email, next: next, force: force === true })
+          });
+          if (res.mode === "password") {
+            setMode("password");
+            passwordInput.focus();
+            return;
+          }
+          startWaiting(res.wait, email);
+        }
+
+        loginForm.addEventListener("submit", async function (ev) {
           ev.preventDefault();
-          var btn = document.getElementById("magicBtn");
-          var email = document.getElementById("magicEmail").value.trim();
+          var email = emailInput.value.trim();
           if (!email) return;
 
           showError("");
-          btn.disabled = true;
-          btn.textContent = "Sending…";
+          showNotice("");
+          loginBtn.disabled = true;
+
+          if (mode === "password") {
+            var password = passwordInput.value;
+            if (!password) { loginBtn.disabled = false; return; }
+            loginBtn.textContent = "Signing in…";
+            try {
+              var res = await api("/api/auth/login/password", {
+                method: "POST",
+                body: JSON.stringify({ email: email, password: password, next: next })
+              });
+              // Seed the nav hint so the next page paints signed-in at once.
+              if (res.user) writeUserHint(Object.assign({}, res.user, { sessionMethod: "password" }));
+              location.href = res.next || "/index.html";
+            } catch (err) {
+              showError(err.message || "Sign-in failed.");
+              passwordInput.value = "";
+              passwordInput.focus();
+              loginBtn.disabled = false;
+              loginBtn.textContent = "Sign in";
+            }
+            return;
+          }
+
+          loginBtn.textContent = "Checking…";
           try {
-            var res = await api("/api/auth/magic/start", {
-              method: "POST",
-              body: JSON.stringify({ email: email, next: next })
-            });
-            startWaiting(res.wait, email);
+            await requestLink(email, false);
           } catch (err) {
-            showError(err.message || "Couldn't send the link. Please try again.");
+            showError(err.message || "Something went wrong. Please try again.");
           } finally {
-            btn.disabled = false;
-            btn.textContent = "Send sign-in link";
+            loginBtn.disabled = false;
+            if (mode !== "password") loginBtn.textContent = "Continue";
           }
         });
 
-        // ---- Password ----
-        passwordForm.addEventListener("submit", async function (ev) {
+        document.getElementById("sendLinkBtn").addEventListener("click", async function (ev) {
           ev.preventDefault();
-          var btn = document.getElementById("pwBtn");
-          var email = document.getElementById("pwEmail").value.trim();
-          var password = document.getElementById("pwPassword").value;
-          if (!email || !password) return;
-
+          var email = emailInput.value.trim();
+          if (!email) return;
           showError("");
-          showNotice("");
-          btn.disabled = true;
-          btn.textContent = "Signing in…";
           try {
-            var res = await api("/api/auth/login/password", {
-              method: "POST",
-              body: JSON.stringify({ email: email, password: password, next: next })
-            });
-            // Seed the nav hint so the next page paints signed-in at once.
-            if (res.user) writeUserHint(Object.assign({}, res.user, { sessionMethod: "password" }));
-            location.href = res.next || "/index.html";
+            await requestLink(email, true);
           } catch (err) {
-            showError(err.message || "Sign-in failed.");
-            document.getElementById("pwPassword").value = "";
-            btn.disabled = false;
-            btn.textContent = "Sign in";
+            showError(err.message || "Couldn't send the link. Please try again.");
           }
         });
       })();

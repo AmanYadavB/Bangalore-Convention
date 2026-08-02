@@ -11,16 +11,11 @@
     <div id="nav"></div>
 
     <main class="container">
-      <h1 class="page-title">Your account</h1>
+      <h1 class="page-title" id="pageTitle">Your account</h1>
       <p class="page-sub" id="whoami">Loading…</p>
 
-      <p id="setupBanner" class="auth-notice" hidden>
-        You're signed in — one last step. Create a password below and you're
-        done; next time you can sign in with it directly, no email needed.
-      </p>
-
       <div class="card">
-        <div class="section-head" style="margin: 0 0 14px">
+        <div class="section-head" id="pwHead" style="margin: 0 0 14px">
           <h2 style="margin: 0">Password</h2>
         </div>
         <p class="muted" id="pwIntro" style="margin-top: 0">
@@ -33,9 +28,13 @@
             <input type="password" id="currentPassword" autocomplete="current-password" />
           </div>
           <div class="field full">
-            <label for="newPassword">New password</label>
+            <label for="newPassword" id="newPasswordLabel">New password</label>
             <input type="password" id="newPassword" autocomplete="new-password"
                    placeholder="At least 12 characters" />
+          </div>
+          <div class="field full">
+            <label for="confirmPassword">Confirm password</label>
+            <input type="password" id="confirmPassword" autocomplete="new-password" />
           </div>
           <div class="field full">
             <button class="btn primary" type="submit" id="savePassword">Save password</button>
@@ -109,10 +108,13 @@
       // here), no chat mascot, no session/access cards.
       mountNav("account", setupMode ? { links: false, chat: false } : undefined);
 
+      // Setup mode strips the page to the single step: a heading, the email,
+      // the field. No banner paragraphs, no card intro, no other cards.
       if (setupMode) {
-        document.getElementById("setupBanner").hidden = false;
-        document.getElementById("pwIntro").textContent =
-          "Pick a password of at least 12 characters. You'll use it together with your email the next time you sign in.";
+        document.getElementById("pageTitle").textContent = "Create a password";
+        document.getElementById("newPasswordLabel").textContent = "Password";
+        document.getElementById("pwHead").hidden = true;
+        document.getElementById("pwIntro").hidden = true;
         document.getElementById("sessionsCard").hidden = true;
         document.getElementById("accessCard").hidden = true;
       }
@@ -140,6 +142,8 @@
         const me = currentUser();
         const el = document.getElementById("whoami");
         if (!me) { el.textContent = "Not signed in."; return; }
+        // Setup mode: just the address — the heading already says the rest.
+        if (setupMode) { el.textContent = me.email; return; }
         el.innerHTML =
           escapeHtml(me.email) + " · " +
           (me.role === "developer" ? "developer" : "committee") +
@@ -174,8 +178,13 @@
         e.preventDefault();
         const btn = document.getElementById("savePassword");
         const password = document.getElementById("newPassword").value;
+        const confirm = document.getElementById("confirmPassword").value;
         const currentPassword = document.getElementById("currentPassword").value;
         if (!password) return toast("Type a password first", "error");
+        if (password !== confirm) {
+          document.getElementById("confirmPassword").focus();
+          return toast("Passwords don't match", "error");
+        }
         btn.disabled = true;
         try {
           await api("/api/auth/password/set", {
@@ -183,6 +192,7 @@
             body: JSON.stringify({ password: password, currentPassword: currentPassword }),
           });
           document.getElementById("newPassword").value = "";
+          document.getElementById("confirmPassword").value = "";
           document.getElementById("currentPassword").value = "";
           if (setupMode) {
             // Setup finished — carry on to wherever they were headed.
