@@ -69,11 +69,28 @@
         <div class="section-head" style="margin: 0 0 14px">
           <h2 style="margin: 0">Access</h2>
         </div>
-        <p class="muted" style="margin: 0">
+        <p class="muted" id="accessNote" style="margin: 0 0 14px">
           Who can sign in is set in the site's configuration, not here. To add
           or remove someone, edit <code>STAFF_EMAILS</code> or
           <code>DEVELOPER_EMAILS</code> in <code>wrangler.toml</code> and deploy.
         </p>
+        <!-- Developers additionally get the live account list with delete. -->
+        <div class="table-wrap" id="staffWrap" hidden>
+          <table>
+            <thead>
+              <tr>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Password</th>
+                <th>Last sign-in</th>
+                <th class="col-actions"></th>
+              </tr>
+            </thead>
+            <tbody id="staffRows">
+              <tr><td colspan="5" class="empty">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </main>
 
@@ -179,6 +196,57 @@
         }
       });
 
+      // Developer-only: the live account list. Deleting ends the person's
+      // sessions and wipes their password, but ACCESS itself still comes from
+      // wrangler.toml — the server's response says so when that's the case.
+      async function loadStaff() {
+        if (!hasRole("developer")) return;
+        document.getElementById("staffWrap").hidden = false;
+        document.getElementById("accessNote").textContent =
+          "Adding someone still happens in wrangler.toml (STAFF_EMAILS / DEVELOPER_EMAILS). " +
+          "Deleting an account below signs them out everywhere and clears their password; " +
+          "to fully revoke access, also remove their email from wrangler.toml and deploy.";
+        const rows = document.getElementById("staffRows");
+        try {
+          const data = await api("/api/auth/staff");
+          const list = data.staff || [];
+          if (!list.length) {
+            rows.innerHTML = '<tr><td colspan="5" class="empty">No accounts yet.</td></tr>';
+            return;
+          }
+          rows.innerHTML = list.map(function (p) {
+            return "<tr>" +
+              "<td>" + escapeHtml(p.email) +
+                (p.current ? ' <span class="muted">(you)</span>' : "") + "</td>" +
+              "<td>" + escapeHtml(p.role || "not on list") + "</td>" +
+              "<td>" + (p.hasPassword ? "set" : "—") + "</td>" +
+              "<td>" + escapeHtml(when(p.lastLoginAt)) + "</td>" +
+              '<td class="col-actions">' +
+                (p.current ? "" :
+                  '<button class="btn ghost small" data-del="' + escapeHtml(p.id) + '" data-email="' + escapeHtml(p.email) + '">Delete</button>') +
+              "</td>" +
+            "</tr>";
+          }).join("");
+          rows.querySelectorAll("[data-del]").forEach(function (btn) {
+            btn.addEventListener("click", async function () {
+              const email = btn.getAttribute("data-email");
+              if (!confirm("Delete " + email + "? They are signed out everywhere and their password is cleared.")) return;
+              btn.disabled = true;
+              try {
+                const res = await api("/api/auth/staff/" + encodeURIComponent(btn.getAttribute("data-del")), { method: "DELETE" });
+                toast(res.note ? "Deleted. " + res.note : "Account deleted");
+                loadStaff();
+              } catch (err) {
+                toast(err.message, "error");
+                btn.disabled = false;
+              }
+            });
+          });
+        } catch (err) {
+          rows.innerHTML = '<tr><td colspan="5" class="empty">' + escapeHtml(err.message) + "</td></tr>";
+        }
+      }
+
       document.getElementById("revokeOthers").addEventListener("click", async function () {
         if (!confirm("Sign out every other device?")) return;
         try {
@@ -194,6 +262,7 @@
         await requireUser();
         paintMe();
         loadSessions();
+        loadStaff();
         if (setupMode) document.getElementById("newPassword").focus();
       })();
     </script>

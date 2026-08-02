@@ -57,7 +57,13 @@
         <div id="waitPanel" class="auth-wait" hidden>
           <div class="auth-spinner" aria-hidden="true"></div>
           <p class="auth-wait-title">Check your inbox</p>
-          <p class="muted" id="waitText">Approve the link we just emailed you and this page will sign in on its own.</p>
+          <!-- The address sits on its own line (.auth-email) so a long one
+               wraps cleanly on phones instead of overflowing the card. -->
+          <p class="muted" id="waitText">
+            If <b id="waitEmail" class="auth-email"></b> is on the committee
+            list, an approval link is on its way. Approve it there — even from
+            your mail app — and this page signs in by itself.
+          </p>
           <button class="btn ghost small" id="waitCancel" type="button">Use a different email</button>
         </div>
 
@@ -170,9 +176,7 @@
           waitDeadline = Date.now() + WAIT_TTL_MS;
           // Same wording whether or not the account exists — anything else
           // would let anyone probe for staff addresses.
-          document.getElementById("waitText").textContent =
-            "If " + email + " is on the committee list, an approval link is on its way. " +
-            "Approve it there — even from your mail app — and this page signs in by itself.";
+          document.getElementById("waitEmail").textContent = email;
           setWaiting(true);
 
           (function poll() {

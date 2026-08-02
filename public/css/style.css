@@ -2371,6 +2371,21 @@ tbody tr:hover {
   line-height: 1.55;
 }
 
+/* An email address inside auth copy gets its own line: a 30+ character
+   address inline in a sentence either overflows a phone-width card or gets
+   broken mid-word with a couple of characters orphaned on the next line. */
+.auth-email {
+  display: block;
+  margin: 3px 0;
+  overflow-wrap: anywhere;
+}
+
+/* Belt and braces for everything else in the card (long names, error text
+   from the server): break rather than overflow. */
+.auth-card {
+  overflow-wrap: break-word;
+}
+
 /* Waiting for the emailed link to be approved: the login page polls the
    server and signs itself in, so all this state has to do is look alive. */
 .auth-wait {

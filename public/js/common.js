@@ -302,7 +302,12 @@ function needsPasswordSetup(user) {
 
 function enforcePasswordSetup(user) {
   if (!needsPasswordSetup(user)) return false;
-  const page = (location.pathname.split("/").pop() || "index.html").toLowerCase();
+  // Mirror the server's canonicalPage(): the assets host serves pages
+  // EXTENSIONLESS (/account.html 307s to /account), so comparing against
+  // "account.html" alone would fail there and redirect in a loop forever.
+  let page = (location.pathname.replace(/\/+$/, "").split("/").pop() || "").toLowerCase();
+  if (!page) page = "index.html";
+  else if (!/\.[a-z0-9]+$/.test(page)) page += ".html";
   if (page === "account.html" || page === "login.html") return false;
   location.replace("account.html?setup=1");
   return true;

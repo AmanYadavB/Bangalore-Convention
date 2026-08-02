@@ -1086,7 +1086,7 @@ async function handleAuth(request, env, ctx, parts, url) {
     return authShellPage(
       "Approve sign-in",
       `<h2 style="margin-top:0">Approve sign-in</h2>
-       <p class="muted">You're approving a sign-in for <b>${esc(row.email)}</b>.</p>
+       <p class="muted">You're approving a sign-in for <b class="auth-email">${esc(row.email)}</b>.</p>
        <form method="POST" action="/api/auth/magic/confirm">
          <input type="hidden" name="token" value="${esc(token)}">
          <input type="hidden" name="csrf" value="${esc(row.csrf)}">
@@ -1478,6 +1478,62 @@ async function handleAuth(request, env, ctx, parts, url) {
     await revokeAllSessions(env, s.staff.id, s.session.id);
     audit(env, ctx, auditFrom(request, { type: "session_revoked", staffId: s.staff.id, detail: "all others" }));
     return json({ ok: true });
+  }
+
+  // ---- Staff directory (developers) ---------------------------------------
+  // Read-and-delete only. ADDING someone still happens in wrangler.toml —
+  // the allowlist there is the authority on who may sign in, so deleting a
+  // row here ends their sessions and wipes their password, but an email that
+  // is still in STAFF_EMAILS/DEVELOPER_EMAILS can simply sign in again. The
+  // response says so rather than pretending the delete was a full revocation.
+  if (action === "staff" && method === "GET" && !sub) {
+    if (s.staff.role !== "developer") return json({ error: "Developer access required." }, 403);
+    const { results } = await env.CONVENTION_DB.prepare(
+      `SELECT id, email, name, status, password_hash IS NOT NULL AS has_password,
+              last_login_at, created_at FROM staff ORDER BY created_at ASC`
+    ).all();
+    return json({
+      staff: (results || []).map((r) => ({
+        id: r.id,
+        email: r.email,
+        name: r.name || "",
+        // Effective role comes from config, same as every request; a stale
+        // DB value (or a de-listed email) must not be presented as real.
+        role: resolveRoleFromConfig(env, r.email),
+        status: r.status,
+        hasPassword: Boolean(r.has_password),
+        lastLoginAt: r.last_login_at,
+        createdAt: r.created_at,
+        current: r.id === s.staff.id,
+      })),
+    });
+  }
+
+  if (action === "staff" && method === "DELETE" && sub) {
+    if (s.staff.role !== "developer") return json({ error: "Developer access required." }, 403);
+    if (sub === s.staff.id) return json({ error: "You can't delete your own account." }, 400);
+    const target = await staffById(env, sub);
+    if (!target) return json({ error: "Not found." }, 404);
+
+    await revokeAllSessions(env, target.id);
+    await env.CONVENTION_DB.batch([
+      env.CONVENTION_DB.prepare("DELETE FROM magic_token WHERE email = ?").bind(target.email),
+      env.CONVENTION_DB.prepare("DELETE FROM staff WHERE id = ?").bind(target.id),
+    ]);
+    audit(env, ctx, auditFrom(request, {
+      type: "staff_deleted",
+      staffId: s.staff.id,
+      email: target.email,
+      detail: "deleted by " + s.staff.email,
+    }));
+
+    const stillListed = resolveRoleFromConfig(env, target.email);
+    return json({
+      ok: true,
+      note: stillListed
+        ? "Their email is still in wrangler.toml, so they can sign in again — remove it there to fully revoke access."
+        : "",
+    });
   }
 
   // ---- Audit log (developers) ---------------------------------------------
