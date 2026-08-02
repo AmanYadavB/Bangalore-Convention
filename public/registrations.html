@@ -32,24 +32,17 @@
         <button class="btn small" id="export">Export CSV</button>
       </div>
 
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Contact</th>
-              <th>City</th>
-              <th>Category</th>
-              <th>Amount</th>
-              <th>Status</th>
-              <th>Registered</th>
-              <th class="col-actions"></th>
-            </tr>
-          </thead>
-          <tbody id="rows">
-            <tr><td colspan="8" class="empty">Loading…</td></tr>
-          </tbody>
-        </table>
+      <!-- RG3 master–detail: person list left, detail panel right. On phones
+           the detail opens as a frosted popup over the blurred page. -->
+      <div class="reg-md">
+        <div class="card reg-list" id="regList">
+          <div class="empty">Loading…</div>
+        </div>
+        <div class="reg-detail-wrap" id="detailWrap">
+          <div class="card reg-detail" id="detailCard">
+            <div class="empty">Pick a person to see their details.</div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -78,40 +71,86 @@
         });
       }
 
+      let selId = null;
+      const wrap = document.getElementById("detailWrap");
+
+      function selected() {
+        return ALL.find((r) => r.id === selId) || null;
+      }
+
+      function paintDetail(retum) {
+        const card = document.getElementById("detailCard");
+        const r = selected();
+        if (!r) {
+          card.innerHTML = '<div class="empty">Pick a person to see their details.</div>';
+          return;
+        }
+        card.innerHTML =
+          `<button class="reg-detail-x" id="detailClose" type="button" aria-label="Close">✕</button>` +
+          `<div style="display:flex;align-items:center;gap:11px;margin-bottom:10px">
+            <span class="reg-avat" style="width:42px;height:42px;font-size:16px">${escapeHtml(
+              (r.name || "?").charAt(0).toUpperCase()
+            )}</span>
+            <div><b style="font-size:16px">${escapeHtml(r.name)}</b><br>
+            <span class="muted" style="font-size:12px">registered ${formatDate(r.createdAt)}</span></div>
+          </div>` +
+          `<div class="reg-drow"><span class="muted">Email</span><span><b>${escapeHtml(r.email)}</b></span></div>` +
+          `<div class="reg-drow"><span class="muted">Phone</span><span><b>${escapeHtml(r.phone)}</b></span></div>` +
+          `<div class="reg-drow"><span class="muted">City</span><span>${escapeHtml(r.city) || "—"}</span></div>` +
+          `<div class="reg-drow"><span class="muted">Gender</span><span>${escapeHtml(r.gender) || "—"}</span></div>` +
+          `<div class="reg-drow"><span class="muted">Category</span><span><b>${escapeHtml(r.categoryName)}</b></span></div>` +
+          `<div class="reg-drow"><span class="muted">Amount</span><span><b style="font-size:15px">${money(r.amount)}</b></span></div>` +
+          `<div class="reg-drow"><span class="muted">Status</span><span><span class="pill ${
+            r.paid ? "paid" : "pending"
+          }">${r.paid ? "Paid" : "Pending"}</span></span></div>` +
+          (r.notes
+            ? `<div class="reg-drow"><span class="muted">Notes</span><span>${escapeHtml(r.notes)}</span></div>`
+            : "") +
+          `<div class="reg-actions">
+            <button class="btn primary small" data-toggle="${r.id}">${r.paid ? "Mark Unpaid" : "Mark Paid"}</button>
+            <button class="btn small" data-copy="${r.id}">Copy details</button>
+            <button class="btn danger" data-del="${r.id}">Delete</button>
+          </div>`;
+        if (retum) {
+          card.classList.remove("retum");
+          void card.offsetWidth;
+          card.classList.add("retum");
+        }
+        const x = document.getElementById("detailClose");
+        if (x) x.addEventListener("click", () => wrap.classList.remove("open"));
+      }
+
       function render() {
         const rows = applyFilters().sort(
           (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
         );
-        const tbody = document.getElementById("rows");
         document.getElementById("count-line").textContent =
           `${ALL.length} total · ${ALL.filter((r) => r.paid).length} paid · showing ${rows.length}`;
 
+        const list = document.getElementById("regList");
         if (!rows.length) {
-          tbody.innerHTML = '<tr><td colspan="8" class="empty">No registrations found.</td></tr>';
+          list.innerHTML = '<div class="empty">No registrations found.</div>';
+          selId = null;
+          paintDetail(false);
           return;
         }
+        // Keep the selection if it survived the filters; else pick the top row.
+        if (!rows.some((r) => r.id === selId)) selId = rows[0].id;
 
-        tbody.innerHTML = rows
+        list.innerHTML = rows
           .map(
             (r) => `
-          <tr>
-            <td>
-              <b>${escapeHtml(r.name)}</b>
-              ${r.notes ? `<br><span class="muted" style="font-size:12px">${escapeHtml(r.notes)}</span>` : ""}
-            </td>
-            <td>${escapeHtml(r.email)}<br><span class="muted">${escapeHtml(r.phone)}</span></td>
-            <td>${escapeHtml(r.city) || "—"}</td>
-            <td>${escapeHtml(r.categoryName)}</td>
-            <td>${money(r.amount)}</td>
-            <td><span class="pill ${r.paid ? "paid" : "pending"}">${r.paid ? "Paid" : "Pending"}</span></td>
-            <td class="muted">${formatDate(r.createdAt)}</td>
-            <td class="col-actions">
-              <button class="btn small" data-toggle="${r.id}">${r.paid ? "Mark Unpaid" : "Mark Paid"}</button>
-              <button class="btn danger" data-del="${r.id}">Delete</button>
-            </td>
-          </tr>`
+          <button class="mrow${r.id === selId ? " on" : ""}" data-id="${r.id}" type="button">
+            <span class="reg-avat">${escapeHtml((r.name || "?").charAt(0).toUpperCase())}</span>
+            <span style="min-width:0">
+              <span class="m-nm">${escapeHtml(r.name)}</span><br>
+              <span class="m-sub">${escapeHtml(r.categoryName)} · ${money(r.amount)}</span>
+            </span>
+            <span class="m-chip pill ${r.paid ? "paid" : "pending"}">${r.paid ? "✓" : "…"}</span>
+          </button>`
           )
           .join("");
+        paintDetail(false);
       }
 
       async function load() {
@@ -127,9 +166,31 @@
       document.getElementById("filter-cat").addEventListener("change", render);
       document.getElementById("filter-paid").addEventListener("change", render);
 
-      document.getElementById("rows").addEventListener("click", async (e) => {
+      // Selecting a person: paint the panel; on phones it opens as the
+      // frosted popup (the .open class only has an effect ≤700px).
+      document.getElementById("regList").addEventListener("click", (e) => {
+        const row = e.target.closest(".mrow");
+        if (!row) return;
+        selId = row.getAttribute("data-id");
+        document.querySelectorAll(".mrow").forEach((m) =>
+          m.classList.toggle("on", m.getAttribute("data-id") === selId)
+        );
+        paintDetail(true);
+        wrap.classList.add("open");
+      });
+
+      // Frost tap (not the card) and Escape close the mobile popup.
+      wrap.addEventListener("click", (e) => {
+        if (e.target === wrap) wrap.classList.remove("open");
+      });
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") wrap.classList.remove("open");
+      });
+
+      document.getElementById("detailCard").addEventListener("click", async (e) => {
         const toggle = e.target.closest("[data-toggle]");
         const del = e.target.closest("[data-del]");
+        const copy = e.target.closest("[data-copy]");
         try {
           if (toggle) {
             const id = toggle.getAttribute("data-toggle");
@@ -142,7 +203,23 @@
             });
             cur.paid = updated.paid;
             render();
+            paintDetail(true);
             toast(updated.paid ? "marked as paid — the mascot heard a tiny cash register go off" : "marked as pending — the mascot is keeping one eye on that payment");
+          } else if (copy) {
+            const r = ALL.find((x) => x.id === copy.getAttribute("data-copy"));
+            if (!r) return;
+            const text = [
+              r.name,
+              r.email,
+              r.phone,
+              r.city,
+              `${r.categoryName} — ${money(r.amount)}`,
+              r.paid ? "Paid" : "Pending",
+            ]
+              .filter(Boolean)
+              .join("\n");
+            await navigator.clipboard.writeText(text);
+            toast("details copied — paste away");
           } else if (del) {
             const id = del.getAttribute("data-del");
             if (!(await mascotConfirm({
@@ -155,6 +232,8 @@
             }))) return;
             await api(`/api/registrations/${id}`, { method: "DELETE" });
             ALL = ALL.filter((r) => r.id !== id);
+            selId = null;
+            wrap.classList.remove("open");
             render();
             toast("registration deleted — the mascot needs a minute");
           }

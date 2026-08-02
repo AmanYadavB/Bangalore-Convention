@@ -64,30 +64,10 @@
       <h1 class="page-title">Funds &amp; Expenses Dashboard</h1>
       <p class="page-sub">Live view of money collected and spent for the convention.</p>
 
-      <!-- Top stats -->
-      <div class="grid cols-4" id="stats">
-        <div class="empty">Loading…</div>
-      </div>
-
-      <!-- Chart + collections -->
-      <div class="grid dash-2col" style="margin-top: 22px; align-items: start; gap: 18px">
-        <div class="card">
-          <h3 style="margin-top: 0">Funds Overview</h3>
-          <div id="funds-chart"><div class="muted">Loading…</div></div>
-        </div>
-        <div class="card">
-          <h3 style="margin-top: 0">Collections by Category</h3>
-          <div id="by-category"><div class="muted">Loading…</div></div>
-        </div>
-      </div>
-
-      <!-- Expenses breakdown -->
-      <div class="card" style="margin-top: 18px">
-        <div class="section-head" style="margin: 0 0 12px">
-          <h3 style="margin: 0">Expenses by Category</h3>
-          <a class="btn small" href="expenses.html">Manage Expenses</a>
-        </div>
-        <div id="exp-category"><div class="muted">Loading…</div></div>
+      <!-- DB1 bento board: the money story in one grid — hero collected tile
+           with progress + trend, stat tiles, category bars, activity feed. -->
+      <div class="bento" id="bento">
+        <div class="empty" style="grid-column: 1 / -1">Loading…</div>
       </div>
     </div>
 
@@ -98,13 +78,6 @@
       mountNav("dashboard");
 
       {
-        function statCard(label, value, cls) {
-          return `<div class="card stat">
-            <div class="label">${label}</div>
-            <div class="value ${cls || ""}">${value}</div>
-          </div>`;
-        }
-
         function bars(items, valueKey, max, cls) {
           if (!items.length) return '<div class="muted">No data yet.</div>';
           return items
@@ -120,79 +93,109 @@
             .join("");
         }
 
-        function donut(segments) {
-          const total = segments.reduce((s, x) => s + Math.max(0, x.value), 0);
-          const r = 62;
-          const c = 2 * Math.PI * r;
-          let offset = 0;
-          const arcs = total
-            ? segments
-                .map((seg) => {
-                  const val = Math.max(0, seg.value);
-                  const dash = (val / total) * c;
-                  const arc = `<circle r="${r}" cx="80" cy="80" fill="none" stroke-width="22"
-                    style="stroke:${seg.color}" stroke-dasharray="${dash} ${c - dash}"
-                    stroke-dashoffset="${-offset}" transform="rotate(-90 80 80)"></circle>`;
-                  offset += dash;
-                  return arc;
-                })
-                .join("")
-            : "";
-          return `<svg viewBox="0 0 160 160" width="160" height="160">
-              <circle r="${r}" cx="80" cy="80" fill="none" stroke-width="22" style="stroke:var(--bg-2)"></circle>
-              ${arcs}
-            </svg>`;
+        // Cumulative collected-per-day over the last 30 days, as a sparkline.
+        function sparkline(regs) {
+          const paid = regs
+            .filter((r) => r.paid)
+            .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+          if (paid.length < 2) return "";
+          const cutoff = Date.now() - 30 * 864e5;
+          let base = 0;
+          const pts = [];
+          let running = 0;
+          for (const r of paid) {
+            const t = new Date(r.createdAt).getTime();
+            running += r.amount;
+            if (t < cutoff) base = running;
+            else pts.push([t, running]);
+          }
+          if (pts.length < 2) return "";
+          const t0 = pts[0][0], t1 = pts[pts.length - 1][0] || t0 + 1;
+          const v0 = base, v1 = pts[pts.length - 1][1];
+          const X = (t) => (200 * (t - t0)) / Math.max(1, t1 - t0);
+          const Y = (v) => 42 - (38 * (v - v0)) / Math.max(1, v1 - v0);
+          const line = pts.map(([t, v]) => `${X(t).toFixed(1)},${Y(v).toFixed(1)}`).join(" ");
+          const last = pts[pts.length - 1];
+          return `<svg class="dash-spark" viewBox="0 0 200 46" width="100%" height="46" preserveAspectRatio="none" aria-hidden="true">
+            <polyline fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" points="${line}"/>
+            <circle cx="${X(last[0]).toFixed(1)}" cy="${Y(last[1]).toFixed(1)}" r="3.5" fill="var(--accent)"/>
+          </svg>`;
         }
 
-        function legend(items) {
-          return (
-            `<div class="legend">` +
-            items
-              .map(
-                (i) =>
-                  `<div class="legend-row"><span class="dot" style="background:${i.color}"></span>
-                    <span>${i.label}</span><b>${money(i.value)}</b></div>`
-              )
-              .join("") +
-            `</div>`
-          );
+        function tile(label, value, valueCls, sub, subCls) {
+          return `<div class="card stat">
+            <div class="label">${label}</div>
+            <div class="value ${valueCls || ""}">${value}</div>
+            ${sub ? `<div class="b-sub ${subCls || "mut"}">${sub}</div>` : ""}
+          </div>`;
         }
 
         async function loadDashboard() {
-          const d = await api("/api/dashboard");
+          // Registrations feed the sparkline + activity feed; the dashboard
+          // still paints fully from the aggregates if that call fails.
+          const [d, regs] = await Promise.all([
+            api("/api/dashboard"),
+            api("/api/registrations").catch(() => []),
+          ]);
 
-          document.getElementById("stats").innerHTML =
-            statCard("Registrations", `${d.registrationCount}`, "accent") +
-            statCard("Collected", money(d.totalCollected), "green") +
-            statCard("Pending", money(d.totalPending), "amber") +
-            statCard("Total Expenses", money(d.totalExpenses), "red") +
-            statCard("Available Balance", money(d.balance), d.balance >= 0 ? "green" : "red") +
-            statCard("Total Pledged", money(d.totalPledged)) +
-            statCard("Paid Count", `${d.paidCount} / ${d.registrationCount}`) +
-            statCard("Avg / Head", money(d.registrationCount ? Math.round(d.totalPledged / d.registrationCount) : 0));
+          const pct = d.totalPledged
+            ? Math.min(100, Math.round((d.totalCollected / d.totalPledged) * 100))
+            : 0;
+          const pendingCount = d.registrationCount - d.paidCount;
 
-          const segs = [
-            { label: "Collected", value: d.totalCollected, color: "var(--green)" },
-            { label: "Pending", value: d.totalPending, color: "var(--amber)" },
-            { label: "Expenses", value: d.totalExpenses, color: "var(--red)" },
-          ];
-          document.getElementById("funds-chart").innerHTML = `
-            <div class="donut">
-              ${donut(segs)}
-              <div class="donut-center">
-                <span class="muted">Balance</span>
-                <b style="color:${d.balance >= 0 ? "var(--green)" : "var(--red)"}">${money(d.balance)}</b>
-              </div>
-            </div>
-            ${legend(segs)}`;
+          const hero = `<div class="card stat dash-hero">
+            <div class="label">Collected</div>
+            <div class="big">${money(d.totalCollected)}</div>
+            <div class="goal-line">${pct}% of ${money(d.totalPledged)} pledged</div>
+            <div class="goal-track"><i style="width:${pct}%"></i></div>
+            ${sparkline(regs)}
+          </div>`;
+
+          const tiles =
+            tile("Available Balance", money(d.balance), d.balance >= 0 ? "green" : "red") +
+            tile("Total Expenses", money(d.totalExpenses), "red") +
+            tile("Registrations", d.registrationCount, "accent", `${d.paidCount} paid`, "green") +
+            tile("Pending", money(d.totalPending), "amber", `${pendingCount} awaiting payment`, "amber");
 
           const maxCat = Math.max(1, ...d.byCategory.map((c) => c.amount));
-          document.getElementById("by-category").innerHTML = bars(d.byCategory, "amount", maxCat, "green");
+          const catCard = `<div class="card b-wide">
+            <div class="section-head" style="margin:0 0 10px"><h3 style="margin:0;font-size:15px">Collections by Category</h3></div>
+            ${bars(d.byCategory, "amount", maxCat, "green")}
+          </div>`;
 
           const maxExp = Math.max(1, ...d.expenseByCategory.map((c) => c.amount));
-          document.getElementById("exp-category").innerHTML = d.expenseByCategory.length
-            ? bars(d.expenseByCategory, "amount", maxExp, "amber")
-            : '<div class="muted">No expenses recorded yet.</div>';
+          const expCard = `<div class="card b-wide">
+            <div class="section-head" style="margin:0 0 10px">
+              <h3 style="margin:0;font-size:15px">Expenses by Category</h3>
+              <a class="btn small" href="expenses.html">Manage Expenses</a>
+            </div>
+            ${d.expenseByCategory.length ? bars(d.expenseByCategory, "amount", maxExp, "amber") : '<div class="muted">No expenses recorded yet.</div>'}
+          </div>`;
+
+          const recent = [...regs]
+            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+            .slice(0, 6);
+          const feedCard = `<div class="card b-wide">
+            <div class="section-head" style="margin:0 0 6px">
+              <h3 style="margin:0;font-size:15px">Latest Registrations</h3>
+              <a class="btn small" href="registrations.html">See all</a>
+            </div>
+            ${
+              recent.length
+                ? recent
+                    .map(
+                      (r) => `<div class="feed-row">
+                        <span class="feed-ic">🎟️</span>
+                        <span><b>${escapeHtml(r.name)}</b> · ${escapeHtml(r.categoryName)}</span>
+                        <span class="feed-amt" style="color:${r.paid ? "var(--green)" : "var(--amber)"}">${money(r.amount)}</span>
+                      </div>`
+                    )
+                    .join("")
+                : '<div class="muted">No registrations yet.</div>'
+            }
+          </div>`;
+
+          document.getElementById("bento").innerHTML = hero + tiles + catCard + feedCard + expCard;
         }
 
         loadDashboard().catch((e) => toast(e.message, "error"));

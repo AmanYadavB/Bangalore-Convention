@@ -3450,6 +3450,157 @@ select.dd-native {
   .reg-wizard.at-ticket .mini-ticket { display: none; }
 }
 
+/* ================= Dashboard: DB1 bento board ================= */
+.bento {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  align-items: stretch;
+}
+
+.bento > .dash-hero { grid-column: span 2; grid-row: span 2; display: flex; flex-direction: column; }
+.bento > .b-wide { grid-column: span 2; }
+
+.dash-hero .big {
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--green);
+}
+
+.goal-line { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+.goal-track {
+  height: 8px; border-radius: 4px;
+  background: var(--card-2);
+  overflow: hidden;
+  margin: 10px 0 4px;
+}
+
+.goal-track i {
+  display: block; height: 100%; border-radius: 4px;
+  background: linear-gradient(90deg, var(--accent-3), var(--accent));
+}
+
+.dash-spark { margin-top: auto; padding-top: 10px; }
+
+.b-sub { font-size: 12px; font-weight: 700; margin-top: 2px; }
+.b-sub.green { color: var(--green); }
+.b-sub.amber { color: var(--amber); }
+.b-sub.mut { color: var(--muted); font-weight: 600; }
+
+.feed-row {
+  display: flex; gap: 9px; align-items: center;
+  font-size: 12.5px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border);
+}
+.feed-row:last-child { border-bottom: 0; }
+.feed-ic {
+  width: 26px; height: 26px; border-radius: 8px;
+  display: grid; place-items: center; font-size: 13px;
+  background: var(--card-2); flex-shrink: 0;
+}
+.feed-amt { margin-left: auto; font-weight: 800; white-space: nowrap; }
+
+@media (max-width: 760px) {
+  .bento { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .bento > .dash-hero { grid-column: span 2; grid-row: auto; }
+  .bento > .b-wide { grid-column: span 2; }
+  .dash-hero .big { font-size: 27px; }
+}
+
+/* ================= Registrations: RG3 master–detail ================= */
+.reg-md {
+  display: grid;
+  grid-template-columns: 1fr 1.15fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.reg-list {
+  padding: 8px;
+  max-height: 72vh;
+  overflow-y: auto;
+}
+
+.mrow {
+  display: flex; align-items: center; gap: 9px;
+  width: 100%;
+  padding: 9px 11px;
+  border: 0; border-radius: 11px;
+  background: none; color: var(--text);
+  font: inherit; text-align: left; cursor: pointer;
+  transition: background 0.12s ease;
+}
+.mrow:hover { background: var(--card-2); }
+.mrow.on { background: color-mix(in srgb, var(--accent) 11%, transparent); }
+.mrow .m-nm { font-size: 13.5px; font-weight: 700; }
+.mrow .m-sub { font-size: 11px; color: var(--muted); }
+.mrow .m-chip { margin-left: auto; }
+
+.reg-avat {
+  width: 30px; height: 30px; border-radius: 50%;
+  display: inline-grid; place-items: center;
+  color: #fff; font-size: 12px; font-weight: 800;
+  background: linear-gradient(140deg, var(--accent-3), var(--accent) 55%, var(--accent-2));
+  flex-shrink: 0;
+}
+
+.reg-detail { position: sticky; top: 84px; }
+.reg-detail.retum { animation: wiz-tum 0.4s cubic-bezier(0.34, 1.45, 0.64, 1); }
+
+.reg-drow {
+  display: flex; justify-content: space-between; gap: 14px;
+  font-size: 13px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.reg-drow:last-of-type { border-bottom: 0; }
+.reg-drow > span:last-child { text-align: right; overflow-wrap: anywhere; }
+
+.reg-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+
+.reg-detail-x {
+  display: none;
+  position: absolute; top: 14px; right: 14px;
+  width: 38px; height: 38px; border-radius: 11px;
+  border: 1px solid var(--border); background: var(--card); color: var(--text);
+  font-size: 16px; cursor: pointer; z-index: 2;
+}
+
+/* Mobile: the detail opens as a frosted popup — same frost language as the
+   nav menu — blurring the whole page behind it. */
+@media (max-width: 700px) {
+  .reg-md { grid-template-columns: 1fr; }
+  .reg-list { max-height: none; }
+  .reg-detail-wrap {
+    position: fixed; inset: 0; z-index: 74;
+    background: color-mix(in srgb, var(--bg) 80%, transparent);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    display: grid; place-items: center;
+    padding: 18px;
+    opacity: 0; visibility: hidden; pointer-events: none;
+    transition: opacity 0.25s ease, visibility 0s linear 0.25s;
+  }
+  .reg-detail-wrap.open {
+    opacity: 1; visibility: visible; pointer-events: auto;
+    transition: opacity 0.25s ease;
+  }
+  .reg-detail {
+    position: static;
+    width: min(430px, 100%);
+    max-height: 80vh;
+    overflow-y: auto;
+  }
+  .reg-detail-x { display: grid; place-items: center; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reg-detail.retum { animation: none; }
+}
+
 /* Mobile home: "What's Included" collapses into one cycling spotlight card
    (like the hero's category card) instead of three stacked cards. */
 .inc-spot { display: none; }
