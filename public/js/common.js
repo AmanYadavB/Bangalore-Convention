@@ -108,6 +108,23 @@ let __toastEl = null;
 let __toastTimers = [];
 
 function toast(message, type = "success") {
+  // ONE mascot rule: when the corner mascot is home (and not mid-flight or
+  // grown huge, and the chat panel is closed), IT says the message itself —
+  // registered by mountMascot as __mascotSay. Everything below is the
+  // fallback: a plain corner bubble, with a robot ONLY on pages that have no
+  // corner mascot at all (e.g. sign-in) so there are never two on screen.
+  const fabEl = document.getElementById("chatFab");
+  if (
+    window.__mascotSay &&
+    fabEl &&
+    !document.body.classList.contains("chat-open") &&
+    !fabEl.classList.contains("flying") &&
+    !fabEl.classList.contains("huge")
+  ) {
+    window.__mascotSay(message, type);
+    return;
+  }
+
   if (__toastEl) __toastEl.remove();
   __toastTimers.forEach(clearTimeout);
   __toastTimers = [];
@@ -119,14 +136,13 @@ function toast(message, type = "success") {
 
   const el = document.createElement("div");
   __toastEl = el;
-  el.className =
-    "chattoast " + flavor + (document.getElementById("chatFab") ? "" : " no-fab");
+  el.className = "chattoast " + flavor + (fabEl ? "" : " no-fab");
   el.innerHTML =
     '<div class="bubble">' +
     (title ? '<b class="ct-title"></b>' : "") +
     '<span class="ct-msg"></span><span class="type-caret"></span>' +
     '<span class="burst"></span></div>' +
-    mascotHTML(mood);
+    (fabEl ? "" : mascotHTML(mood));
   if (title) el.querySelector(".ct-title").textContent = title;
   document.body.appendChild(el);
   requestAnimationFrame(() => el.classList.add("show"));
@@ -910,7 +926,7 @@ function mountMascot() {
   ghost.className = "fab-ghost";
   ghost.setAttribute("aria-label", "Open chat");
   ghost.setAttribute("title", "Open chat");
-  ghost.innerHTML = '<span class="fg-icon">\uD83D\uDCAC</span><span class="fg-hand">\uD83D\uDC4B</span>';
+  ghost.innerHTML = '<span class="fg-icon">💬</span><span class="fg-hand">👋</span>';
   (fab.parentElement || document.body).appendChild(ghost);
   ghost.addEventListener("click", () => {
     const panel = document.getElementById("chatPanel");
@@ -968,7 +984,8 @@ function mountMascot() {
     return 1000;
   }
   function idleBox() {
-    return 4500 + Math.random() * 3000;
+    // A touch longer than before (was 4.5–7.5s) — calmer, not sleepy.
+    return 6500 + Math.random() * 4500;
   }
   function wave() {
     fab.classList.add("waving");
@@ -1024,6 +1041,83 @@ function mountMascot() {
     return roll();
   }
 
+  // ---- toast() hands messages here: THE mascot says them itself ----------
+  // The chat-bubble button morphs into the robot, feels the mood, types the
+  // message in its own speech bubble, then tucks back in. The scene loop is
+  // held off (via __mascotSayUntil) while it talks.
+  let sayToken = 0;
+  window.__mascotSay = function (message, type) {
+    const my = ++sayToken;
+    const text = String(message || "");
+    const mood =
+      type === "error" ? "sad" : type === "info" ? "worried" : type === "party" ? "dance" : "happy";
+    const flavor = type === "party" ? "party" : type === "error" ? "error" : "";
+    const hold = 2200 + Math.min(1800, text.length * 12);
+    window.__mascotSayUntil = Date.now() + text.length * 17 + hold + 1200;
+
+    clearMoves();
+    hideBubble();
+    setForm("bot");
+    const bot = fab.querySelector(".ebot");
+    if (bot) bot.className = "ebot " + mood;
+
+    bubble.className = "fab-bubble toast-mode show" + (flavor ? " " + flavor : "");
+    bubble.innerHTML =
+      (type === "party" ? '<b class="ct-title">LET\'S GOOOO!! 🎉</b>' : "") +
+      '<span class="ct-msg"></span><span class="type-caret"></span>' +
+      (flavor === "party" ? '<span class="burst"></span>' : "");
+
+    if (flavor === "party") {
+      const burst = bubble.querySelector(".burst");
+      const colors = ["#5b5bf0", "#7c3aed", "#0ea5e9", "#10b981", "#f59e0b", "#ef4444"];
+      for (let i = 0; i < 10; i++) {
+        const p = document.createElement("i");
+        const ang = (i / 10) * Math.PI * 2;
+        p.style.setProperty("--bx", Math.round(Math.cos(ang) * (60 + Math.random() * 40)) + "px");
+        p.style.setProperty("--by", Math.round(Math.sin(ang) * (40 + Math.random() * 30) - 20) + "px");
+        p.style.setProperty("--br", Math.round(Math.random() * 500 - 250) + "deg");
+        p.style.background = colors[i % colors.length];
+        p.style.animationDelay = 0.15 + Math.random() * 0.15 + "s";
+        burst.appendChild(p);
+      }
+      if (canPlay()) boops();
+    }
+
+    const msgEl = bubble.querySelector(".ct-msg");
+    const caret = bubble.querySelector(".type-caret");
+    let i = 0;
+    const t = setInterval(() => {
+      if (my !== sayToken) return clearInterval(t);
+      msgEl.textContent = text.slice(0, ++i);
+      if (i >= text.length) {
+        clearInterval(t);
+        caret.remove();
+        setTimeout(() => {
+          if (my !== sayToken) return;
+          bubble.classList.remove("show");
+          setTimeout(() => {
+            if (my !== sayToken) return;
+            bubble.className = "fab-bubble";
+            bubble.textContent = "";
+            if (bot) bot.className = "ebot";
+            setForm("box");
+            window.__mascotSayUntil = 0;
+          }, 280);
+        }, hold);
+      }
+    }, 17);
+  };
+  // A toast can arrive while a previous one is still up — the token above
+  // makes the newest one win; the interval/timeouts of the old one bail out.
+  const cancelSay = () => {
+    sayToken++;
+    window.__mascotSayUntil = 0;
+    bubble.className = "fab-bubble";
+    bubble.textContent = "";
+    const bot = fab.querySelector(".ebot");
+    if (bot) bot.className = "ebot";
+  };
+
   // Run the scenes one after another, forever. Pause while the chat is open.
   // minuteFlipBusy is set while the minute-flip overlay scene is running so that
   // chain() doesn't stomp over it.
@@ -1033,6 +1127,10 @@ function mountMascot() {
     let i = 0;
     (function step() {
       if (i >= steps.length) return done();
+      // Mid-announcement (toast): hold the show until the mascot finishes.
+      if (window.__mascotSayUntil && Date.now() < window.__mascotSayUntil) {
+        return setTimeout(step, 800);
+      }
       if (isChatOpen()) {
         clearMoves();
         setForm("box");
@@ -1042,18 +1140,22 @@ function mountMascot() {
       setTimeout(step, dur);
     })();
   }
+  // Every scene stays in the show — grow and the flight included — the
+  // rotation is just a touch calmer: one antic fewer, grow and the flight a
+  // little less often, one extra rest per cycle.
   function cycle() {
     chain(
       [
         toMascot,
         antic,
         antic,
-        () => (Math.random() < 0.5 ? grow() : antic()),
-        antic,
+        () => (Math.random() < 0.35 ? grow() : antic()),
         toBox,
         idleBox,
         toMascot,
-        takeOff,
+        () => (Math.random() < 0.65 ? takeOff() : antic()),
+        toBox,
+        idleBox,
       ],
       cycle
     );
@@ -1295,9 +1397,11 @@ function mountMascot() {
   setForm("box");
   setTimeout(cycle, 1000);
 
-  // When the chat opens, calm down and stay a plain chat button.
+  // When the chat opens, calm down and stay a plain chat button — and if a
+  // toast announcement was mid-sentence, drop it cleanly.
   const obs = new MutationObserver(() => {
     if (isChatOpen()) {
+      cancelSay();
       clearMoves();
       showGhost(false);
       setForm("box");
@@ -1418,14 +1522,7 @@ function mountChat() {
     <button class="chat-fab as-box" id="chatFab" type="button" aria-label="Open chat" title="Ask a question">
       <span class="fab-bubble" id="fabBubble" aria-hidden="true"></span>
       <span class="fab-box">\uD83D\uDCAC</span>
-      <span class="fab-mascot" aria-hidden="true">
-        <span class="fm-rotor"></span>
-        <span class="fm-antenna"></span>
-        <span class="fm-head"><i class="fm-eye"></i><i class="fm-eye"></i></span>
-        <span class="fm-body"></span>
-        <span class="fm-arm"></span>
-        <span class="fm-legs"><i></i><i></i></span>
-      </span>
+      <span class="fab-mascot" aria-hidden="true"><span class="fm-rotor"></span>${mascotHTML("")}</span>
     </button>
     <section class="chat-panel" id="chatPanel" aria-live="polite" hidden>
       <header class="chat-head">

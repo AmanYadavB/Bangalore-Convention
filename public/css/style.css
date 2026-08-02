@@ -639,11 +639,6 @@ a:hover {
   to { background-position: 200% center; }
 }
 
-@keyframes fadeUp {
-  from { opacity: 0; transform: translateY(14px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
 /* Subtle ambient colour drift. A soft tint layer sits behind all content and
    slowly cycles blue -> near-black -> amber -> red and back. Minimal on purpose
    so only the mood of the page shifts, never the layout or readable colours. */
@@ -1155,6 +1150,13 @@ tbody tr:hover {
   z-index: 60;
 }
 
+/* While the chat panel is OPEN it must outrank the nav bar (the mobile nav
+   sits at 66 so the menu frost passes under it). Scoped to chat-open so the
+   resting mascot still gets frosted over by the menu overlay (64). */
+body.chat-open .chat-widget {
+  z-index: 70;
+}
+
 .chat-fab {
   width: 58px;
   height: 58px;
@@ -1194,7 +1196,19 @@ tbody tr:hover {
   border-radius: 18px;
   box-shadow: var(--shadow);
   overflow: hidden;
-  animation: fadeUp 0.18s ease;
+  /* Same motion family as the nav: the panel tumbles out of the mascot's
+     corner every time the chat opens. */
+  transform-origin: bottom right;
+  animation: chat-tumble 0.4s cubic-bezier(0.34, 1.45, 0.64, 1);
+}
+
+@keyframes chat-tumble {
+  0% { opacity: 0; transform: translate(24px, 24px) rotate(4deg) scale(0.5); }
+  100% { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-panel { animation: none; }
 }
 
 .chat-panel[hidden] {
@@ -1910,7 +1924,14 @@ tbody tr:hover {
   height: 50px;
   opacity: 0;
   transform: scale(0.4) rotate(-10deg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
+
+/* The button's robot IS the site-wide full robot (mascotHTML) — one
+   character, one implementation. Scaled a touch to sit inside the pod. */
+.fab-mascot .ebot { zoom: 0.88; }
 .chat-fab.as-box .fab-box { opacity: 1; transform: scale(1); }
 .chat-fab.as-box .fab-mascot { opacity: 0; transform: scale(0.4); }
 .chat-fab.as-bot .fab-box { opacity: 0; transform: scale(0.4); }
@@ -1923,103 +1944,20 @@ tbody tr:hover {
 }
 .chat-fab.as-bot::before { opacity: 0; animation: none; }
 
-/* --- the robot itself (colours transition slowly for the demon morph) --- */
-.fm-head {
-  position: absolute;
-  top: 8px;
-  left: 4px;
-  width: 36px;
-  height: 26px;
-  border-radius: 10px;
-  background: linear-gradient(160deg, #eef2ff, #c7d2fe);
-  border: 1px solid color-mix(in srgb, var(--accent) 45%, #fff);
-  box-shadow: inset 0 -3px 6px rgba(99, 102, 241, 0.25), 0 3px 8px -3px rgba(30, 30, 60, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  transition: background 0.9s ease, border-color 0.9s ease, box-shadow 0.9s ease;
-}
-.fm-eye {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--accent-ink);
-  animation: mascotBlink 3.4s infinite;
-  transition: background 0.9s ease, box-shadow 0.9s ease;
-}
+/* --- the robot itself ---
+   The button's body parts (old fm-head/eye/antenna/body/arm/legs) are gone:
+   the robot inside the button is the shared .ebot component now. Only the
+   blink/dangle keyframes (used by .ebot too), the wave hook and the rotor
+   remain here. --- */
 @keyframes mascotBlink {
   0%, 92%, 100% { transform: scaleY(1); }
   95% { transform: scaleY(0.1); }
 }
-.fm-antenna {
-  position: absolute;
-  top: 0;
-  left: 50%;
-  width: 2px;
-  height: 9px;
-  transform: translateX(-50%);
-  background: color-mix(in srgb, var(--accent) 60%, #fff);
-}
-.fm-antenna::after {
-  content: "";
-  position: absolute;
-  top: -5px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--accent-2);
-  box-shadow: 0 0 8px 1px color-mix(in srgb, var(--accent-2) 70%, transparent);
-  animation: mascotBlink 2s infinite;
-}
-.fm-body {
-  position: absolute;
-  top: 31px;
-  left: 7px;
-  width: 30px;
-  height: 15px;
-  border-radius: 8px 8px 6px 6px;
-  background: linear-gradient(160deg, var(--accent), var(--accent-2));
-  box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.3), 0 4px 10px -4px rgba(99, 102, 241, 0.6);
-  transition: background 0.9s ease, box-shadow 0.9s ease;
-}
-.fm-arm {
-  position: absolute;
-  top: 32px;
-  right: -3px;
-  width: 11px;
-  height: 3px;
-  border-radius: 2px;
-  background: #fff;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-  transform-origin: left center;
-  transform: rotate(-8deg);
-}
-.chat-fab.waving .fm-arm { animation: fmWave 0.4s ease-in-out infinite; }
+.chat-fab.waving .eb-arm.r { animation: fmWave 0.4s ease-in-out infinite; }
 @keyframes fmWave {
   0%, 100% { transform: rotate(-8deg); }
   50% { transform: rotate(-52deg); }
 }
-.fm-legs {
-  position: absolute;
-  top: 45px;
-  left: 12px;
-  width: 20px;
-  height: 8px;
-}
-.fm-legs i {
-  position: absolute;
-  top: 0;
-  width: 5px;
-  height: 8px;
-  border-radius: 3px;
-  background: var(--accent-ink);
-  transition: background 0.9s ease;
-}
-.fm-legs i:first-child { left: 0; animation: mascotDangle 1.4s ease-in-out infinite; }
-.fm-legs i:last-child { right: 0; animation: mascotDangle 1.4s ease-in-out infinite reverse; }
 @keyframes mascotDangle {
   0%, 100% { transform: rotate(-10deg); }
   50% { transform: rotate(10deg); }
@@ -2140,6 +2078,53 @@ tbody tr:hover {
 .fab-bubble.show {
   opacity: 1;
   transform: translateY(0) scale(1);
+}
+
+/* Toast mode: toast() hands site messages to the mascot, and this same
+   bubble carries them — wider, left-aligned, typewriter text, party/error
+   tints, confetti burst. (See __mascotSay in common.js.) */
+.fab-bubble.toast-mode {
+  max-width: 280px;
+  text-align: left;
+  font-weight: 500;
+  font-size: 13.5px;
+  line-height: 1.5;
+  padding: 10px 14px 11px;
+  border-radius: 14px;
+}
+
+.fab-bubble .ct-title {
+  display: block;
+  font-weight: 800;
+  font-size: 14.5px;
+  margin-bottom: 2px;
+}
+
+.fab-bubble.party .ct-title {
+  background: linear-gradient(90deg, var(--accent), var(--accent-2), var(--accent-3));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.fab-bubble.party { border-color: color-mix(in srgb, var(--green) 40%, var(--border)); }
+.fab-bubble.error { border-color: color-mix(in srgb, var(--red) 40%, var(--border)); }
+
+.fab-bubble .burst {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.fab-bubble .burst i {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 6px;
+  height: 9px;
+  border-radius: 2px;
+  opacity: 0;
+  animation: ctBurst 0.9s cubic-bezier(0.16, 0.8, 0.4, 1) forwards;
 }
 /* Never show a floating message while the mascot is rolling or huge, even if
    a bubble timer from the previous scene is still running. */
