@@ -6,6 +6,7 @@
 // prompt's price line is generated from the same array so a price change can
 // never leave the bot quoting stale numbers.
 import { PRICING, findCategory, pricingPhrase } from "./shared/pricing.mjs";
+import { factsPromptBlock, groundingRuleBlock, STYLE_REMINDER } from "./shared/facts.mjs";
 import {
   b64urlEncode,
   randomToken,
@@ -3516,10 +3517,6 @@ async function handleApi(request, env, ctx) {
     const voice = body.voice === true;
     track(env, ctx, { chatRequests: 1, voiceChats: voice ? 1 : 0 });
 
-    const priceLines = PRICING.map(
-      (c) => `- ${c.name}: \u20b9${c.price} (${c.description})`
-    ).join("\n");
-
     const catLines = PRICING.map((c) => `${c.id} = ${c.name}`).join(", ");
 
     const content = [
@@ -3580,17 +3577,10 @@ async function handleApi(request, env, ctx) {
         "• They just registered → lose it completely, pure joy for them. 'LET'S GOOOOO you're in!! so happy for you fr'",
         "• Hesitant → just listen and reassure: 'totally okay to take your time — I'm here for whatever you need, zero pressure'",
         "",
-        "== WHAT YOU KNOW (reference material — deliver it in YOUR voice, never formally) ==",
-        "- Dates: 9th to 11th July 2027. Location: Bangalore, India.",
-        "- Anyone in recovery is welcome. Even non members are welcome.",
-        "- Registration categories and prices:",
-        priceLines,
-        "- Meals (breakfast, lunch, dinner, tea breaks) and all sessions included in every stay category.",
-        "- 'Without Stay' = full convention access, no accommodation.",
-        "- To register: Register page on this site, or I can book it right here in this chat.",
+        // Generated from shared/facts.mjs — edit facts there, never here.
+        factsPromptBlock(),
         "",
-        "== WHAT YOU DON'T KNOW (say this briefly and pivot — never dwell on it) ==",
-        "You don't know the exact venue address, schedule, speaker names, travel directions, refund policy, or phone numbers UNLESS they appear in the 'EXTRA KNOWLEDGE' section below. If not there, say 'not confirmed yet, will be shared with registered guests' and immediately offer something you CAN do. Never invent specifics.",
+        groundingRuleBlock(),
         "",
         "== AA & THE FELLOWSHIP (share warmly when asked, keep it brief) ==",
         "- AA: worldwide fellowship, started 1935 by Bill W. and Dr. Bob in Akron, Ohio. People sharing experience, strength and hope to recover from alcoholism.",
@@ -3699,11 +3689,20 @@ async function handleApi(request, env, ctx) {
     const fullSystem = { role: "system", content: content.join("\n") };
     const leanSystem = { role: "system", content: leanContent.join("\n") };
 
+    // The LENGTH rule sits mid-prompt where small models stop obeying it; a
+    // system reminder AFTER the user's last message (recency) is what actually
+    // keeps replies short. Every provider call sends its messages through this.
+    const styleReminder = { role: "system", content: STYLE_REMINDER };
+    const withStyle = (sys) => [sys, ...cleaned, styleReminder];
+
     // Only actual page-building work needs the heavy HTML model + big token
     // budget. Everything else (data questions, normal chat) uses the fast
     // model so replies come back quickly.
     const models = ["@cf/meta/llama-3.1-8b-instruct-fast", "@cf/zai-org/glm-4.7-flash"];
     const maxTokens = voice ? 170 : staff ? 340 : 280;
+    // 0.4 on every provider: low enough to curb sampling-driven fabrication
+    // and rambling, high enough that the mascot voice doesn't go flat.
+    const CHAT_TEMPERATURE = 0.4;
 
     // ---- Streaming path: return SSE so the client gets tokens as they arrive ---
     if (body.stream === true && !wantsPage) {
@@ -3754,8 +3753,9 @@ async function handleApi(request, env, ctx) {
         for (const model of models) {
           try {
             const aiStream = await env.AI.run(model, {
-              messages: [fullSystem, ...cleaned],
+              messages: withStyle(fullSystem),
               max_tokens: maxTokens,
+              temperature: CHAT_TEMPERATURE,
               stream: true,
             });
             // Workers AI normally returns a ReadableStream directly, but guard
@@ -3814,12 +3814,14 @@ async function handleApi(request, env, ctx) {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                  system_instruction: { parts: [{ text: leanSystem.content }] },
+                  // Gemini takes one system slot, so the style reminder is
+                  // appended there instead of as a trailing system message.
+                  system_instruction: { parts: [{ text: leanSystem.content + "\n\n" + STYLE_REMINDER }] },
                   contents: cleaned.map((m) => ({
                     role: m.role === "assistant" ? "model" : "user",
                     parts: [{ text: m.content }],
                   })),
-                  generationConfig: { maxOutputTokens: maxTokens },
+                  generationConfig: { maxOutputTokens: maxTokens, temperature: CHAT_TEMPERATURE },
                 }),
               }
             );
@@ -3858,8 +3860,9 @@ async function handleApi(request, env, ctx) {
         // Streaming failed for all models; try one plain (non-streaming) call before giving up.
         try {
           const fallback = await env.AI.run("@cf/meta/llama-3.1-8b-instruct-fast", {
-            messages: [leanSystem, ...cleaned],
+            messages: withStyle(leanSystem),
             max_tokens: maxTokens,
+            temperature: CHAT_TEMPERATURE,
           });
           const fb = ((fallback && (fallback.response || fallback.result)) || "")
             .replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
@@ -3886,9 +3889,9 @@ async function handleApi(request, env, ctx) {
               },
               body: JSON.stringify({
                 model: "llama-3.3-70b-versatile",
-                messages: [{ role: "system", content: leanSystem.content }, ...cleaned],
+                messages: withStyle({ role: "system", content: leanSystem.content }),
                 max_tokens: maxTokens,
-                temperature: 0.7,
+                temperature: CHAT_TEMPERATURE,
                 stream: true,
               }),
             });
@@ -3954,8 +3957,9 @@ async function handleApi(request, env, ctx) {
 
     const runModel = async (sys, model, tokens) => {
       const result = await env.AI.run(model, {
-        messages: [sys, ...cleaned],
+        messages: withStyle(sys),
         max_tokens: tokens,
+        temperature: CHAT_TEMPERATURE,
       });
       let reply = ((result && (result.response || result.result)) || "").trim();
       // Some reasoning models wrap their thoughts in <think>...</think>; drop it.
@@ -4055,6 +4059,7 @@ async function handleApi(request, env, ctx) {
             role: m.role,
             content: m.content,
           })),
+          styleReminder,
         ];
 
         const groqRes = await fetch(
@@ -4069,7 +4074,7 @@ async function handleApi(request, env, ctx) {
               model: "llama-3.3-70b-versatile",
               messages: groqMessages,
               max_tokens: maxTokens,
-              temperature: 0.7,
+              temperature: CHAT_TEMPERATURE,
             }),
           }
         );

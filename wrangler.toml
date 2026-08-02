@@ -33,8 +33,11 @@ database_name = "convention-db"
 database_id = "60bc0f91-4595-478b-a576-1841ebb41588"
 
 # Cloudflare Workers AI powers the chat assistant (env.AI).
+# remote = true only affects `wrangler dev`: it proxies AI calls to Cloudflare
+# (there is no local AI runtime), so the chatbot works in local dev too.
 [ai]
 binding = "AI"
+remote = true
 
 # Ops dashboard emails: one cron ticks every 10 minutes and the Worker decides
 # what's due — the daily digest at DIGEST_TIME_IST (set below, plain IST time,
