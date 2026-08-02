@@ -41,7 +41,13 @@
       <div class="section-head">
         <h2>What's Included</h2>
       </div>
-      <div class="grid cols-3">
+      <!-- Phones: the three cards collapse into one cycling spotlight card
+           (the .inc-spot below); desktop shows this grid as before. -->
+      <div class="inc-spot">
+        <div class="inc-card" id="incCard"></div>
+        <div class="inc-dots" id="incDots" aria-hidden="true"></div>
+      </div>
+      <div class="grid cols-3 inc-grid">
         <div class="card feature-card">
           <div class="feature-icon">🍽️</div>
           <h3>Meals &amp; Refreshments</h3>
@@ -228,6 +234,36 @@
         document.addEventListener("keydown", (e) => {
           if (e.key === "Escape") closeBurst();
         });
+      })();
+
+      // ---- Mobile What's Included: one cycling card ----------------------
+      // On phones the .inc-grid is hidden and this compact spotlight cycles
+      // through the same three points with the tumble (desktop never sees it).
+      (() => {
+        const INC = [
+          ["🍽️", "Meals & Refreshments", "Breakfast, lunch, dinner and tea breaks — covered all three days."],
+          ["🎤", "Sessions & Speakers", "Open meetings, workshops and speaker sharings across the weekend."],
+          ["🤝", "Fellowship", "Marathon meetings, entertainment evenings and time to connect."],
+        ];
+        const card = document.getElementById("incCard");
+        const dots = document.getElementById("incDots");
+        dots.innerHTML = INC.map(() => "<i></i>").join("");
+        let i = 0;
+        function show(n) {
+          i = n;
+          card.innerHTML =
+            `<span class="inc-ic" aria-hidden="true">${INC[n][0]}</span>` +
+            `<span><b>${INC[n][1]}</b><small>${INC[n][2]}</small></span>`;
+          card.classList.remove("anim");
+          void card.offsetWidth;
+          card.classList.add("anim");
+          dots.querySelectorAll("i").forEach((d, j) => d.classList.toggle("on", j === n));
+        }
+        show(0);
+        setInterval(() => {
+          // skip the work while hidden (backgrounded tab or desktop layout)
+          if (!document.hidden && card.offsetParent !== null) show((i + 1) % INC.length);
+        }, 3200);
       })();
 
       // ---- Memories: the living photo wall -------------------------------

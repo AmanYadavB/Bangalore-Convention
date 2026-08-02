@@ -3339,6 +3339,142 @@ select.dd-native {
   box-shadow: none;
 }
 
+/* ================= Register: the Ticket Wizard =================
+   R1+R2 combo: three guided steps, and a live ticket that every step
+   stamps — category art + price, then the name as it's typed, then the
+   final step IS the ticket with Confirm & Pay. */
+.reg-wizard {
+  display: grid;
+  grid-template-columns: 1.25fr 1fr;
+  gap: 18px;
+  align-items: start;
+}
+
+.reg-wizard > .wiz-col { grid-column: 1; grid-row: 1; }
+.reg-wizard > .ticket-col { grid-column: 2; grid-row: 1; }
+
+.reg-steps {
+  display: flex; align-items: center; gap: 8px;
+  margin: 0 0 14px;
+  font-size: 12px; font-weight: 800;
+}
+.reg-stp { display: flex; align-items: center; gap: 7px; color: var(--muted); white-space: nowrap; }
+.reg-stp i {
+  width: 24px; height: 24px; border-radius: 50%; font-style: normal;
+  display: grid; place-items: center; font-size: 11px;
+  background: var(--card); border: 1.5px solid var(--border);
+}
+.reg-stp.on { color: var(--text); }
+.reg-stp.on i,
+.reg-stp.done i {
+  background: linear-gradient(140deg, var(--accent-3), var(--accent) 55%, var(--accent-2));
+  color: #fff; border-color: transparent;
+}
+.reg-steps .reg-ln { flex: 1; height: 2px; background: var(--border); border-radius: 2px; min-width: 10px; }
+
+.wiz-stage > * { animation: wiz-tum 0.45s cubic-bezier(0.34, 1.45, 0.64, 1); }
+@keyframes wiz-tum {
+  0% { opacity: 0; transform: translate(24px, -20px) rotate(4deg) scale(0.65); }
+  100% { opacity: 1; transform: none; }
+}
+
+.cat-choice { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.catcard {
+  border: 1.5px solid var(--border); border-radius: 14px; overflow: hidden; cursor: pointer;
+  background: var(--card); font: inherit; color: var(--text); text-align: left; padding: 0;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+.catcard:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--accent) 50%, var(--border)); }
+.catcard.sel { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent); }
+.catcard .cat-ph { height: 62px; display: grid; place-items: center; font-size: 24px; color: #fff; text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); }
+.catcard .cat-nm { display: block; padding: 8px 11px 2px; font-size: 12.5px; font-weight: 700; }
+.catcard .cat-pr { display: block; padding: 0 11px 9px; font-size: 14.5px; font-weight: 800; }
+
+.wiz-nav { display: flex; justify-content: space-between; gap: 10px; margin-top: 16px; }
+.rev-row { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 13.5px; }
+.rev-row:last-of-type { border-bottom: 0; }
+
+.ticket {
+  border-radius: 18px; overflow: hidden;
+  border: 1px solid var(--border); background: var(--card);
+  box-shadow: 0 20px 42px -16px rgba(15, 20, 45, 0.4);
+  position: sticky; top: 84px;
+}
+.ticket.retum { animation: wiz-tum 0.5s cubic-bezier(0.34, 1.45, 0.64, 1); }
+.tk-band { height: 84px; display: grid; place-items: center; font-size: 32px; color: #fff; text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3); transition: background 0.3s ease; }
+.tk-body { padding: 13px 16px 9px; }
+.tk-kicker { font-size: 9.5px; letter-spacing: 1.6px; text-transform: uppercase; color: var(--muted); font-weight: 800; }
+.tk-name { font-size: 17px; font-weight: 800; letter-spacing: -0.01em; min-height: 24px; overflow-wrap: anywhere; }
+.tk-name .tk-phname { color: color-mix(in srgb, var(--muted) 60%, transparent); font-weight: 600; }
+.tk-meta { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-top: 5px; font-size: 12px; color: var(--muted); }
+.tk-meta b { font-size: 18px; color: var(--text); font-weight: 800; white-space: nowrap; }
+.tk-perf { border-top: 2px dashed var(--border); margin-top: 9px; position: relative; }
+.tk-perf::before,
+.tk-perf::after {
+  content: ""; position: absolute; top: -8px; width: 16px; height: 16px; border-radius: 50%;
+  background: var(--bg);
+}
+.tk-perf::before { left: -9px; }
+.tk-perf::after { right: -9px; }
+.tk-stub { display: flex; justify-content: space-between; align-items: center; padding: 9px 16px 13px; }
+.tk-code { font-size: 10.5px; font-weight: 800; letter-spacing: 1px; color: var(--muted); }
+.tk-bars { display: flex; gap: 2px; align-items: flex-end; }
+.tk-bars i { width: 2.5px; background: var(--text); opacity: 0.8; }
+.tk-hint { font-size: 11.5px; color: var(--muted); text-align: center; margin: 10px 0 0; }
+
+/* Mobile: a compact mini-ticket docks at the top until the final step,
+   where the full ticket takes over above the pay controls. */
+.mini-ticket {
+  display: none;
+  align-items: center; gap: 10px;
+  background: var(--card); border: 1px solid var(--border); border-radius: 13px;
+  padding: 9px 12px; margin-bottom: 12px;
+  box-shadow: var(--shadow-sm);
+  position: sticky; top: 74px; z-index: 5;
+}
+.mini-ticket.retum { animation: wiz-tum 0.45s cubic-bezier(0.34, 1.45, 0.64, 1); }
+.mt-ico { width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; font-size: 17px; color: #fff; flex-shrink: 0; transition: background 0.3s ease; }
+.mt-txt { min-width: 0; }
+.mt-name { font-size: 12.5px; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mt-cat { font-size: 10px; color: var(--muted); font-weight: 600; }
+.mt-amt { margin-left: auto; font-size: 14px; font-weight: 800; white-space: nowrap; }
+
+@media (max-width: 700px) {
+  .reg-wizard { grid-template-columns: 1fr; }
+  .reg-wizard > .wiz-col,
+  .reg-wizard > .ticket-col { grid-column: auto; grid-row: auto; }
+  .reg-wizard .ticket-col { display: none; }
+  .reg-wizard.at-ticket .ticket-col { display: block; }
+  .reg-wizard .ticket { position: static; }
+  .reg-wizard .mini-ticket { display: flex; }
+  .reg-wizard.at-ticket .mini-ticket { display: none; }
+}
+
+/* Mobile home: "What's Included" collapses into one cycling spotlight card
+   (like the hero's category card) instead of three stacked cards. */
+.inc-spot { display: none; }
+
+@media (max-width: 640px) {
+  .inc-grid { display: none; }
+  .inc-spot { display: block; margin: 0 0 8px; }
+  .inc-card {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+    padding: 12px 15px; box-shadow: var(--shadow-sm);
+  }
+  .inc-card.anim { animation: wiz-tum 0.5s cubic-bezier(0.34, 1.45, 0.64, 1); }
+  .inc-card .inc-ic { font-size: 23px; flex-shrink: 0; }
+  .inc-card b { display: block; font-size: 13.5px; }
+  .inc-card small { color: var(--muted); font-size: 11.5px; line-height: 1.45; display: block; }
+  .inc-dots { display: flex; gap: 6px; justify-content: center; margin-top: 9px; }
+  .inc-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--border); transition: background 0.2s ease; }
+  .inc-dots i.on { background: var(--accent); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wiz-stage > *, .ticket.retum, .mini-ticket.retum, .inc-card.anim { animation: none; }
+}
+
 /* G-a: on phones the wall becomes a tight two-column masonry instead of a
    single plain stack (three 220px columns never fit a phone). Lives after
    the base .mem-wall rule so the shorthand doesn't override it. */
