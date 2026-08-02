@@ -118,7 +118,9 @@ function formatDate(iso) {
 // password, plus the raw DEV_KEY in localStorage) is gone. Do not reintroduce
 // any auth state in localStorage: it is readable by any script on the origin.
 
-const ROLE_ORDER = { viewer: 1, admin: 2, owner: 3 };
+// Mirrors ROLE_RANK in shared/auth-core.mjs. Two groups: the committee, and
+// developers who additionally get Ops and Feed AI.
+const ROLE_ORDER = { staff: 1, developer: 2 };
 
 // Display-only cache so the nav can render on first paint instead of flashing
 // the signed-out menu. sessionStorage, not localStorage, and reconciled
@@ -207,13 +209,13 @@ function goToLogin() {
 const NAV_LINKS = [
   { href: "index.html", label: "Home", key: "home" },
   { href: "register.html", label: "Register", key: "register" },
-  { href: "reflections.html", label: "Reflections", key: "reflections", need: "viewer" },
-  { href: "registrations.html", label: "Registrations", key: "registrations", need: "viewer" },
-  { href: "dashboard.html", label: "Dashboard", key: "dashboard", need: "viewer" },
-  { href: "expenses.html", label: "Expenses", key: "expenses", need: "viewer" },
-  { href: "ops.html", label: "Ops", key: "ops", need: "admin" },
-  { href: "pages.html", label: "Feed AI", key: "pages", need: "owner" },
-  { href: "team.html", label: "Team", key: "team", need: "owner" },
+  { href: "reflections.html", label: "Reflections", key: "reflections", need: "developer" },
+  { href: "registrations.html", label: "Registrations", key: "registrations", need: "staff" },
+  { href: "dashboard.html", label: "Dashboard", key: "dashboard", need: "staff" },
+  { href: "expenses.html", label: "Expenses", key: "expenses", need: "staff" },
+  { href: "ops.html", label: "Ops", key: "ops", need: "developer" },
+  { href: "pages.html", label: "Feed AI", key: "pages", need: "developer" },
+  { href: "account.html", label: "Account", key: "account", need: "staff" },
 ];
 
 function renderNav(active) {
@@ -433,15 +435,10 @@ function mountMascot() {
     fab.classList.toggle("as-bot", form === "bot");
   }
   function clearMoves() {
-    fab.classList.remove(
-      "waving", "rolling", "jumping", "huge", "demonic", "flying",
-      "mf-windup", "mf-arrive", "mf-idle-wait", "mf-throw", "mf-victory", "mf-land"
-    );
-    // // Clear any inline styles set during the minute-flip scene.
-    // fab.style.transform = '';
-    // fab.style.transition = '';
-    // fab.style.removeProperty('--mf-dx');
-    // fab.style.removeProperty('--mf-dy');
+    // The six mf-* classes that used to be listed here belonged to the
+    // commented-out "minute flip" scene and are defined nowhere in the
+    // stylesheet, so removing them was pure work on every animation frame.
+    fab.classList.remove("waving", "rolling", "jumping", "huge", "demonic", "flying");
   }
 
   // Each "scene" performs an action and returns how long it lasts (ms).
@@ -813,15 +810,20 @@ async function openRazorpay(record, onSuccess) {
     }).catch(() => null);
   }
 
-  // Ask the backend to create a Razorpay order.
+  // Ask the backend to create a Razorpay order. The amount is NOT sent — the
+  // server prices the order from the stored registration, so a tampered value
+  // here would be ignored anyway.
   let orderData;
   try {
     orderData = await api("/api/payment/create-order", {
       method: "POST",
-      body: JSON.stringify({ registrationId: record.id, amount: record.amount }),
+      body: JSON.stringify({ registrationId: record.id }),
     });
-  } catch (_) {
-    // Network error or backend unavailable — fall through without payment.
+  } catch (err) {
+    // Say so. This used to fall through silently to onSuccess(), so a failed
+    // order looked exactly like a completed one.
+    console.warn("[payment] create-order failed:", err);
+    toast("We couldn't start the payment. Your registration is saved — you can pay at the venue.", "error");
     onSuccess(record);
     return;
   }
@@ -862,7 +864,16 @@ async function openRazorpay(record, onSuccess) {
           }),
         });
         verified = true;
-      } catch (_) { /* verification error — still show confirmation */ }
+      } catch (err) {
+        // The money left their account but we could not confirm it. Saying
+        // nothing here is the worst outcome of all — they would see a plain
+        // "Pending" and might pay a second time.
+        console.error("[payment] verify failed:", err);
+        toast(
+          "Payment received, but we couldn't confirm it automatically. Please contact the organisers with your payment id — do not pay again.",
+          "error"
+        );
+      }
       onSuccess({ ...record, paid: verified, paymentId: response.razorpay_payment_id });
     },
 
@@ -875,7 +886,9 @@ async function openRazorpay(record, onSuccess) {
   try {
     const rzp = new window.Razorpay(options);
     rzp.open();
-  } catch (_) {
+  } catch (err) {
+    console.warn("[payment] checkout failed to open:", err);
+    toast("The payment window couldn't open. Your registration is saved — you can pay at the venue.", "error");
     onSuccess(record);
   }
 }
@@ -1108,7 +1121,7 @@ function mountChat() {
     if (!greeted) {
       greeted = true;
       let greeting;
-      if (hasRole("owner")) {
+      if (hasRole("developer")) {
         greeting = "owner mode! ask me anything — registrations, money, expenses. feed me more knowledge on the Feed AI page and I'll use it instantly.";
       } else if (isSignedIn()) {
         greeting = "hey! got live numbers ready — registrations, payments, pending, expenses. what do you need?";
@@ -1159,15 +1172,23 @@ function mountChat() {
 
   // ---- Agentic actions ------------------------------------------------------
   // Where the bot can navigate: keyword -> page file.
+  // Every page the assistant can offer to open. `need` mirrors PROTECTED_PAGES
+  // on the server — asking to open a page you cannot reach used to silently do
+  // nothing, and half the site was missing from this map entirely.
   const PAGES = {
     home: "index.html",
     index: "index.html",
     register: "register.html",
     registration: "register.html",
     pricing: "index.html#pricing",
+    privacy: "privacy.html",
     dashboard: "dashboard.html",
     registrations: "registrations.html",
     expenses: "expenses.html",
+    account: "account.html",
+    reflections: "reflections.html",
+    ops: "ops.html",
+    feed: "pages.html",
   };
 
   const NAV_LABELS = {
@@ -1176,9 +1197,25 @@ function mountChat() {
     register: "Register",
     registration: "Register",
     pricing: "Pricing",
+    privacy: "Privacy",
     dashboard: "Dashboard",
     registrations: "Registrations",
     expenses: "Expenses",
+    account: "Account",
+    reflections: "Reflections",
+    ops: "Ops",
+    feed: "Feed AI",
+  };
+
+  // Minimum role for the pages that are gated; absent means public.
+  const PAGE_NEEDS = {
+    dashboard: "staff",
+    registrations: "staff",
+    expenses: "staff",
+    account: "staff",
+    reflections: "developer",
+    ops: "developer",
+    feed: "developer",
   };
 
   // Did the user's last message actually ask to move to a page? Guards against
@@ -1404,6 +1441,13 @@ function mountChat() {
       const target = PAGES[key];
       if (!target) return;
       const label = NAV_LABELS[key] || key;
+      // Don't offer a door the visitor can't walk through — the server would
+      // just bounce them to the sign-in page.
+      const need = PAGE_NEEDS[key];
+      if (need && !hasRole(need)) {
+        addMsg("assistant", "The " + label + " page is for the organising team — you'd need to sign in first.");
+        return;
+      }
       if (isCurrentPage(target)) {
         addMsg("assistant", "You're already on the " + label + " page.");
         return;
@@ -1645,7 +1689,7 @@ function mountChat() {
       // actually fix it. The server only sends `detail` to signed-in staff.
       if (replyDetail) {
         console.error("[chat/voice] server detail:", replyDetail);
-        if (hasRole("owner")) addMsg("assistant", "\uD83D\uDEE0\ufe0f debug: " + replyDetail);
+        if (hasRole("developer")) addMsg("assistant", "\uD83D\uDEE0\ufe0f debug: " + replyDetail);
       }
 
       // SSE sent an error event (AI models unavailable) — show friendly message, not "network error".

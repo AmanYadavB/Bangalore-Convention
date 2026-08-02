@@ -31,7 +31,13 @@
               </div>
               <div class="field">
                 <label for="phone">Phone *</label>
-                <input id="phone" name="phone" required placeholder="10-digit number" />
+                <!-- The label promised "10-digit" but nothing enforced it,
+                     client or server. inputmode gets the numeric keypad on
+                     phones; the server checks the same rule. -->
+                <input id="phone" name="phone" type="tel" required
+                       inputmode="numeric" pattern="[0-9]{10}" maxlength="10"
+                       autocomplete="tel" title="10 digits, no spaces or +91"
+                       placeholder="10-digit number" />
               </div>
               <div class="field">
                 <label for="city">City</label>
@@ -99,8 +105,18 @@
       }
 
       (async () => {
-        PRICING = await api("/api/pricing");
         const sel = document.getElementById("categoryId");
+        try {
+          PRICING = await api("/api/pricing");
+        } catch (err) {
+          // Without this the promise rejected unhandled, leaving an empty
+          // category list and no explanation at all on screen.
+          sel.innerHTML = '<option value="">Couldn\'t load categories</option>';
+          const btn = document.querySelector('#reg-form button[type="submit"]');
+          if (btn) btn.disabled = true;
+          toast("Couldn't load ticket categories. Please refresh the page.", "error");
+          return;
+        }
         sel.innerHTML =
           '<option value="" disabled selected>Select a category</option>' +
           PRICING.map(

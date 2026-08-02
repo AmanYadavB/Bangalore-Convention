@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Registrations · Bangalore Convention</title>
     <link rel="stylesheet" href="css/style.css" />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
   </head>
   <body>
     <div id="nav"></div>
@@ -42,7 +43,7 @@
               <th>Amount</th>
               <th>Status</th>
               <th>Registered</th>
-              <th></th>
+              <th class="col-actions"></th>
             </tr>
           </thead>
           <tbody id="rows">
@@ -55,7 +56,7 @@
     <script src="js/common.js"></script>
     <script>
       // No client-side gate: the Worker refuses to serve this page at all
-      // without a session that has at least the viewer role.
+      // without a session that has at least the staff role.
       mountNav("registrations");
       let ALL = [];
 
@@ -104,7 +105,7 @@
             <td>${money(r.amount)}</td>
             <td><span class="pill ${r.paid ? "paid" : "pending"}">${r.paid ? "Paid" : "Pending"}</span></td>
             <td class="muted">${formatDate(r.createdAt)}</td>
-            <td style="white-space:nowrap">
+            <td class="col-actions">
               <button class="btn small" data-toggle="${r.id}">${r.paid ? "Mark Unpaid" : "Mark Paid"}</button>
               <button class="btn danger" data-del="${r.id}">Delete</button>
             </td>
@@ -133,6 +134,8 @@
           if (toggle) {
             const id = toggle.getAttribute("data-toggle");
             const cur = ALL.find((r) => r.id === id);
+            // The row can be stale if the list reloaded underneath us.
+            if (!cur) return toast("That row is out of date — refresh the page.", "error");
             const updated = await api(`/api/registrations/${id}`, {
               method: "PATCH",
               body: JSON.stringify({ paid: !cur.paid }),
@@ -156,12 +159,20 @@
       document.getElementById("export").addEventListener("click", () => {
         const rows = applyFilters();
         if (!rows.length) return toast("Nothing to export", "error");
+        // Excel and Sheets execute any cell beginning with = + - @ (or a
+        // leading tab/CR) as a formula. A registrant can put anything in the
+        // notes field, so prefix those with an apostrophe to neutralise them.
+        const csvCell = (v) => {
+          let s = String(v === null || v === undefined ? "" : v);
+          if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+          return `"${s.replace(/"/g, '""')}"`;
+        };
         const header = ["Name", "Email", "Phone", "City", "Gender", "Category", "Amount", "Paid", "Registered", "Notes"];
         const csv = [header.join(",")]
           .concat(
             rows.map((r) =>
               [r.name, r.email, r.phone, r.city, r.gender, r.categoryName, r.amount, r.paid ? "Yes" : "No", r.createdAt, r.notes]
-                .map((v) => `"${String(v || "").replace(/"/g, '""')}"`)
+                .map(csvCell)
                 .join(",")
             )
           )

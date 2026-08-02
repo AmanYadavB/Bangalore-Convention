@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Daily Reflections · Bangalore Convention</title>
     <link rel="stylesheet" href="css/style.css" />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
     <style>
       /* Follow card: the one thing this page exists to get people to tap. */
       .follow-card { text-align: center; }
@@ -309,7 +310,7 @@
         listEl.innerHTML = "";
         // Viewers can read reflections; composing, broadcasting (which costs
         // money per recipient) and deleting need admin.
-        const dev = hasRole("admin");
+        const dev = hasRole("developer");
 
         items.forEach((r) => {
           const card = document.createElement("div");
@@ -434,7 +435,7 @@
       // flickering in after the list has already drawn.
       (async () => {
         await requireUser();
-        if (hasRole("admin")) wireCompose();
+        if (hasRole("developer")) wireCompose();
         load();
       })();
     </script>

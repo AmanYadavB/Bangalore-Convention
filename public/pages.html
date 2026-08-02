@@ -54,7 +54,7 @@
                 <th>Title</th>
                 <th>Preview</th>
                 <th>Added</th>
-                <th></th>
+                <th class="col-actions"></th>
               </tr>
             </thead>
             <tbody id="feed-rows">
@@ -73,7 +73,7 @@
       const bodyEl = document.getElementById("dev-body");
 
       // The developer-key prompt is gone. This page is only served to a
-      // signed-in session with the owner role: everything fed here is injected
+      // signed-in session with the developer role: everything fed here is injected
       // into the assistant's system prompt on every conversation, so it is a
       // privileged surface, not a content-editing one.
 

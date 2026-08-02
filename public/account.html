@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Your account · Bangalore Convention</title>
+    <link rel="stylesheet" href="css/style.css" />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  </head>
+  <body>
+    <div id="nav"></div>
+
+    <main class="container">
+      <h1 class="page-title">Your account</h1>
+      <p class="page-sub" id="whoami">Loading…</p>
+
+      <div class="card">
+        <div class="section-head" style="margin: 0 0 14px">
+          <h2 style="margin: 0">Password</h2>
+        </div>
+        <p class="muted" style="margin-top: 0">
+          Optional. You can keep signing in with Google or an emailed link — a
+          password is just a third way in, useful when email is slow.
+        </p>
+        <form id="pwForm" class="form-grid">
+          <div class="field full" id="currentField" hidden>
+            <label for="currentPassword">Current password</label>
+            <input type="password" id="currentPassword" autocomplete="current-password" />
+          </div>
+          <div class="field full">
+            <label for="newPassword">New password</label>
+            <input type="password" id="newPassword" autocomplete="new-password"
+                   placeholder="At least 12 characters" />
+          </div>
+          <div class="field full">
+            <button class="btn primary" type="submit" id="savePassword">Save password</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="card">
+        <div class="section-head" style="margin: 0 0 14px">
+          <h2 style="margin: 0">Where you're signed in</h2>
+          <button class="btn ghost small" id="revokeOthers" type="button">Sign out everywhere else</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Method</th>
+                <th>Started</th>
+                <th>Last seen</th>
+                <th>Device</th>
+              </tr>
+            </thead>
+            <tbody id="sessionRows">
+              <tr><td colspan="4" class="empty">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-head" style="margin: 0 0 14px">
+          <h2 style="margin: 0">Access</h2>
+        </div>
+        <p class="muted" style="margin: 0">
+          Who can sign in is set in the site's configuration, not here. To add
+          or remove someone, edit <code>STAFF_EMAILS</code> or
+          <code>DEVELOPER_EMAILS</code> in <code>wrangler.toml</code> and deploy.
+        </p>
+      </div>
+    </main>
+
+    <script src="js/common.js"></script>
+    <script>
+      mountNav("account");
+
+      function when(ts) {
+        if (!ts) return "—";
+        const d = new Date(Number(ts));
+        if (isNaN(d)) return "—";
+        return d.toLocaleString("en-IN", {
+          day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
+        });
+      }
+
+      function shortDevice(ua) {
+        const s = String(ua || "");
+        if (/iPhone|iPad/i.test(s)) return "iPhone / iPad";
+        if (/Android/i.test(s)) return "Android";
+        if (/Macintosh/i.test(s)) return "Mac";
+        if (/Windows/i.test(s)) return "Windows";
+        if (/Linux/i.test(s)) return "Linux";
+        return "Unknown";
+      }
+
+      function paintMe() {
+        const me = currentUser();
+        const el = document.getElementById("whoami");
+        if (!me) { el.textContent = "Not signed in."; return; }
+        el.innerHTML =
+          escapeHtml(me.email) + " · " +
+          (me.role === "developer" ? "developer" : "committee") +
+          (me.hasPassword ? " · password set" : " · no password yet");
+        document.getElementById("currentField").hidden = !me.hasPassword;
+      }
+
+      async function loadSessions() {
+        const rows = document.getElementById("sessionRows");
+        try {
+          const data = await api("/api/auth/sessions");
+          const list = data.sessions || [];
+          if (!list.length) {
+            rows.innerHTML = '<tr><td colspan="4" class="empty">No active sessions.</td></tr>';
+            return;
+          }
+          rows.innerHTML = list.map(function (s) {
+            return "<tr>" +
+              "<td>" + escapeHtml(s.method || "—") +
+                (s.current ? ' <span class="muted">(this one)</span>' : "") + "</td>" +
+              "<td>" + escapeHtml(when(s.createdAt)) + "</td>" +
+              "<td>" + escapeHtml(when(s.lastSeenAt)) + "</td>" +
+              "<td>" + escapeHtml(shortDevice(s.ua)) + "</td>" +
+            "</tr>";
+          }).join("");
+        } catch (err) {
+          rows.innerHTML = '<tr><td colspan="4" class="empty">' + escapeHtml(err.message) + "</td></tr>";
+        }
+      }
+
+      document.getElementById("pwForm").addEventListener("submit", async function (e) {
+        e.preventDefault();
+        const btn = document.getElementById("savePassword");
+        const password = document.getElementById("newPassword").value;
+        const currentPassword = document.getElementById("currentPassword").value;
+        if (!password) return toast("Type a password first", "error");
+        btn.disabled = true;
+        try {
+          await api("/api/auth/password/set", {
+            method: "POST",
+            body: JSON.stringify({ password: password, currentPassword: currentPassword }),
+          });
+          document.getElementById("newPassword").value = "";
+          document.getElementById("currentPassword").value = "";
+          toast("Password saved — your other sessions were signed out");
+          await refreshUser();
+          paintMe();
+          loadSessions();
+        } catch (err) {
+          toast(err.message, "error");
+        } finally {
+          btn.disabled = false;
+        }
+      });
+
+      document.getElementById("revokeOthers").addEventListener("click", async function () {
+        if (!confirm("Sign out every other device?")) return;
+        try {
+          await api("/api/auth/sessions", { method: "DELETE" });
+          toast("Other sessions signed out");
+          loadSessions();
+        } catch (err) {
+          toast(err.message, "error");
+        }
+      });
+
+      (async function () {
+        await requireUser();
+        paintMe();
+        loadSessions();
+      })();
+    </script>
+  </body>
+</html>

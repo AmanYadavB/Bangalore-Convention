@@ -68,11 +68,23 @@ crons = ["*/10 * * * *"]
 # headers. NEVER derived from the Host header (host-header injection).
 AUTH_ORIGIN = "https://biaac.com"
 
-# The first account that can sign in. On the very first Google sign-in or
-# sign-in-link request matching this address, and ONLY while the staff table is
-# empty, it is created as an owner. The branch goes permanently inert after
-# that. Owners then invite everyone else from the Team page.
-BOOTSTRAP_OWNER_EMAIL = "amankumaryadavasasmd@gmail.com"
+# WHO CAN SIGN IN, AND AS WHAT.
+#
+# These two lists are the entire access-control system. There is no invite
+# flow and no admin screen for managing people: for a committee this size,
+# two lists you can read at a glance are safer than a UI nobody audits.
+#
+# Anyone NOT on a list is refused, even with a valid Google account.
+# Add or remove an email and redeploy; removal takes effect on that person's
+# very next request, because the role is re-checked against config every time.
+#
+# DEVELOPER_EMAILS also get Ops (email digests, Deepgram/Cloudflare billing
+# figures) and Feed AI (the knowledge base injected into every chat reply).
+DEVELOPER_EMAILS = "amankumaryadavasasmd@gmail.com"
+
+# The organising committee: registrations, dashboard, expenses, reflections.
+# Comma-separated, e.g. "asha@example.com, ravi@example.com"
+STAFF_EMAILS = ""
 
 # Google OAuth client id (public — the secret is set with `wrangler secret put`).
 # Create at console.cloud.google.com -> APIs & Services -> Credentials ->

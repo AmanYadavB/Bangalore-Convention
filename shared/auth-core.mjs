@@ -259,11 +259,29 @@ export function isValidEmail(raw) {
   return e.length >= 6 && e.length <= 254 && /^[^\s@]+@[^\s@.]+\.[^\s@]+$/.test(e);
 }
 
-export const ROLE_RANK = { viewer: 1, admin: 2, owner: 3 };
+// Two groups, and only two.
+//
+//   staff     — the organising committee. Registrations, dashboard, expenses,
+//               reflections. Everything they need to run the event.
+//   developer — the same, plus Ops (email digests, Deepgram/Cloudflare
+//               figures) and Feed AI (the knowledge base injected into every
+//               chat system prompt). Both are technical surfaces.
+//
+// Who is in which group is decided by config, not by a database row or an
+// invite flow — see resolveRoleFromConfig() in worker.js.
+export const ROLE_RANK = { staff: 1, developer: 2 };
 export const ROLES = Object.keys(ROLE_RANK);
 
 export function roleAtLeast(role, needed) {
   return (ROLE_RANK[role] || 0) >= (ROLE_RANK[needed] || 0);
+}
+
+// Parses a comma-separated allowlist from config into normalised emails.
+export function parseEmailList(raw) {
+  return String(raw || "")
+    .split(",")
+    .map((e) => normalizeEmail(e))
+    .filter((e) => e.length > 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -275,13 +293,16 @@ export function roleAtLeast(role, needed) {
 // into every chat system prompt), so it sits at owner.
 
 export const PROTECTED_PAGES = {
-  "/registrations.html": "viewer",
-  "/dashboard.html": "viewer",
-  "/expenses.html": "viewer",
-  "/reflections.html": "viewer",
-  "/ops.html": "admin",
-  "/pages.html": "owner",
-  "/team.html": "owner",
+  "/registrations.html": "staff",
+  "/dashboard.html": "staff",
+  "/expenses.html": "staff",
+  "/account.html": "staff",
+  // Developer surfaces. Ops runs the email digests and exposes billing
+  // figures; Feed AI writes straight into the assistant's system prompt; and
+  // Reflections can fire a PAID WhatsApp broadcast, one message per recipient.
+  "/reflections.html": "developer",
+  "/ops.html": "developer",
+  "/pages.html": "developer",
 };
 
 export const PUBLIC_PAGES = [

@@ -51,6 +51,22 @@
           <p class="muted auth-hint">We'll email you a link that signs you in. It works once and expires in 15 minutes.</p>
         </form>
 
+        <!-- Shown after the email is sent. On phones, mail apps often open the
+             link in their own mini-browser, which signs you in there and not
+             here — typing the code puts the session in THIS browser. -->
+        <form id="codeForm" class="auth-form" hidden>
+          <div class="field full">
+            <label for="signinCode">Enter the 6-digit code from the email</label>
+            <input type="text" id="signinCode" inputmode="numeric" autocomplete="one-time-code"
+                   pattern="[0-9]{6}" maxlength="6" placeholder="123456" class="code-input" />
+          </div>
+          <button class="btn primary auth-submit" type="submit" id="codeBtn">Sign in with code</button>
+          <p class="muted auth-hint">
+            Tapping the link works too — but if it opens inside your mail app and
+            you end up back here signed out, use the code instead.
+          </p>
+        </form>
+
         <!-- Password -->
         <form id="passwordForm" class="auth-form" hidden>
           <div class="field full">
@@ -85,6 +101,7 @@
 
         var errorEl = document.getElementById("authError");
         var noticeEl = document.getElementById("authNotice");
+        var lastEmail = "";
 
         var MESSAGES = {
           state: "That sign-in attempt didn't complete safely. Please try again.",
@@ -92,7 +109,7 @@
           cancelled: "Sign-in was cancelled.",
           google: "Google sign-in failed. Please try again, or use a sign-in link.",
           google_unconfigured: "Google sign-in isn't set up on this server yet. Use a sign-in link instead.",
-          not_staff: "That account isn't on the organising committee list. Ask an organiser to invite you.",
+          not_staff: "That account isn't on the committee list. Ask an organiser to add your email.",
           disabled: "That account has been disabled. Contact an organiser.",
           conflict: "That email is already linked to a different Google account. Contact an organiser.",
           session: "Your session expired. Please sign in again."
@@ -149,12 +166,41 @@
             // Deliberately the same message whether or not the account exists —
             // anything else would let anyone probe for staff addresses.
             magicForm.hidden = true;
-            showNotice("If that address belongs to a committee member, a sign-in link is on its way. Check your inbox.");
+            document.getElementById("codeForm").hidden = false;
+            document.getElementById("signinCode").focus();
+            lastEmail = email;
+            showNotice("If that address belongs to a committee member, a sign-in link and code are on their way. Check your inbox.");
           } catch (err) {
             showError(err.message || "Couldn't send the link. Please try again.");
           } finally {
             btn.disabled = false;
             btn.textContent = "Send sign-in link";
+          }
+        });
+
+        // ---- Sign-in code ----
+        document.getElementById("codeForm").addEventListener("submit", async function (ev) {
+          ev.preventDefault();
+          var btn = document.getElementById("codeBtn");
+          var input = document.getElementById("signinCode");
+          var code = input.value.replace(/\D/g, "");
+          if (code.length !== 6) return showError("Enter the 6-digit code from the email.");
+
+          showError("");
+          btn.disabled = true;
+          btn.textContent = "Checking…";
+          try {
+            var res = await api("/api/auth/magic/code", {
+              method: "POST",
+              body: JSON.stringify({ email: lastEmail, code: code })
+            });
+            location.href = res.next || "/index.html";
+          } catch (err) {
+            showError(err.message || "That code didn't work.");
+            input.value = "";
+            input.focus();
+            btn.disabled = false;
+            btn.textContent = "Sign in with code";
           }
         });
 

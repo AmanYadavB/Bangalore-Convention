@@ -19,6 +19,7 @@ import {
   isPwnedPassword,
   normalizeEmail,
   isValidEmail,
+  parseEmailList,
   ROLE_RANK,
   ROLES,
   roleAtLeast,
@@ -33,9 +34,7 @@ import {
   SESSION_IDLE_MS,
   SESSION_ABSOLUTE_MS,
   SESSION_TOUCH_MS,
-  SUDO_MS,
   MAGIC_TTL_MS,
-  INVITE_TTL_MS,
   OAUTH_TTL_MS,
   LOCKOUT_THRESHOLD,
   LOCKOUT_BASE_MS,
@@ -288,7 +287,7 @@ const AUTH_DDL = [
      id TEXT PRIMARY KEY,
      email TEXT NOT NULL UNIQUE,
      name TEXT NOT NULL DEFAULT '',
-     role TEXT NOT NULL DEFAULT 'viewer',
+     role TEXT NOT NULL DEFAULT 'staff',
      status TEXT NOT NULL DEFAULT 'invited',
      password_hash TEXT,
      google_sub TEXT,
@@ -366,11 +365,38 @@ const AUTH_DDL = [
    )`,
 ];
 
+// Columns added after the tables first shipped. CREATE TABLE IF NOT EXISTS
+// will not add them to an existing database, so they are applied separately
+// and the "duplicate column" error is the expected no-op on later boots.
+const AUTH_MIGRATIONS = [
+  "ALTER TABLE magic_token ADD COLUMN code_hash TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE magic_token ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0",
+];
+
 async function ensureAuthTables(env) {
   if (authTablesReady) return;
   if (!env.CONVENTION_DB) throw new Error("D1 binding CONVENTION_DB is required for authentication.");
   await env.CONVENTION_DB.batch(AUTH_DDL.map((sql) => env.CONVENTION_DB.prepare(sql)));
+  for (const sql of AUTH_MIGRATIONS) {
+    try {
+      await env.CONVENTION_DB.prepare(sql).run();
+    } catch (e) {
+      if (!/duplicate column/i.test(String(e && e.message))) {
+        console.log("auth migration failed:", sql, e && e.message);
+      }
+    }
+  }
   authTablesReady = true;
+}
+
+// A 6-digit code that can be typed into the browser the person is ALREADY
+// looking at. This exists because mail apps on phones open links in an
+// isolated in-app webview: the link signs you in inside Gmail's browser, and
+// your real browser stays signed out. Typing the code puts the session where
+// the person actually is.
+function sixDigitCode() {
+  const n = crypto.getRandomValues(new Uint32Array(1))[0] % 1000000;
+  return String(n).padStart(6, "0");
 }
 
 const clientIp = (request) => request.headers.get("CF-Connecting-IP") || "";
@@ -492,18 +518,43 @@ async function createStaff(env, { email, name, role, status }) {
   return staffById(env, id);
 }
 
-// Zero-state bootstrap. Piggybacks on flows that already prove identity without
-// a pre-existing account (Google validates against Google, a magic link proves
-// mailbox control), so there is no chicken-and-egg. Goes permanently inert once
-// any staff row exists — including a disabled one, so deleting your own account
-// cannot re-open it.
-async function maybeBootstrapOwner(env, ctx, email, request) {
-  const target = normalizeEmail(env.BOOTSTRAP_OWNER_EMAIL);
-  if (!target || normalizeEmail(email) !== target) return null;
-  if ((await staffCount(env)) > 0) return null;
-  const row = await createStaff(env, { email: target, name: "", role: "owner", status: "active" });
-  audit(env, ctx, auditFrom(request, { type: "bootstrap_owner", staffId: row.id, email: target }));
-  console.log("[auth] bootstrapped first owner:", target);
+// Who is allowed in, and as what — decided entirely by config.
+//
+// There is no invite flow and no staff-management UI: for a committee of a
+// handful of people, two lists in wrangler.toml are easier to reason about and
+// impossible to get subtly wrong. Adding someone means adding their email and
+// redeploying; removing someone means deleting it, and they lose access on
+// their next request because the role is re-derived on every session read.
+//
+// Returns "developer", "staff", or null (not allowed in at all).
+function resolveRoleFromConfig(env, email) {
+  const e = normalizeEmail(email);
+  if (!e) return null;
+  if (parseEmailList(env.DEVELOPER_EMAILS).includes(e)) return "developer";
+  if (parseEmailList(env.STAFF_EMAILS).includes(e)) return "staff";
+  return null;
+}
+
+// Find or create the local record for an allowlisted email. The row exists to
+// hold a password hash, lockout counters and session links — it is NOT the
+// authority on whether someone may sign in, or on what they can do.
+async function staffForEmail(env, ctx, email, request) {
+  const role = resolveRoleFromConfig(env, email);
+  if (!role) return null;
+
+  let row = await staffByEmail(env, email);
+  if (!row) {
+    row = await createStaff(env, { email, name: "", role, status: "active" });
+    audit(env, ctx, auditFrom(request, { type: "staff_created", staffId: row.id, email: row.email, detail: role }));
+  } else if (row.role !== role || row.status !== "active") {
+    // Config is the source of truth, so a change there takes effect here.
+    await env.CONVENTION_DB.prepare(
+      "UPDATE staff SET role = ?, status = 'active', updated_at = ? WHERE id = ?"
+    )
+      .bind(role, Date.now(), row.id)
+      .run();
+    row = await staffById(env, row.id);
+  }
   return row;
 }
 
@@ -596,6 +647,14 @@ async function readSession(request, env) {
     const staff = await staffById(env, row.staff_id);
     if (!staff || staff.status !== "active") return null;
 
+    // Re-derive the role from config on every request rather than trusting the
+    // stored row. Removing someone from the allowlist then takes effect on
+    // their very next request instead of whenever their session happens to
+    // expire, and there is no stale-privilege window after a config change.
+    const configRole = resolveRoleFromConfig(env, staff.email);
+    if (!configRole) return null;
+    staff.role = configRole;
+
     // Throttled so a busy session does not mean a D1 write per request.
     if (now - Number(row.last_seen_at) > SESSION_TOUCH_MS) {
       await env.CONVENTION_DB.prepare("UPDATE session SET last_seen_at = ? WHERE id = ?")
@@ -652,7 +711,6 @@ function checkCsrf(request, sessionRow) {
   return timingEqualStr(sent, sessionRow.csrf);
 }
 
-const hasSudo = (sessionRow) => Number((sessionRow && sessionRow.sudo_until) || 0) > Date.now();
 
 // ---- DEV_KEY, reduced to a machine token ----------------------------------
 // No longer a user-facing credential. It survives only as break-glass account
@@ -760,7 +818,6 @@ async function handleAuth(request, env, ctx, parts, url) {
     return json({
       authenticated: true,
       user: publicStaff(s.staff),
-      sudo: hasSudo(s.session),
       sessionMethod: s.session.method,
     });
   }
@@ -877,7 +934,7 @@ async function handleAuth(request, env, ctx, parts, url) {
     // a different status code.
     const work = (async () => {
       let staff = await staffByEmail(env, email);
-      if (!staff) staff = await maybeBootstrapOwner(env, ctx, email, request);
+      if (!staff) staff = await staffForEmail(env, ctx, email, request);
       if (!staff || staff.status === "disabled") {
         await audit(env, ctx, auditFrom(request, {
           type: "magic_unknown",
@@ -891,12 +948,13 @@ async function handleAuth(request, env, ctx, parts, url) {
       const tokenHash = await sha256Hex(token);
       const csrf = randomToken(16);
       const bindId = randomToken(16);
+      const code = sixDigitCode();
       const now = Date.now();
       await env.CONVENTION_DB.prepare(
-        `INSERT INTO magic_token (token_hash, email, purpose, next, csrf, bind_id, created_at, expires_at)
-         VALUES (?, ?, 'login', ?, ?, ?, ?, ?)`
+        `INSERT INTO magic_token (token_hash, email, purpose, next, csrf, bind_id, created_at, expires_at, code_hash)
+         VALUES (?, ?, 'login', ?, ?, ?, ?, ?, ?)`
       )
-        .bind(tokenHash, staff.email, next, csrf, bindId, now, now + MAGIC_TTL_MS)
+        .bind(tokenHash, staff.email, next, csrf, bindId, now, now + MAGIC_TTL_MS, await sha256Hex(code))
         .run();
 
       // Recipient comes from the DATABASE ROW, never from the request body,
@@ -906,12 +964,19 @@ async function handleAuth(request, env, ctx, parts, url) {
       const html = `
         <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px">
           <h2 style="margin:0 0 12px">Sign in to Bangalore Convention</h2>
-          <p style="color:#555;line-height:1.6">Click the button below to sign in. This link works once and expires in 15 minutes.</p>
+          <p style="color:#555;line-height:1.6">Tap the button to sign in. It works once and expires in 15 minutes.</p>
           <p style="margin:26px 0"><a href="${link}" style="background:#4f46e5;color:#fff;padding:13px 26px;border-radius:10px;text-decoration:none;font-weight:600;display:inline-block">Sign in</a></p>
-          <p style="color:#777;font-size:13px;line-height:1.6">If you didn't ask to sign in, you can ignore this email — nobody can access your account without clicking the link.</p>
+          <p style="color:#555;line-height:1.6;margin-top:30px">
+            <b>On a phone?</b> Mail apps sometimes open links in their own mini-browser,
+            which signs you in there instead of in your normal browser. If that happens,
+            go back to the sign-in page you already have open and type this code:
+          </p>
+          <p style="font-size:32px;font-weight:700;letter-spacing:8px;font-family:ui-monospace,Menlo,Consolas,monospace;margin:14px 0;color:#111">${code}</p>
+          <p style="color:#777;font-size:13px;line-height:1.6">If you didn't ask to sign in, ignore this email. Nobody can reach your account without the link or the code.</p>
         </div>`;
       if (env.AUTH_LOG_LINKS === "1" || !env.MAILCHANNELS_API_KEY) {
         console.log("[auth] magic link for " + staff.email + ": " + link);
+        console.log("[auth] sign-in code for " + staff.email + ": " + code);
       }
       const sent = await sendMail(env, staff.email, "Your sign-in link", html, { toName: staff.name || "" });
       await audit(env, ctx, auditFrom(request, {
@@ -925,6 +990,77 @@ async function handleAuth(request, env, ctx, parts, url) {
 
     if (ctx && ctx.waitUntil) ctx.waitUntil(work);
     return uniform;
+  }
+
+  // ---- Sign-in code ------------------------------------------------------
+  // The same credential as the emailed link, redeemed in whichever browser the
+  // person is actually sitting in front of. This is the answer to "the link
+  // doesn't work on my phone": mail apps open links in an isolated in-app
+  // browser, so the link's session never reaches the real one.
+  if (action === "magic" && sub === "code" && method === "POST") {
+    const ip = clientIp(request) || "unknown";
+    const email = normalizeEmail(body.email);
+    const code = String(body.code || "").replace(/\D/g, "");
+    const generic = { error: "That code isn't right, or it has expired. Request a new one." };
+
+    // Throttle hard — six digits is only a million combinations.
+    const perIp = await rateLimit(env, "code:ip", ip, 10, 15 * 60);
+    if (!perIp.allowed) {
+      audit(env, ctx, auditFrom(request, { type: "rate_limited", outcome: "deny", detail: "magic code" }));
+      return tooManyRequests(perIp.retryAfter);
+    }
+    if (!isValidEmail(email) || code.length !== 6) return json(generic, 400);
+
+    const row = await env.CONVENTION_DB.prepare(
+      `SELECT * FROM magic_token
+       WHERE email = ? AND used_at IS NULL AND expires_at > ? AND code_hash != ''
+       ORDER BY created_at DESC LIMIT 1`
+    )
+      .bind(email, Date.now())
+      .first();
+
+    if (!row) {
+      audit(env, ctx, auditFrom(request, { type: "magic_code_invalid", outcome: "deny" }));
+      return json(generic, 401);
+    }
+
+    // Five wrong guesses burns the code, so an attacker cannot keep trying
+    // against one live token.
+    if (Number(row.attempts || 0) >= 5) {
+      await env.CONVENTION_DB.prepare("UPDATE magic_token SET used_at = ? WHERE token_hash = ?")
+        .bind(Date.now(), row.token_hash)
+        .run();
+      audit(env, ctx, auditFrom(request, { type: "magic_code_invalid", email, outcome: "deny", detail: "attempts exhausted" }));
+      return json(generic, 401);
+    }
+
+    if (!timingEqualStr(await sha256Hex(code), row.code_hash)) {
+      await env.CONVENTION_DB.prepare("UPDATE magic_token SET attempts = attempts + 1 WHERE token_hash = ?")
+        .bind(row.token_hash)
+        .run();
+      audit(env, ctx, auditFrom(request, { type: "magic_code_invalid", email, outcome: "deny", detail: "wrong code" }));
+      return json(generic, 401);
+    }
+
+    // Single-use, same conditional-update guarantee as the link.
+    const claim = await env.CONVENTION_DB.prepare(
+      "UPDATE magic_token SET used_at = ? WHERE token_hash = ? AND used_at IS NULL"
+    )
+      .bind(Date.now(), row.token_hash)
+      .run();
+    if (!claim.meta || claim.meta.changes !== 1) return json(generic, 401);
+
+    let staff = await staffByEmail(env, row.email);
+    if (!staff) staff = await staffForEmail(env, ctx, row.email, request);
+    if (!staff || staff.status === "disabled") return json({ error: "That account can't sign in." }, 403);
+
+    await clearLoginFailures(env, staff.id);
+    const created = await createSession(env, staff, "code", request);
+    audit(env, ctx, auditFrom(request, { type: "magic_consumed", staffId: staff.id, email: staff.email, detail: "code" }));
+    return jsonWithCookies(
+      { ok: true, user: publicStaff(staff), next: safeNext(row.next) },
+      sessionCookieHeaders(env, created)
+    );
   }
 
   // ---- Magic link: interstitial ------------------------------------------
@@ -991,7 +1127,7 @@ async function handleAuth(request, env, ctx, parts, url) {
     }
 
     let staff = await staffByEmail(env, row.email);
-    if (!staff) staff = await maybeBootstrapOwner(env, ctx, row.email, request);
+    if (!staff) staff = await staffForEmail(env, ctx, row.email, request);
     if (!staff || staff.status === "disabled") return loginRedirect(env, request, "not_staff");
 
     if (staff.status === "invited") {
@@ -1128,7 +1264,7 @@ async function handleAuth(request, env, ctx, parts, url) {
 
     if (!staff) {
       staff = await staffByEmail(env, email);
-      if (!staff) staff = await maybeBootstrapOwner(env, ctx, email, request);
+      if (!staff) staff = await staffForEmail(env, ctx, email, request);
 
       if (staff && staff.google_sub && staff.google_sub !== sub_) {
         // Someone else's Google account claims this staff email. Never rebind.
@@ -1146,7 +1282,7 @@ async function handleAuth(request, env, ctx, parts, url) {
     }
 
     if (!staff) {
-      // Do NOT auto-provision. Attendee PII sits behind the viewer role, and
+      // Do NOT auto-provision. Attendee PII sits behind the staff role, and
       // anyone with a Gmail address is not staff.
       audit(env, ctx, auditFrom(request, { type: "google_unknown", email, outcome: "deny" }));
       return redirectTo(`${authOrigin(env, request)}/login.html?e=not_staff`, clearOauth);
@@ -1170,71 +1306,12 @@ async function handleAuth(request, env, ctx, parts, url) {
     ]);
   }
 
-  // ---- Invite acceptance (the token is the credential) -------------------
-  if (action === "invite" && sub === "accept") {
-    const token = method === "GET" ? url.searchParams.get("token") || "" : String(body.token || "");
-    const tokenHash = await sha256Hex(token);
-    const row = await env.CONVENTION_DB.prepare("SELECT * FROM staff_invite WHERE token_hash = ?")
-      .bind(tokenHash)
-      .first();
-    const dead = !row || row.used_at || Number(row.expires_at) < Date.now();
-
-    if (method === "GET") {
-      if (dead) {
-        return authShellPage(
-          "Invitation expired",
-          `<h2 style="margin-top:0">This invitation has expired</h2>
-           <p class="muted">Invitations last 72 hours. Ask an organiser to send a new one.</p>
-           <a class="btn primary" href="/login.html">Go to sign in</a>`,
-          410
-        );
-      }
-      return authShellPage(
-        "Accept invitation",
-        `<h2 style="margin-top:0">Join the Convention team</h2>
-         <p class="muted">You've been invited as <b>${esc(row.email)}</b> with <b>${esc(row.role)}</b> access.</p>
-         <form method="POST" action="/api/auth/invite/accept">
-           <input type="hidden" name="token" value="${esc(token)}">
-           <button class="btn primary" type="submit" style="width:100%">Accept and sign in</button>
-         </form>
-         <p class="muted" style="font-size:13px;margin-bottom:0">You can set a password afterwards, or keep using Google and sign-in links.</p>`
-      );
-    }
-
-    if (method === "POST") {
-      const h = await sha256Hex(String(body.token || ""));
-      const inv = await env.CONVENTION_DB.prepare("SELECT * FROM staff_invite WHERE token_hash = ?").bind(h).first();
-      if (!inv || inv.used_at || Number(inv.expires_at) < Date.now()) {
-        return loginRedirect(env, request, "expired");
-      }
-      // Invites GRANT PRIVILEGE, so single-use must be airtight: exactly one
-      // caller can flip used_at, and changes tells us whether it was us.
-      const claim = await env.CONVENTION_DB.prepare(
-        "UPDATE staff_invite SET used_at = ? WHERE token_hash = ? AND used_at IS NULL"
-      )
-        .bind(Date.now(), h)
-        .run();
-      if (!claim.meta || claim.meta.changes !== 1) return loginRedirect(env, request, "expired");
-
-      let staff = await staffByEmail(env, inv.email);
-      if (!staff) staff = await createStaff(env, { email: inv.email, name: "", role: inv.role, status: "active" });
-      else {
-        await env.CONVENTION_DB.prepare("UPDATE staff SET status = 'active', updated_at = ? WHERE id = ?")
-          .bind(Date.now(), staff.id)
-          .run();
-        staff = await staffById(env, staff.id);
-      }
-
-      const created = await createSession(env, staff, "invite", request);
-      audit(env, ctx, auditFrom(request, { type: "invite_accepted", staffId: staff.id, email: staff.email }));
-      return redirectTo(authOrigin(env, request) + "/index.html", sessionCookieHeaders(env, created));
-    }
-  }
-
-  // ---- Break-glass account recovery (DEV_KEY) ----------------------------
-  // The recovery path for a locked-out owner, a deleted last owner, or a Google
-  // outage. A break-glass that is used SILENTLY is a backdoor; this one is
-  // capped, always audited, and always emails the ops address.
+  // ---- Break-glass sign-in link (DEV_KEY) --------------------------------
+  // The recovery path when email or Google is the thing that is broken. It
+  // does NOT grant access — the email must already be on an allowlist in
+  // wrangler.toml — it only mints a sign-in link for someone who is already
+  // permitted. A break-glass used SILENTLY is a backdoor; this one is capped
+  // at 3/day, always audited, and always emails the ops address.
   if (action === "bootstrap" && method === "POST") {
     if (!checkMachineToken(request, env, body)) return json({ error: "Forbidden" }, 403);
 
@@ -1245,25 +1322,21 @@ async function handleAuth(request, env, ctx, parts, url) {
     }
 
     const email = normalizeEmail(body.email);
-    const role = ROLES.includes(body.role) ? body.role : "owner";
     if (!isValidEmail(email)) return json({ error: "A valid email is required." }, 400);
 
-    let staff = await staffByEmail(env, email);
-    if (staff) {
-      await env.CONVENTION_DB.prepare(
-        "UPDATE staff SET role = ?, status = 'active', failed_count = 0, locked_until = 0, updated_at = ? WHERE id = ?"
-      )
-        .bind(role, Date.now(), staff.id)
-        .run();
-    } else {
-      staff = await createStaff(env, { email, name: "", role, status: "active" });
+    const role = resolveRoleFromConfig(env, email);
+    if (!role) {
+      audit(env, ctx, auditFrom(request, { type: "devkey_bootstrap", outcome: "deny", detail: "not on allowlist" }));
+      return json(
+        { error: "That email is not in STAFF_EMAILS or DEVELOPER_EMAILS. Add it in wrangler.toml and redeploy." },
+        403
+      );
     }
 
-    // Also mint a one-time sign-in link. Without this, break-glass recovery is
-    // useless in exactly the situation it exists for — you'd be an owner who
-    // still can't get in because email or Google is the thing that's broken.
-    // This grants nothing extra: the caller already proved they hold DEV_KEY,
-    // which can make anyone an owner anyway.
+    const staff = await staffForEmail(env, ctx, email, request);
+    if (!staff) return json({ error: "Could not create the account." }, 500);
+    await clearLoginFailures(env, staff.id);
+
     const token = randomToken(32);
     const now = Date.now();
     await env.CONVENTION_DB.prepare(
@@ -1342,29 +1415,6 @@ async function handleAuth(request, env, ctx, parts, url) {
     return jsonWithCookies({ ok: true }, sessionCookieHeaders(env, created));
   }
 
-  // ---- Step up to sudo ---------------------------------------------------
-  // Owner-level operations require re-authentication within the last 15
-  // minutes. This is what buys the security a short idle timeout would,
-  // without logging staff out mid-shift.
-  if (action === "sudo" && method === "POST") {
-    const rl = await rateLimit(env, "sudo:staff", s.staff.id, 5, 15 * 60);
-    if (!rl.allowed) return tooManyRequests(rl.retryAfter);
-
-    if (!s.staff.password_hash) {
-      return json({ error: "Set a password first — it's required to confirm sensitive changes." }, 400);
-    }
-    const ok = await verifyPassword(env, String(body.password || ""), s.staff.password_hash);
-    if (!ok.ok) {
-      audit(env, ctx, auditFrom(request, { type: "sudo_fail", staffId: s.staff.id, outcome: "deny" }));
-      return json({ error: "That password didn't match." }, 401);
-    }
-    await env.CONVENTION_DB.prepare("UPDATE session SET sudo_until = ? WHERE id = ?")
-      .bind(Date.now() + SUDO_MS, s.session.id)
-      .run();
-    audit(env, ctx, auditFrom(request, { type: "sudo_granted", staffId: s.staff.id, email: s.staff.email }));
-    return json({ ok: true, sudoUntil: Date.now() + SUDO_MS });
-  }
-
   // ---- Session listing / revocation --------------------------------------
   if (action === "sessions" && method === "GET") {
     const { results } = await env.CONVENTION_DB.prepare(
@@ -1391,10 +1441,9 @@ async function handleAuth(request, env, ctx, parts, url) {
     if (sub) {
       const row = await env.CONVENTION_DB.prepare("SELECT staff_id FROM session WHERE id = ?").bind(sub).first();
       if (!row) return json({ error: "Not found." }, 404);
-      const isOwn = row.staff_id === s.staff.id;
-      if (!isOwn && !(s.staff.role === "owner" && hasSudo(s.session))) {
-        return json({ error: "Confirm your password to revoke someone else's session." }, 403);
-      }
+      // You can only ever revoke your own sessions. Access itself is managed
+      // in config, so there is nothing here for one person to do to another.
+      if (row.staff_id !== s.staff.id) return json({ error: "Not found." }, 404);
       await revokeSession(env, sub);
       audit(env, ctx, auditFrom(request, { type: "session_revoked", staffId: s.staff.id, detail: sub.slice(0, 16) }));
       return json({ ok: true });
@@ -1404,116 +1453,9 @@ async function handleAuth(request, env, ctx, parts, url) {
     return json({ ok: true });
   }
 
-  // ---- Staff management (owner) ------------------------------------------
-  if (action === "staff") {
-    if (s.staff.role !== "owner") return json({ error: "Owner access required." }, 403);
-
-    if (method === "GET" && !sub) {
-      const { results } = await env.CONVENTION_DB.prepare(
-        "SELECT id, email, name, role, status, created_at, last_login_at, password_hash, google_sub FROM staff ORDER BY created_at"
-      ).all();
-      return json({
-        staff: (results || []).map((r) => ({
-          id: r.id, email: r.email, name: r.name, role: r.role, status: r.status,
-          createdAt: r.created_at, lastLoginAt: r.last_login_at,
-          hasPassword: Boolean(r.password_hash), hasGoogle: Boolean(r.google_sub),
-          self: r.id === s.staff.id,
-        })),
-      });
-    }
-
-    // Everything that grants or removes access needs a fresh password check.
-    if (method === "POST" && !hasSudo(s.session)) {
-      return json({ error: "Confirm your password first.", needsSudo: true }, 403);
-    }
-
-    if (method === "POST" && sub === "invite") {
-      const email = normalizeEmail(body.email);
-      const role = ROLES.includes(body.role) ? body.role : "viewer";
-      if (!isValidEmail(email)) return json({ error: "That doesn't look like an email address." }, 400);
-
-      let target = await staffByEmail(env, email);
-      if (!target) target = await createStaff(env, { email, name: "", role, status: "invited" });
-
-      const token = randomToken(32);
-      const now = Date.now();
-      await env.CONVENTION_DB.prepare(
-        `INSERT INTO staff_invite (token_hash, email, role, invited_by, created_at, expires_at)
-         VALUES (?, ?, ?, ?, ?, ?)`
-      )
-        .bind(await sha256Hex(token), email, role, s.staff.id, now, now + INVITE_TTL_MS)
-        .run();
-
-      const link = `${authOrigin(env, request)}/api/auth/invite/accept?token=${encodeURIComponent(token)}`;
-      const html = `
-        <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px">
-          <h2 style="margin:0 0 12px">You've been added to the Bangalore Convention team</h2>
-          <p style="color:#555;line-height:1.6">You have been given <b>${esc(role)}</b> access. Click below to activate your account — the link expires in 72 hours.</p>
-          <p style="margin:26px 0"><a href="${link}" style="background:#4f46e5;color:#fff;padding:13px 26px;border-radius:10px;text-decoration:none;font-weight:600;display:inline-block">Accept invitation</a></p>
-        </div>`;
-      if (env.AUTH_LOG_LINKS === "1" || !env.MAILCHANNELS_API_KEY) {
-        console.log("[auth] invite link for " + email + ": " + link);
-      }
-      if (ctx && ctx.waitUntil) {
-        ctx.waitUntil(sendMail(env, email, "You've been invited to the Convention team", html));
-      }
-      audit(env, ctx, auditFrom(request, { type: "staff_invited", staffId: s.staff.id, email, detail: "role " + role }));
-      return json({ ok: true, email, role });
-    }
-
-    if (method === "POST" && sub && parts[4] === "role") {
-      const role = ROLES.includes(body.role) ? body.role : null;
-      if (!role) return json({ error: "Unknown role." }, 400);
-      const target = await staffById(env, sub);
-      if (!target) return json({ error: "Not found." }, 404);
-      if (target.id === s.staff.id && role !== "owner") {
-        return json({ error: "You can't remove your own owner access — ask another owner." }, 400);
-      }
-      await env.CONVENTION_DB.prepare("UPDATE staff SET role = ?, updated_at = ? WHERE id = ?")
-        .bind(role, Date.now(), target.id)
-        .run();
-      // The target's live sessions carry the OLD role, so they must all go.
-      await revokeAllSessions(env, target.id);
-      audit(env, ctx, auditFrom(request, {
-        type: "role_changed", staffId: s.staff.id, email: target.email,
-        detail: `${target.role} -> ${role}`,
-      }));
-      if (ctx && ctx.waitUntil) {
-        ctx.waitUntil(sendOpsEmail(env, "Role changed: " + target.email,
-          `<p><b>${esc(target.email)}</b> changed from <b>${esc(target.role)}</b> to <b>${esc(role)}</b> by ${esc(s.staff.email)}.</p>`));
-      }
-      return json({ ok: true });
-    }
-
-    if (method === "POST" && sub && parts[4] === "disable") {
-      const target = await staffById(env, sub);
-      if (!target) return json({ error: "Not found." }, 404);
-      if (target.id === s.staff.id) return json({ error: "You can't disable your own account." }, 400);
-      await env.CONVENTION_DB.prepare("UPDATE staff SET status = 'disabled', updated_at = ? WHERE id = ?")
-        .bind(Date.now(), target.id)
-        .run();
-      // A disable that leaves live sessions is not a disable.
-      await revokeAllSessions(env, target.id);
-      audit(env, ctx, auditFrom(request, { type: "staff_disabled", staffId: s.staff.id, email: target.email }));
-      return json({ ok: true });
-    }
-
-    if (method === "POST" && sub && parts[4] === "enable") {
-      const target = await staffById(env, sub);
-      if (!target) return json({ error: "Not found." }, 404);
-      await env.CONVENTION_DB.prepare("UPDATE staff SET status = 'active', updated_at = ? WHERE id = ?")
-        .bind(Date.now(), target.id)
-        .run();
-      audit(env, ctx, auditFrom(request, { type: "staff_enabled", staffId: s.staff.id, email: target.email }));
-      return json({ ok: true });
-    }
-
-    return json({ error: "Unsupported staff action." }, 405);
-  }
-
-  // ---- Audit log (owner) --------------------------------------------------
+  // ---- Audit log (developers) ---------------------------------------------
   if (action === "events" && method === "GET") {
-    if (s.staff.role !== "owner") return json({ error: "Owner access required." }, 403);
+    if (s.staff.role !== "developer") return json({ error: "Developer access required." }, 403);
     const limit = Math.min(Number(url.searchParams.get("limit")) || 100, 500);
     const type = url.searchParams.get("type");
     const q = type
@@ -1539,30 +1481,28 @@ async function handleAuth(request, env, ctx, parts, url) {
 // This table is the security boundary. The nav in common.js mirrors it for
 // cosmetics only.
 const API_POLICY = [
-  // Attendee PII and money — every one of these was completely open before.
-  ["GET", "registrations", "viewer"],
-  ["PATCH", "registrations", "admin"],
-  ["DELETE", "registrations", "admin"],
-  ["GET", "expenses", "viewer"],
-  ["POST", "expenses", "admin"],
-  ["DELETE", "expenses", "admin"],
-  ["GET", "dashboard", "viewer"],
+  // Committee work — attendee PII and money. Every one of these was
+  // completely open to the internet before.
+  ["GET", "registrations", "staff"],
+  ["PATCH", "registrations", "staff"],
+  ["DELETE", "registrations", "staff"],
+  ["GET", "expenses", "staff"],
+  ["POST", "expenses", "staff"],
+  ["DELETE", "expenses", "staff"],
+  ["GET", "dashboard", "staff"],
 
-  // Reflections: reading is public (below), writing and the paid broadcast
-  // are not.
-  ["POST", "reflections", "admin"],
-  ["DELETE", "reflections", "admin"],
+  // Reflections: reading stays public (see isPublicApi — Meta fetches the
+  // card image when sending the daily template). Writing, and the paid
+  // broadcast that costs money per recipient, are developer-only.
+  ["POST", "reflections", "developer"],
+  ["DELETE", "reflections", "developer"],
 
-  // The knowledge base is injected into every chat system prompt, so both
-  // reading and writing it are privileged.
-  ["GET", "knowledge", "viewer"],
-  ["POST", "knowledge", "owner"],
-  ["DELETE", "knowledge", "owner"],
-
-  // Ops reports expose Deepgram balances, Cloudflare analytics and full
-  // financials, and can send email.
-  ["*", "report", "admin"],
-  ["*", "whatsapp", "admin"], // /api/whatsapp/status; the webhook is routed earlier
+  // Developer surfaces. The knowledge base is injected into every chat system
+  // prompt, and the ops reports expose Deepgram balances, Cloudflare
+  // analytics and full financials, and can send email.
+  ["*", "knowledge", "developer"],
+  ["*", "report", "developer"],
+  ["*", "whatsapp", "developer"], // /api/whatsapp/status; the webhook routes earlier
 ];
 
 // Routes that must stay reachable without a session, with the reason.
@@ -2323,6 +2263,28 @@ async function runSchedules(env) {
     await env.CONVENTION_KV.put("critical:last", String(Date.now()), { expirationTtl: 60 * 60 * 48 });
     await runCriticalCheck(env);
   }
+
+  await pruneAuthTables(env);
+}
+
+// Housekeeping on the existing 10-minute cron. Without this, every session
+// row and every audit event lives forever in D1.
+async function pruneAuthTables(env) {
+  try {
+    await ensureAuthTables(env);
+    const now = Date.now();
+    await env.CONVENTION_DB.batch([
+      // Sessions are unusable once past their absolute expiry; keep a week's
+      // grace so "where am I signed in" history is not cut off abruptly.
+      env.CONVENTION_DB.prepare("DELETE FROM session WHERE absolute_exp < ?").bind(now - 7 * 86400000),
+      env.CONVENTION_DB.prepare("DELETE FROM auth_event WHERE at < ?").bind(now - 180 * 86400000),
+      env.CONVENTION_DB.prepare("DELETE FROM magic_token WHERE expires_at < ?").bind(now - 86400000),
+      env.CONVENTION_DB.prepare("DELETE FROM oauth_tx WHERE expires_at < ?").bind(now - 86400000),
+      env.CONVENTION_DB.prepare("DELETE FROM rate_limit WHERE reset_at < ?").bind(now - 86400000),
+    ]);
+  } catch (e) {
+    console.log("pruneAuthTables failed:", e && e.message);
+  }
 }
 
 async function runCriticalCheck(env) {
@@ -2581,7 +2543,10 @@ async function waReply(env, ctx, msg, origin) {
   if (!text) return;
 
   const key = "wa:" + from;
-  const today = new Date().toISOString().slice(0, 10);
+  // istDate, not a UTC slice: everything else in this file buckets by IST, and
+  // a UTC day would reset this cap at 5:30 AM IST — mid-morning for the
+  // person it applies to.
+  const today = istDate(0);
   const state = (await env.CONVENTION_KV.get(key, { type: "json" })) || {};
   const count = state.day === today ? state.count || 0 : 0;
 
@@ -2902,11 +2867,21 @@ async function handleApi(request, env, ctx) {
       if (!name || !email || !phone || !category) {
         return json({ error: "Name, email, phone and a valid category are required." }, 400);
       }
+      // Client-side validation alone is theatre — this endpoint is public.
+      // Accept the common ways people type an Indian mobile, then store the
+      // bare 10 digits so the WhatsApp confirmation can find the number.
+      const digits = phone.replace(/[\s\-()]/g, "").replace(/^(\+?91)/, "");
+      if (!/^[6-9]\d{9}$/.test(digits)) {
+        return json({ error: "Enter a valid 10-digit Indian mobile number." }, 400);
+      }
+      if (!isValidEmail(email)) {
+        return json({ error: "Enter a valid email address." }, 400);
+      }
       const record = {
         id: crypto.randomUUID(),
         name,
         email,
-        phone,
+        phone: digits,
         city: (body.city || "").trim(),
         gender: (body.gender || "").trim(),
         notes: (body.notes || "").trim(),
@@ -2954,7 +2929,10 @@ async function handleApi(request, env, ctx) {
         title,
         category: (body.category || "General").trim(),
         amount: value,
-        date: body.date || new Date().toISOString().slice(0, 10),
+        // IST, matching how reflections are dated. A UTC slice put anything
+        // entered after 5:30 AM IST... on the right day, but anything entered
+        // late in the evening landed on the previous day for the organiser.
+        date: body.date || istDate(0),
         notes: (body.notes || "").trim(),
         createdAt: new Date().toISOString(),
       };
@@ -3170,7 +3148,7 @@ async function handleApi(request, env, ctx) {
     // This previously trusted `body.role === "admin"`, so anyone could send
     // that one field and read live registration and financial figures through
     // the chatbot without any credential at all.
-    const dev = Boolean(session && session.staff.role === "owner");
+    const dev = Boolean(session && session.staff.role === "developer");
     const staff = Boolean(session);
     // Voice mode: the user is listening, so we keep answers short and snappy so
     // the neural TTS returns quickly and there is far less to wait for.

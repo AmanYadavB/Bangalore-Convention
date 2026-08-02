@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Expenses · Bangalore Convention</title>
     <link rel="stylesheet" href="css/style.css" />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
   </head>
   <body>
     <div id="nav"></div>
@@ -68,7 +69,7 @@
               <th>Amount</th>
               <th>Date</th>
               <th>Notes</th>
-              <th></th>
+              <th class="col-actions"></th>
             </tr>
           </thead>
           <tbody id="exp-rows">
@@ -81,7 +82,7 @@
     <script src="js/common.js"></script>
     <script>
       // No client-side gate: the Worker refuses to serve this page at all
-      // without a session that has at least the viewer role.
+      // without a session that has at least the staff role.
       mountNav("expenses");
 
       {

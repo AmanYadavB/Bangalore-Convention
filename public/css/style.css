@@ -1,33 +1,13 @@
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Sora:wght@600;700;800&display=swap");
 
+/* DAYLIGHT IS THE DEFAULT and therefore lives on :root.
+   It used to be the other way around — :root held the dark palette while
+   common.js defaults the theme to "daylight" — and because common.js is the
+   LAST element in <body>, every cold page load painted dark and then snapped
+   to light. Putting the default palette on :root fixes that with no inline
+   <head> script on nine separate pages, and it covers login.html for free. */
 :root {
   --font-display: "Sora", "Inter", "Segoe UI", sans-serif;
-  --bg: #0b0f1a;
-  --bg-2: #121829;
-  --card: #141b2d;
-  --card-2: #1b2438;
-  --border: #26314a;
-  --border-soft: #1e2740;
-  --text: #eef2fb;
-  --muted: #93a1bd;
-  --accent: #818cf8;
-  --accent-2: #a78bfa;
-  --accent-3: #38bdf8;
-  --accent-ink: #6366f1;
-  --green: #34d399;
-  --amber: #fbbf24;
-  --red: #f87171;
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 14px 34px -12px rgba(0, 0, 0, 0.6);
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25), 0 6px 16px -8px rgba(0, 0, 0, 0.5);
-  --ring: 0 0 0 3px rgba(129, 140, 248, 0.35);
-  --radius: 16px;
-  --radius-sm: 10px;
-  --bg-glow: radial-gradient(1100px 640px at 88% -12%, rgba(124, 111, 255, 0.2), transparent 60%),
-    radial-gradient(760px 520px at -5% 0%, rgba(52, 211, 153, 0.07), transparent 55%), var(--bg);
-  --nav-bg: rgba(11, 15, 26, 0.72);
-}
-
-[data-theme="daylight"] {
   --bg: #f5f7fc;
   --bg-2: #ffffff;
   --card: #ffffff;
@@ -43,12 +23,42 @@
   --green: #109d5b;
   --amber: #b9770f;
   --red: #d8433a;
+  /* Alias: several pages were written against --danger, which never existed,
+     so they silently fell back to a hardcoded hex that ignored the theme. */
+  --danger: var(--red);
   --shadow: 0 1px 2px rgba(20, 30, 60, 0.06), 0 18px 44px -18px rgba(30, 41, 90, 0.18);
   --shadow-sm: 0 1px 2px rgba(20, 30, 60, 0.05), 0 8px 22px -12px rgba(30, 41, 90, 0.14);
   --ring: 0 0 0 3px rgba(91, 91, 240, 0.18);
+  --radius: 16px;
+  --radius-sm: 10px;
   --bg-glow: radial-gradient(1100px 640px at 88% -12%, rgba(124, 111, 255, 0.12), transparent 60%),
     radial-gradient(760px 520px at -5% 0%, rgba(16, 157, 91, 0.05), transparent 55%), var(--bg);
   --nav-bg: rgba(255, 255, 255, 0.78);
+}
+
+[data-theme="midnight"] {
+  --bg: #0b0f1a;
+  --bg-2: #121829;
+  --card: #141b2d;
+  --card-2: #1b2438;
+  --border: #26314a;
+  --border-soft: #1e2740;
+  --text: #eef2fb;
+  --muted: #93a1bd;
+  --accent: #818cf8;
+  --accent-2: #a78bfa;
+  --accent-3: #38bdf8;
+  --accent-ink: #6366f1;
+  --green: #34d399;
+  --amber: #fbbf24;
+  --red: #f87171;
+  --danger: var(--red);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 14px 34px -12px rgba(0, 0, 0, 0.6);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25), 0 6px 16px -8px rgba(0, 0, 0, 0.5);
+  --ring: 0 0 0 3px rgba(129, 140, 248, 0.35);
+  --bg-glow: radial-gradient(1100px 640px at 88% -12%, rgba(124, 111, 255, 0.2), transparent 60%),
+    radial-gradient(760px 520px at -5% 0%, rgba(52, 211, 153, 0.07), transparent 55%), var(--bg);
+  --nav-bg: rgba(11, 15, 26, 0.72);
 }
 
 * {
@@ -192,8 +202,9 @@ a:hover {
 }
 
 .theme-toggle {
-  width: 40px;
-  height: 40px;
+  /* 44px is the accessible minimum for a touch target; this was 40. */
+  width: 44px;
+  height: 44px;
   border-radius: 11px;
   border: 1px solid var(--border);
   background: var(--card);
@@ -230,8 +241,8 @@ a:hover {
   justify-content: center;
   align-items: center;
   gap: 4px;
-  width: 42px;
-  height: 38px;
+  width: 44px;
+  height: 44px;
   padding: 0;
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -859,7 +870,9 @@ table {
   width: 100%;
   border-collapse: collapse;
   font-size: 14px;
-  min-width: 640px;
+  /* Wide tables scroll inside .table-wrap rather than squeezing columns to
+     illegibility. The floor drops further on phones — see the 720px block. */
+  min-width: 560px;
 }
 
 th,
@@ -880,9 +893,11 @@ th {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.6px;
-  position: sticky;
-  top: 0;
 }
+/* `position: sticky` was set on th but did nothing: .table-wrap has no height
+   constraint, so there is no vertical scroll container for it to stick
+   within, and it had no z-index against the sticky nav above it. Removed
+   rather than propped up — a sticky header buys little at 360px wide. */
 
 tbody tr {
   transition: background 0.12s ease;
@@ -967,8 +982,15 @@ tbody tr:hover {
   opacity: 0;
   transition: opacity 0.25s ease, transform 0.25s ease;
   pointer-events: none;
-  z-index: 60;
+  /* Above the chat widget (z-index 60), which it used to tie with and get
+     tangled up in on phones. */
+  z-index: 70;
   font-weight: 600;
+  /* Error text comes straight from the server and can be a full sentence.
+     Without a bound it grew past the viewport and was clipped on both sides. */
+  max-width: min(92vw, 420px);
+  box-sizing: border-box;
+  text-align: center;
 }
 
 .toast.show {
@@ -1124,8 +1146,10 @@ tbody tr:hover {
   border: none;
   background: rgba(255, 255, 255, 0.18);
   color: #fff;
-  width: 28px;
-  height: 28px;
+  /* Was 28px — the smallest tap target on the site, and the one people reach
+     for fastest when they want the chat panel gone. */
+  width: 36px;
+  height: 36px;
   border-radius: 8px;
   font-size: 18px;
   line-height: 1;
@@ -1150,8 +1174,8 @@ tbody tr:hover {
 /* ---- Voice / talk mode ---- */
 .chat-mic {
   flex-shrink: 0;
-  width: 38px;
-  height: 38px;
+  width: 44px;
+  height: 44px;
   border-radius: 10px;
   border: 1px solid var(--border);
   background: var(--card-2);
@@ -1597,12 +1621,14 @@ tbody tr:hover {
     padding: 13px 20px;
     min-height: 46px;
   }
-  .btn.small {
-    min-height: 0;
-    padding: 8px 14px;
-  }
+  /* .btn.small and .btn.danger used to opt OUT of the 46px minimum here,
+     which meant every row action on every admin screen — Mark Paid, Delete,
+     Copy, Generate card, Send broadcast — landed at roughly 30px. Those are
+     the most-tapped controls on the site and the easiest to mis-hit. */
+  .btn.small,
   .btn.danger {
-    min-height: 0;
+    min-height: 44px;
+    padding: 10px 16px;
   }
   /* Countdown fills the row evenly instead of overflowing */
   .countdown {
@@ -2298,8 +2324,8 @@ tbody tr:hover {
 }
 .auth-tab {
   flex: 1;
-  min-height: 40px;
-  padding: 9px 10px;
+  min-height: 44px;
+  padding: 11px 10px;
   border: 0;
   border-radius: calc(var(--radius-sm) - 4px);
   background: transparent;
@@ -2334,6 +2360,16 @@ tbody tr:hover {
   margin: 2px 0 0;
   font-size: 13px;
   line-height: 1.55;
+}
+
+/* Sign-in code: wide tracking so six digits are easy to read back from an
+   email, and a monospace face so 0/O and 1/l cannot be confused. */
+.code-input {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 22px;
+  letter-spacing: 0.32em;
+  text-align: center;
+  padding: 14px 12px;
 }
 
 /* -------- Professional polish -------- */
@@ -2450,18 +2486,44 @@ h3,
     justify-content: center;
   }
 
-  /* Tables are constrained, NOT switched to display:block. Making a table a
-     block destroys its table formatting context, which breaks any page that
-     stacks its own cells on mobile (ops.html does exactly that) and lets the
-     cells lay out as full-width columns that overflow the page instead. */
+  /* Tables SCROLL sideways inside .table-wrap; they are not squeezed and not
+     switched to display:block (that destroys the table formatting context).
+     `table-layout: fixed` used to be set here, which combined with the 640px
+     min-width to give every column an identical slice — 80px each across the
+     8-column registrations table, with the action buttons clipped. Auto
+     layout lets columns size to their content and the wrapper scrolls. */
   table {
-    max-width: 100%;
-    table-layout: fixed;
+    min-width: 460px;
   }
 
   td,
   th {
     overflow-wrap: anywhere;
+    padding: 11px 12px;
+  }
+
+  /* Keep the row actions on one line and sized for a thumb. */
+  td.col-actions,
+  th.col-actions {
+    white-space: nowrap;
+  }
+  td.col-actions .btn {
+    margin-right: 6px;
+  }
+
+  /* Sideways scroll is easy to miss, so hint at it. */
+  .table-wrap {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .footer {
+    padding: 28px 16px;
+  }
+
+  /* The toast sits centred at the bottom, exactly where the chat button
+     lives. Lift it clear on small screens. */
+  .toast {
+    bottom: 88px;
   }
 }
 
