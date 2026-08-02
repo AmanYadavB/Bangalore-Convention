@@ -1748,6 +1748,28 @@ function withSecurityHeaders(res, env, url) {
   const out = new Response(res.body, res);
   const h = out.headers;
 
+  // API responses must never be cached by the browser, by Cloudflare's edge,
+  // or by any proxy in between.
+  //
+  // This was a real bug, not a precaution: /api/auth/me answers "who am I"
+  // and had no cache headers at all, so a cache could store one visitor's
+  // {"authenticated":true,...} and hand it to somebody else — and could serve
+  // a stale {"authenticated":false} to someone who had just signed in
+  // successfully, making a working login look broken.
+  //
+  // Vary: Cookie is the half that keeps a shared cache from mixing sessions;
+  // no-store is the half that stops it being stored at all.
+  //
+  // Responses that deliberately set their own cache-control are left alone —
+  // notably GET /api/reflections/:id/image, which Meta fetches when sending
+  // the daily WhatsApp template and which must stay publicly cacheable.
+  if (url.pathname.startsWith("/api/") && !h.has("cache-control")) {
+    h.set("cache-control", "private, no-store, max-age=0, must-revalidate");
+  }
+  if (url.pathname.startsWith("/api/") && !h.has("vary")) {
+    h.set("vary", "Cookie");
+  }
+
   h.set("x-content-type-options", "nosniff");
   h.set("referrer-policy", "strict-origin-when-cross-origin");
   h.set("x-frame-options", "DENY");
