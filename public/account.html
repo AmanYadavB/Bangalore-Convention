@@ -261,8 +261,9 @@
                 mood: "sad",
                 danger: true,
                 title: "Delete " + email + "?",
-                message: "They're signed out everywhere and their password is cleared. The mascot will genuinely miss them.",
+                message: "They get signed out everywhere and their password is wiped clean. The mascot is already planning the goodbye party it never wanted to throw.",
                 confirmText: "Delete account",
+                cancelText: "Let them stay",
               }))) return;
               btn.disabled = true;
               try {
@@ -284,8 +285,9 @@
         if (!(await mascotConfirm({
           mood: "worried",
           title: "Sign out everywhere else?",
-          message: "Every device except this one gets signed out right away.",
+          message: "Every device except this one gets signed out immediately. The mascot is sweating a little, but it's ready to slam the doors on your word.",
           confirmText: "Sign them out",
+          cancelText: "Leave them be",
         }))) return;
         try {
           await api("/api/auth/sessions", { method: "DELETE" });

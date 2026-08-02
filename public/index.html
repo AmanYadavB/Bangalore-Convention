@@ -24,19 +24,18 @@
       </div>
       <div class="hero-cta" style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap">
         <a class="btn primary" href="register.html">Register Now</a>
-        <a class="btn ghost" href="#pricing">View Pricing</a>
+        <a class="btn ghost" href="register.html">View Pricing</a>
+      </div>
+
+      <!-- The registration categories live here now: one compact card that
+           cycles through them, instead of the old four-card grid below. -->
+      <div class="price-spot" id="priceSpot" hidden>
+        <a class="spot-card" id="spotCard" href="register.html"></a>
+        <div class="spot-dots" id="spotDots" aria-hidden="true"></div>
       </div>
     </section>
 
     <div class="container">
-      <div id="pricing" class="section-head">
-        <h2>Registration Categories</h2>
-        <a class="btn small" href="register.html">Book a spot →</a>
-      </div>
-      <div id="pricing-grid" class="grid cols-4">
-        <div class="empty">Loading pricing…</div>
-      </div>
-
       <div class="section-head">
         <h2>What's Included</h2>
       </div>
@@ -104,27 +103,44 @@
         setInterval(tick, 1000);
       })();
 
+      // Price spotlight: one compact card cycling through the categories,
+      // each arriving with the site's tumble. Tap → register, preselected.
       (async () => {
+        let pricing;
         try {
-          const pricing = await api("/api/pricing");
-          const grid = document.getElementById("pricing-grid");
-          grid.innerHTML = pricing
-            .map(
-              (c, i) => `
-            <div class="card price-card ${i === 2 ? "featured" : ""}">
-              ${i === 2 ? '<span class="badge">Popular</span>' : ""}
-              <h3>${escapeHtml(c.name)}</h3>
-              <div class="desc">${escapeHtml(c.description)}</div>
-              <div class="amount">${money(c.price)} <span>/ person</span></div>
-              <a class="btn primary" style="margin-top:auto"
-                 href="register.html?category=${c.id}">Select</a>
-            </div>`
-            )
-            .join("");
+          pricing = await api("/api/pricing");
         } catch (e) {
-          document.getElementById("pricing-grid").innerHTML =
-            '<div class="empty">Could not load pricing.</div>';
+          return; // pricing unavailable — the hero simply shows no spotlight
         }
+        if (!Array.isArray(pricing) || !pricing.length) return;
+
+        const wrap = document.getElementById("priceSpot");
+        const card = document.getElementById("spotCard");
+        const dots = document.getElementById("spotDots");
+        const ICONS = ["🛏️", "🚪", "👥", "👨‍👩‍👦", "🎟️", "⭐"];
+        wrap.hidden = false;
+        dots.innerHTML = pricing.map(() => "<i></i>").join("");
+
+        let i = 0;
+        function show(n) {
+          i = n;
+          const c = pricing[n];
+          card.href = "register.html?category=" + encodeURIComponent(c.id);
+          card.innerHTML =
+            `<span class="spot-ico" aria-hidden="true">${ICONS[n % ICONS.length]}</span>` +
+            `<span class="spot-txt"><b>${escapeHtml(c.name)}</b><small>${escapeHtml(
+              c.description || ""
+            )}</small></span>` +
+            `<span class="spot-price">${money(c.price)}</span>`;
+          card.classList.remove("anim");
+          void card.offsetWidth; // restart the tumble
+          card.classList.add("anim");
+          dots.querySelectorAll("i").forEach((d, j) => d.classList.toggle("on", j === n));
+        }
+        show(0);
+        setInterval(() => {
+          if (!document.hidden) show((i + 1) % pricing.length);
+        }, 3000);
       })();
     </script>
   </body>

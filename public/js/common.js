@@ -205,6 +205,9 @@ function mascotConfirm(opts) {
     document.body.appendChild(wrap);
     requestAnimationFrame(() => wrap.classList.add("show"));
     let settled = false;
+    // Once "yes" is clicked the outcome is locked in — the goodbye animation
+    // plays, and Escape/backdrop can no longer downgrade it to a cancel.
+    let confirming = false;
     const done = (ok) => {
       if (settled) return;
       settled = true;
@@ -214,15 +217,19 @@ function mascotConfirm(opts) {
       resolve(ok);
     };
     const onKey = (e) => {
-      if (e.key === "Escape") done(false);
+      if (e.key === "Escape" && !confirming) done(false);
     };
     document.addEventListener("keydown", onKey);
     wrap.addEventListener("click", (e) => {
-      if (e.target === wrap) done(false);
+      if (e.target === wrap && !confirming) done(false);
     });
-    noBtn.addEventListener("click", () => done(false));
+    noBtn.addEventListener("click", () => {
+      if (!confirming) done(false);
+    });
     yesBtn.addEventListener("click", () => {
+      if (confirming) return;
       if (opts.danger && !settled) {
+        confirming = true;
         // The robot takes the news personally: it turns sad and walks off
         // before the dialog closes.
         noBtn.disabled = yesBtn.disabled = true;
@@ -650,6 +657,140 @@ function mountReveals() {
   mo.observe(document.body, { childList: true, subtree: true });
 }
 
+// ---- Animated dropdowns --------------------------------------------------
+// Native <select> menus can't be animated, so every select (outside the chat
+// widget) gets a styled twin that opens with the nav's tumble and staggers
+// its rows. The native control STAYS in the DOM holding its name/value —
+// FormData, .value reads and existing change listeners all keep working.
+function mountDropdowns() {
+  if (mountDropdowns.__on) return;
+  mountDropdowns.__on = true;
+
+  const closeAllDD = (except) => {
+    document.querySelectorAll(".dd.open").forEach((d) => {
+      if (d === except) return;
+      d.classList.remove("open");
+      const b = d.querySelector(".dd-btn");
+      if (b) b.setAttribute("aria-expanded", "false");
+    });
+  };
+  document.addEventListener("click", () => closeAllDD(null));
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeAllDD(null);
+  });
+
+  function enhance(sel) {
+    if (sel.__dd || sel.closest("#chatWidget") || sel.hasAttribute("data-no-dd")) return;
+    sel.__dd = true;
+
+    const dd = document.createElement("div");
+    dd.className = "dd";
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "dd-btn";
+    btn.setAttribute("aria-haspopup", "listbox");
+    btn.setAttribute("aria-expanded", "false");
+    const menu = document.createElement("div");
+    menu.className = "dd-menu";
+    menu.setAttribute("role", "listbox");
+    dd.appendChild(btn);
+    dd.appendChild(menu);
+    sel.classList.add("dd-native");
+    sel.tabIndex = -1;
+    sel.insertAdjacentElement("afterend", dd);
+
+    let hi = -1; // keyboard highlight, index into menu rows
+
+    const syncBtn = () => {
+      const o = sel.options[sel.selectedIndex];
+      btn.innerHTML =
+        `<span class="dd-val${o && o.disabled ? " ph" : ""}">${escapeHtml(
+          o ? o.textContent : ""
+        )}</span><span class="dd-chev" aria-hidden="true">▾</span>`;
+    };
+
+    const rebuild = () => {
+      menu.innerHTML = "";
+      Array.from(sel.options).forEach((o, idx) => {
+        if (o.disabled) return; // placeholder rows never appear in the list
+        const row = document.createElement("div");
+        row.className = "dd-opt" + (idx === sel.selectedIndex ? " sel" : "");
+        row.setAttribute("role", "option");
+        row.setAttribute("aria-selected", idx === sel.selectedIndex ? "true" : "false");
+        row.style.setProperty("--i", menu.children.length);
+        row.textContent = o.textContent;
+        row.addEventListener("click", (e) => {
+          e.stopPropagation();
+          sel.value = o.value;
+          sel.dispatchEvent(new Event("change", { bubbles: true }));
+          close();
+        });
+        menu.appendChild(row);
+      });
+      syncBtn();
+    };
+
+    const open = () => {
+      closeAllDD(dd);
+      rebuild(); // re-sync with whatever the page did to the native select
+      dd.classList.add("open");
+      btn.setAttribute("aria-expanded", "true");
+      hi = -1;
+    };
+    const close = () => {
+      dd.classList.remove("open");
+      btn.setAttribute("aria-expanded", "false");
+    };
+
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (dd.classList.contains("open")) close();
+      else open();
+    });
+
+    btn.addEventListener("keydown", (e) => {
+      const rows = menu.querySelectorAll(".dd-opt");
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        if (!dd.classList.contains("open")) return open();
+        if (!rows.length) return;
+        hi = e.key === "ArrowDown" ? Math.min(hi + 1, rows.length - 1) : Math.max(hi - 1, 0);
+        rows.forEach((r, j) => r.classList.toggle("hi", j === hi));
+        rows[hi].scrollIntoView({ block: "nearest" });
+      } else if ((e.key === "Enter" || e.key === " ") && dd.classList.contains("open")) {
+        e.preventDefault();
+        if (hi >= 0 && rows[hi]) rows[hi].click();
+        else close();
+      } else if (e.key === "Escape") {
+        close();
+      }
+    });
+
+    // The page may rewrite the options (register.html fills categories after
+    // its pricing fetch, then preselects from ?category=) — follow along.
+    new MutationObserver(() => {
+      syncBtn();
+      if (dd.classList.contains("open")) rebuild();
+    }).observe(sel, { childList: true });
+    sel.addEventListener("change", syncBtn);
+
+    rebuild();
+  }
+
+  const scan = () => document.querySelectorAll("select").forEach(enhance);
+  scan();
+
+  // Catch selects that pages render later, one rAF-debounced scan per burst.
+  const mo = new MutationObserver(() => {
+    if (mountDropdowns.__raf) return;
+    mountDropdowns.__raf = requestAnimationFrame(() => {
+      mountDropdowns.__raf = 0;
+      scan();
+    });
+  });
+  mo.observe(document.body, { childList: true, subtree: true });
+}
+
 // opts.chat === false suppresses the chat widget. The login page passes it:
 // a floating mascot that overlaps the password field is not what you want on
 // a sign-in screen.
@@ -662,6 +803,7 @@ function mountNav(active, opts) {
   paintNav(active, options);
   if (options.chat !== false) mountChat();
   mountReveals();
+  mountDropdowns();
 
   // Compare against what was just painted. (This used to compare against the
   // hint AFTER refreshUser had overwritten it — fresh against fresh, always

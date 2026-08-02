@@ -136,8 +136,9 @@
             mood: "sad",
             danger: true,
             title: "Delete this expense?",
-            message: "It comes off the totals right away. The mascot hates losing receipts.",
+            message: "It comes off the totals right away. The mascot is already hugging the receipt goodbye.",
             confirmText: "Delete it",
+            cancelText: "Keep the receipt",
           }))) return;
           try {
             await api(`/api/expenses/${del.getAttribute("data-del")}`, { method: "DELETE" });

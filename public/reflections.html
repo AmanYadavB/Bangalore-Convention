@@ -296,8 +296,9 @@
           mood: "sad",
           danger: true,
           title: "Delete this reflection?",
-          message: "It disappears from the archive for everyone. The mascot will shed a small tear.",
+          message: "It disappears from the archive for everyone, and it cannot be brought back. The mascot will shed a small, honest tear.",
           confirmText: "Delete it",
+          cancelText: "Keep it",
         }))) return;
         try {
           await api("/api/reflections/" + r.id, { method: "DELETE" });
@@ -364,8 +365,9 @@
               if (!(await mascotConfirm({
                 mood: "worried",
                 title: "Send the broadcast now?",
-                message: "This goes to every REFLECTION_RECIPIENTS address immediately, and it costs money per recipient.",
+                message: "It goes to every REFLECTION_RECIPIENTS address the moment you confirm, and it costs money for each recipient. Once it's out, there is no calling it back.",
                 confirmText: "Send it now",
+                cancelText: "Not yet",
               }))) return;
               sendBtn.disabled = true;
               try {

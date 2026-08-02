@@ -149,8 +149,9 @@
               mood: "sad",
               danger: true,
               title: "Delete this registration?",
-              message: "Their booking disappears from the list and the totals. This can't be undone.",
+              message: "Their booking vanishes from the list and the totals, and there's no undo — the mascot checked. Twice.",
               confirmText: "Delete it",
+              cancelText: "Keep them in",
             }))) return;
             await api(`/api/registrations/${id}`, { method: "DELETE" });
             ALL = ALL.filter((r) => r.id !== id);

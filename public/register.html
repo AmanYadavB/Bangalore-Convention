@@ -158,14 +158,19 @@
         const isPaid = !!r.paid;
         const layout = document.getElementById("reg-layout");
         layout.style.gridTemplateColumns = "1fr";
+        // THE celebration — the mascot loses it completely, chatbot style:
+        // victory jumps for a paid booking, a full dance while payment is
+        // still pending, confetti raining through the card either way.
         layout.innerHTML = `
-          <div class="card" style="max-width:560px;margin:0 auto;text-align:center">
-            <div style="width:64px;height:64px;border-radius:50%;margin:6px auto 14px;
-                        display:grid;place-items:center;font-size:32px;
-                        background:rgba(63,208,127,0.15);color:var(--green)">${isPaid ? "💳" : "✓"}</div>
-            <h2 style="margin:0 0 6px">${isPaid ? "Payment received!" : "You're registered!"}</h2>
+          <div class="card confetti-box" id="celebrateCard" style="max-width:560px;margin:0 auto;text-align:center">
+            <div class="mascot-stage party" style="margin-top:4px">
+              <span class="mascot-scale">${mascotHTML(isPaid ? "scene-jump" : "dance")}</span>
+            </div>
+            <h2 style="margin:0 0 6px">${isPaid ? "PAYMENT RECEIVED — LET'S GOOOO!!" : "LET'S GOOOO — you're in!!"}</h2>
             <p class="muted" style="margin:0 0 20px">
-              Thanks, ${escapeHtml(r.name)}. ${isPaid ? "Your payment is confirmed and your spot is reserved." : "We've saved your spot for the convention."}
+              ${isPaid
+                ? escapeHtml(r.name) + ", your payment is confirmed and your spot is officially reserved. The mascot is doing laps around the inside of its button."
+                : "You did it, " + escapeHtml(r.name) + "!! Your spot at the convention is saved and the mascot has not stopped dancing since."}
             </p>
             <div style="text-align:left;border:1px solid var(--border);border-radius:12px;padding:16px">
               <div class="bar-row" style="grid-template-columns:1fr auto;margin-bottom:8px">
@@ -184,14 +189,25 @@
             </div>
             <p class="muted" style="font-size:13px;margin:16px 0 20px">
               ${isPaid
-                ? "Your payment has been received. The team will be in touch shortly."
-                : "You can pay online now or hand it to the team at the venue. Keep your booking reference handy."}
+                ? "Your payment is in, safe and sound. The team will be in touch shortly — until then, the mascot is counting down the days right there with you."
+                : "Pay online now or hand it to the team at the venue — dealer's choice. Just keep your booking reference close; that little code is your golden ticket."}
             </p>
             <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
               <button class="btn primary" type="button" onclick="location.reload()">Register another</button>
               <a class="btn ghost" href="index.html">Back to home</a>
             </div>
           </div>`;
+        // Confetti rain through the celebration card.
+        const box = document.getElementById("celebrateCard");
+        const colors = ["#5b5bf0", "#7c3aed", "#0ea5e9", "#10b981", "#f59e0b", "#ef4444"];
+        for (let i = 0; i < 14; i++) {
+          const p = document.createElement("i");
+          p.style.left = (3 + Math.random() * 94) + "%";
+          p.style.background = colors[i % colors.length];
+          p.style.animationDelay = (Math.random() * 2.6).toFixed(2) + "s";
+          p.style.animationDuration = (2.2 + Math.random() * 1.6).toFixed(2) + "s";
+          box.appendChild(p);
+        }
         window.scrollTo({ top: 0, behavior: "smooth" });
       }
     </script>
