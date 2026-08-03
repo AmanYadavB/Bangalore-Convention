@@ -12,11 +12,22 @@
 
     <main class="container">
       <h1 class="page-title" id="pageTitle">Your account</h1>
-      <p class="page-sub" id="whoami">Loading…</p>
+      <!-- Setup mode speaks through this plain line; the normal page uses
+           the ID card below instead. -->
+      <p class="page-sub" id="whoami" hidden>Loading…</p>
 
+      <section class="acct-id" id="acctId">
+        <span class="acct-ava" id="acctAva" aria-hidden="true">·</span>
+        <div class="acct-who">
+          <b id="acctEmail">Loading…</b><span class="role-chip" id="acctRole" hidden></span>
+          <span class="acct-meta" id="acctMeta"></span>
+        </div>
+      </section>
+
+      <div class="acct-grid" id="acctGrid">
       <div class="card">
         <div class="section-head" id="pwHead" style="margin: 0 0 14px">
-          <h2 style="margin: 0">Password</h2>
+          <h2 style="margin: 0">🔒 Password</h2>
         </div>
         <p class="muted" id="pwIntro" style="margin-top: 0">
           This is how you sign in: type your email on the sign-in page and
@@ -46,29 +57,17 @@
 
       <div class="card" id="sessionsCard">
         <div class="section-head" style="margin: 0 0 14px">
-          <h2 style="margin: 0">Where you're signed in</h2>
+          <h2 style="margin: 0">💻 Where you're signed in</h2>
           <button class="btn ghost small" id="revokeOthers" type="button">Sign out everywhere else</button>
         </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Method</th>
-                <th>Started</th>
-                <th>Last seen</th>
-                <th>Device</th>
-              </tr>
-            </thead>
-            <tbody id="sessionRows">
-              <tr><td colspan="4" class="empty">Loading…</td></tr>
-            </tbody>
-          </table>
+        <div class="ses-list" id="sessionRows">
+          <div class="empty">Loading…</div>
         </div>
       </div>
 
       <div class="card" id="accessCard">
         <div class="section-head" style="margin: 0 0 14px">
-          <h2 style="margin: 0">Access</h2>
+          <h2 style="margin: 0">🗝️ Access</h2>
         </div>
         <p class="muted" id="accessNote" style="margin: 0 0 14px">
           Who can sign in is set in the site's configuration, not here. To add
@@ -92,6 +91,7 @@
             </tbody>
           </table>
         </div>
+      </div>
       </div>
     </main>
 
@@ -119,6 +119,8 @@
         document.getElementById("pwIntro").hidden = true;
         document.getElementById("sessionsCard").hidden = true;
         document.getElementById("accessCard").hidden = true;
+        document.getElementById("acctId").hidden = true;
+        document.getElementById("whoami").hidden = false;
       }
 
       function when(ts) {
@@ -150,17 +152,41 @@
         return "Unknown";
       }
 
+      // The sessions call fills this in; the ID card meta line shows it.
+      let deviceCount = null;
+
+      function paintMeta() {
+        const me = currentUser();
+        if (!me || setupMode) return;
+        document.getElementById("acctMeta").innerHTML =
+          (me.hasPassword
+            ? '<b class="ok">password set ✓</b>'
+            : '<b class="warn">no password yet</b>') +
+          (deviceCount == null
+            ? ""
+            : " · signed in on " + deviceCount + (deviceCount === 1 ? " device" : " devices"));
+      }
+
       function paintMe() {
         const me = currentUser();
-        const el = document.getElementById("whoami");
-        if (!me) { el.textContent = "Not signed in."; return; }
+        const who = document.getElementById("whoami");
+        if (!me) { who.hidden = false; who.textContent = "Not signed in."; return; }
         // Setup mode: just the address — the heading already says the rest.
-        if (setupMode) { el.textContent = me.email; return; }
-        el.innerHTML =
-          escapeHtml(me.email) + " · " +
-          (me.role === "developer" ? "developer" : "committee") +
-          (me.hasPassword ? " · password set" : " · no password yet");
+        if (setupMode) { who.textContent = me.email; return; }
+        document.getElementById("acctAva").textContent = (me.email || "?").charAt(0).toUpperCase();
+        document.getElementById("acctEmail").textContent = me.email;
+        const role = document.getElementById("acctRole");
+        role.hidden = false;
+        role.textContent = me.role === "developer" ? "Developer" : "Committee";
+        paintMeta();
         document.getElementById("currentField").hidden = !me.hasPassword;
+      }
+
+      function deviceIcon(ua) {
+        const s = String(ua || "");
+        if (/iPhone|iPad|Android/i.test(s)) return "📱";
+        if (/Macintosh/i.test(s)) return "💻";
+        return "🖥️";
       }
 
       async function loadSessions() {
@@ -168,21 +194,25 @@
         try {
           const data = await api("/api/auth/sessions");
           const list = data.sessions || [];
+          deviceCount = list.length;
+          paintMeta();
           if (!list.length) {
-            rows.innerHTML = '<tr><td colspan="4" class="empty">No active sessions.</td></tr>';
+            rows.innerHTML = '<div class="empty">No active sessions.</div>';
             return;
           }
           rows.innerHTML = list.map(function (s) {
-            return "<tr>" +
-              "<td>" + escapeHtml(methodLabel(s.method)) +
-                (s.current ? ' <span class="muted">(this one)</span>' : "") + "</td>" +
-              "<td>" + escapeHtml(when(s.createdAt)) + "</td>" +
-              "<td>" + escapeHtml(when(s.lastSeenAt)) + "</td>" +
-              "<td>" + escapeHtml(shortDevice(s.ua)) + "</td>" +
-            "</tr>";
+            return '<div class="ses-row">' +
+              '<span class="ses-dev" aria-hidden="true">' + deviceIcon(s.ua) + "</span>" +
+              '<span class="ses-main">' +
+                escapeHtml(shortDevice(s.ua)) + " · " + escapeHtml(methodLabel(s.method)) +
+                '<span class="ses-mini">started ' + escapeHtml(when(s.createdAt)) +
+                  " · last seen " + escapeHtml(when(s.lastSeenAt)) + "</span>" +
+              "</span>" +
+              (s.current ? '<span class="ses-now">THIS ONE</span>' : "") +
+            "</div>";
           }).join("");
         } catch (err) {
-          rows.innerHTML = '<tr><td colspan="4" class="empty">' + escapeHtml(err.message) + "</td></tr>";
+          rows.innerHTML = '<div class="empty">' + escapeHtml(err.message) + "</div>";
         }
       }
 

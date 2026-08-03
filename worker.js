@@ -2262,6 +2262,98 @@ function istClock() {
   });
 }
 
+// ---- Registration confirmation email --------------------------------------
+// The email twin of the WhatsApp receipt: C's celebration on top, and the
+// SAME ticket the register wizard renders on-site — same per-category icon
+// and gradient (keyed by the category's index in PRICING, the same order
+// register.html reads from /api/pricing), same BC- reference, same stub.
+const TICKET_ICONS = ["🛏️", "🚪", "👥", "👨‍👩‍👦", "🎟️", "⭐"];
+const TICKET_GRADS = [
+  ["#f59e0b", "#ef4444"],
+  ["#38bdf8", "#5b5bf0"],
+  ["#a78bfa", "#7c3aed"],
+  ["#34d399", "#0ea5e9"],
+  ["#fb7185", "#f59e0b"],
+];
+
+function registrationEmail(env, reg, paid) {
+  const idx = Math.max(0, PRICING.findIndex((c) => c.id === reg.categoryId));
+  const icon = TICKET_ICONS[idx % TICKET_ICONS.length];
+  const grad = TICKET_GRADS[idx % TICKET_GRADS.length];
+  const ref = "BC-" + String(reg.id || "").slice(0, 8).toUpperCase();
+  const first = esc(String(reg.name || "friend").trim().split(/\s+/)[0]);
+  const amount = "₹" + Number(reg.amount || 0).toLocaleString("en-IN");
+
+  const pill = paid
+    ? '<span style="background:#d9f4e6;color:#0b7a43;padding:3px 11px;border-radius:999px;font-weight:800;font-size:12px">✓ PAID</span>'
+    : '<span style="background:#fdf0d4;color:#8a6207;padding:3px 11px;border-radius:999px;font-weight:800;font-size:12px">⏳ PENDING</span>';
+  const payNote = paid
+    ? "Payment received, spot reserved, nothing left to do — just count the days with us."
+    : "You can pay online any time or hand it to the team at the venue — zero stress either way. Your spot is saved.";
+  // Deterministic decorative barcode, same formula as the wizard's stub bars.
+  const bars = Array.from(
+    { length: 26 },
+    (_, i) =>
+      '<span style="display:inline-block;width:3px;height:' +
+      (8 + ((i * 7) % 14)) +
+      'px;background:#1f2937;margin:0 1px;vertical-align:bottom"></span>'
+  ).join("");
+
+  const inner =
+    '<div style="text-align:center;font-size:19px;letter-spacing:4px;margin-top:10px">🎊 🎉 🎊</div>' +
+    '<h2 style="margin:6px 0 4px;text-align:center;font-size:25px;font-weight:900;' +
+    "background:linear-gradient(90deg,#10b981,#5b5bf0,#7c3aed);-webkit-background-clip:text;background-clip:text;color:transparent\">" +
+    (paid ? "LET'S GOOOO — PAID &amp; IN!!" : "LET'S GOOOO — YOU'RE IN!!") +
+    "</h2>" +
+    '<p style="color:#4b5563;text-align:center;margin:0 0 16px;line-height:1.65">' +
+    "You did it, " + first + "!! The mascot printed your ticket itself and is extremely proud of the perforation.</p>" +
+    // ---- the ticket (mirror of the wizard's) ----
+    '<div style="border:2px solid #c7d2fe;border-radius:16px;overflow:hidden">' +
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%"><tr>' +
+    '<td width="64" style="width:64px;background-color:' + grad[0] +
+    ";background-image:linear-gradient(140deg," + grad[0] + "," + grad[1] +
+    ');text-align:center;font-size:26px;vertical-align:middle">' + icon + "</td>" +
+    '<td style="padding:14px 16px">' +
+    '<div style="font-size:11px;letter-spacing:1px;color:#6b7280;font-weight:700">BANGALORE CONVENTION · 9–11 JULY 2027</div>' +
+    '<div style="font-size:19px;font-weight:800;margin:3px 0 2px;color:#111827">' + esc(reg.name || "") + "</div>" +
+    '<div style="font-size:13px;color:#4b5563">' + esc(reg.categoryName || "") + " · " + amount + " &nbsp;" + pill + "</div>" +
+    "</td></tr></table>" +
+    '<div style="border-top:2px dashed #c7d2fe;padding:10px 16px;text-align:center;background:#f8f9ff">' +
+    '<span style="font-family:ui-monospace,Consolas,monospace;font-weight:800;font-size:16px;letter-spacing:2px;color:#111827">' + ref + "</span><br>" +
+    '<span style="line-height:0">' + bars + "</span></div></div>" +
+    '<p style="color:#8a91a8;font-size:12.5px;text-align:center;margin:14px 0 0;line-height:1.6">' +
+    "Keep this email — flash the reference at the door and you're in. " + payNote + "</p>";
+
+  const html =
+    '<div style="background:#eef1fb;padding:26px 12px">' +
+    '<div style="max-width:520px;margin:0 auto;border-radius:20px;overflow:hidden;border:1px solid #e2e6f8;background:#ffffff;font-family:system-ui,-apple-system,\'Segoe UI\',Roboto,sans-serif;color:#1f2937">' +
+    '<div style="background-color:#5b5bf0;background-image:linear-gradient(120deg,#38bdf8,#5b5bf0 55%,#7c3aed);padding:16px 24px 44px;text-align:center">' +
+    '<img src="' + emailLogoUrl(env) + '" width="36" height="36" alt="" style="display:inline-block;vertical-align:middle;border-radius:10px">' +
+    '<span style="color:#ffffff;font-weight:700;font-size:15px;margin-left:10px;vertical-align:middle">Bangalore Convention 2027</span></div>' +
+    '<div style="margin-top:-32px">' + emailMascot("dance") + "</div>" +
+    '<div style="padding:4px 28px 24px">' + inner + "</div></div>" +
+    '<p style="max-width:520px;margin:12px auto 0;text-align:center;color:#9aa1b9;font-size:11.5px;font-family:system-ui,sans-serif">Bangalore Convention 2027 · delivered by the site\'s little mascot 🤖<br>9–11 July 2027 · Bangalore, India</p>' +
+    "</div>";
+
+  const subject = paid
+    ? "LET'S GOOOO — you're in AND paid!! 🎉 (" + ref + ")"
+    : "LET'S GOOOO — you're in!! 🎉 (" + ref + ")";
+  return { subject, html };
+}
+
+// Fire-and-forget, like the WhatsApp receipt: a mail hiccup must never break
+// a registration or a payment. The recipient is the STORED record's email.
+function sendRegistrationEmail(env, ctx, reg, paid) {
+  if (!reg || !reg.email) return;
+  try {
+    const mail = registrationEmail(env, reg, paid);
+    const work = sendMail(env, reg.email, mail.subject, mail.html, { toName: reg.name || "" });
+    if (ctx && ctx.waitUntil) ctx.waitUntil(work);
+  } catch (e) {
+    console.log("registration email failed to build:", e && e.message);
+  }
+}
+
 // General mail sender. Magic links need to reach an arbitrary staff address,
 // so the recipient is a parameter — but see handleAuth: that address always
 // comes from a database row, never from a request body, which is what stops
@@ -3255,6 +3347,9 @@ async function handleApi(request, env, ctx) {
       };
       list.push(record);
       await saveList(env, "registrations", list);
+      // The emailed ticket (pending flavour) — the paid one follows the
+      // moment Razorpay verifies, right next to the WhatsApp receipt.
+      sendRegistrationEmail(env, ctx, record, false);
       return json(record, 201);
     }
 
@@ -4233,6 +4328,8 @@ async function handleApi(request, env, ctx) {
     // turn a successful payment into a failed request. No-ops until the
     // WHATSAPP_* config is in place.
     ctx.waitUntil(waSendConfirmation(env, list[idx], url.origin));
+    // The emailed ticket, paid flavour — same moment as the WhatsApp receipt.
+    sendRegistrationEmail(env, ctx, list[idx], true);
 
     return json({ ok: true, registration: list[idx] });
   }

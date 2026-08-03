@@ -505,12 +505,14 @@ function renderNav(active, opts) {
         (user.email || "?").charAt(0).toUpperCase()
       )}</button>
       <div class="profile-menu" id="profileMenu" role="menu">
-        <div class="profile-head">
-          <b class="profile-email">${escapeHtml(user.email)}</b>
-          <span class="profile-role">${user.role === "developer" ? "Developer" : "Committee"}</span>
-        </div>
-        <a class="profile-item" role="menuitem" href="account.html">Your account</a>
-        <button class="profile-item" role="menuitem" id="logoutBtn" type="button">Sign out</button>
+        <div class="profile-band" aria-hidden="true"></div>
+        <span class="profile-ava" aria-hidden="true">${escapeHtml(
+          (user.email || "?").charAt(0).toUpperCase()
+        )}</span>
+        <b class="profile-email">${escapeHtml(user.email)}</b>
+        <span class="profile-role">${user.role === "developer" ? "Developer" : "Committee"}</span>
+        <a class="profile-item" role="menuitem" href="account.html"><span aria-hidden="true">👤</span>Your account</a>
+        <button class="profile-item danger" role="menuitem" id="logoutBtn" type="button"><span aria-hidden="true">🚪</span>Sign out</button>
       </div>
     </div>`
     : "";
