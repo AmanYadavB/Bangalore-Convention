@@ -138,15 +138,20 @@
             api("/api/registrations").catch(() => []),
           ]);
 
-          const pct = d.totalPledged
-            ? Math.min(100, Math.round((d.totalCollected / d.totalPledged) * 100))
-            : 0;
+          // The organisers expect 500–600 attendees; progress is measured
+          // against that estimate, not against "pledged" money (which was
+          // just the sum of whoever had registered so far).
+          const EXPECTED_REGISTRATIONS = 550;
+          const pct = Math.min(
+            100,
+            Math.round((d.registrationCount / EXPECTED_REGISTRATIONS) * 100)
+          );
           const pendingCount = d.registrationCount - d.paidCount;
 
           const hero = `<div class="card stat dash-hero">
             <div class="label">Collected</div>
             <div class="big">${money(d.totalCollected)}</div>
-            <div class="goal-line">${pct}% of ${money(d.totalPledged)} pledged</div>
+            <div class="goal-line">${d.registrationCount} of ~${EXPECTED_REGISTRATIONS} expected registrations (${pct}%)</div>
             <div class="goal-track"><i style="width:${pct}%"></i></div>
             ${sparkline(regs)}
           </div>`;

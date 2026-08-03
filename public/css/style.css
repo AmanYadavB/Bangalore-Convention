@@ -3459,6 +3459,117 @@ select.dd-native {
   .reg-steps .reg-ln { min-width: 6px; }
 }
 
+/* ================= Sign in: L2 popup over the blurred site =================
+   The login page fakes "the site behind a modal": a blurred non-interactive
+   home-page mock + the voice-mode aurora breathing behind a frosted card. */
+.login-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.login-bg-page {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: start center;
+  padding-top: 64px;
+  /* Far enough back that nothing reads through the card as a smear. */
+  filter: blur(14px) saturate(1.05);
+  transform: scale(1.03);
+  opacity: 0.5;
+}
+
+.lbp-hero { text-align: center; }
+
+.lbp-hero h2 {
+  font-size: 42px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  margin: 0 0 10px;
+  color: var(--text);
+}
+
+.lbp-hero h2 span {
+  background: linear-gradient(120deg, var(--accent-3), var(--accent), var(--accent-2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.lbp-hero p { color: var(--muted); margin: 0 0 22px; }
+
+.lbp-count { display: flex; gap: 10px; justify-content: center; margin-bottom: 20px; }
+.lbp-count i {
+  width: 64px; height: 58px; border-radius: 13px;
+  background: var(--card); border: 1px solid var(--border);
+}
+
+.lbp-btns { display: flex; gap: 10px; justify-content: center; }
+.lbp-btns i {
+  width: 132px; height: 42px; border-radius: 12px;
+  background: var(--card); border: 1px solid var(--border);
+}
+.lbp-btns i:first-child {
+  background: linear-gradient(140deg, var(--accent-3), var(--accent) 55%, var(--accent-2));
+  border: 0;
+}
+
+.login-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(46px);
+  animation: login-breathe 6s ease-in-out infinite;
+}
+.login-blob:nth-of-type(1) { width: 320px; height: 320px; left: -80px; bottom: -140px; background: var(--accent); opacity: 0.3; }
+.login-blob:nth-of-type(2) { width: 280px; height: 280px; left: 38%; bottom: -160px; background: var(--accent-2); opacity: 0.27; animation-delay: 1.2s; }
+.login-blob:nth-of-type(3) { width: 260px; height: 260px; right: -70px; bottom: -120px; background: var(--accent-3); opacity: 0.29; animation-delay: 2.4s; }
+
+@keyframes login-breathe {
+  0%, 100% { transform: translateY(6px) scale(1); }
+  50% { transform: translateY(-16px) scale(1.07); }
+}
+
+.login-main { position: relative; z-index: 1; }
+
+.login-main .auth-card {
+  /* Mostly opaque: frosted at the edges, clean to read in the middle —
+     62% let the mock's gradients smear through the card. */
+  background: color-mix(in srgb, var(--card) 90%, transparent);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  border-color: color-mix(in srgb, var(--border) 70%, transparent);
+  box-shadow: 0 24px 54px -20px rgba(15, 20, 45, 0.45);
+  animation: wiz-tum 0.5s cubic-bezier(0.34, 1.45, 0.64, 1);
+}
+
+/* Fields cascade in with the tumble, one after another. */
+.login-main .auth-card > * {
+  animation: login-cascade 0.45s cubic-bezier(0.34, 1.45, 0.64, 1) both;
+}
+.login-main .auth-card > :nth-child(1) { animation-delay: 60ms; }
+.login-main .auth-card > :nth-child(2) { animation-delay: 110ms; }
+.login-main .auth-card > :nth-child(3) { animation-delay: 160ms; }
+.login-main .auth-card > :nth-child(4) { animation-delay: 210ms; }
+.login-main .auth-card > :nth-child(5) { animation-delay: 260ms; }
+.login-main .auth-card > :nth-child(6) { animation-delay: 310ms; }
+.login-main .auth-card > :nth-child(7) { animation-delay: 360ms; }
+.login-main .auth-card > :nth-child(8) { animation-delay: 410ms; }
+
+@keyframes login-cascade {
+  0% { opacity: 0; transform: translate(14px, -10px) scale(0.9); }
+  100% { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-blob { animation: none; }
+  .login-main .auth-card,
+  .login-main .auth-card > * { animation: none; }
+}
+
 /* ================= Expenses: EX1 quick-add ledger ================= */
 .exp-head {
   display: flex;

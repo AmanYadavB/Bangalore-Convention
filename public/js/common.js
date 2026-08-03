@@ -691,8 +691,9 @@ function mountReveals() {
     { sel: ".hero > *:not(.hero-grid)", stagger: true },
     { sel: ".grid > *", stagger: true },
     { sel: ".reg-layout > *", stagger: true },
-    // .mem-wall runs its own per-tile pop (index.html), so it opts out here.
-    { sel: ".container > *:not(.grid):not(.reg-layout):not(.mem-wall):not(script):not(style)", stagger: false },
+    // .mem-wall runs its own per-tile pop (index.html) and .auth-card its
+    // own cascade (login.html), so both opt out here.
+    { sel: ".container > *:not(.grid):not(.reg-layout):not(.mem-wall):not(.auth-card):not(script):not(style)", stagger: false },
   ];
 
   // Strip the classes once the entrance ends so the card :hover lifts (and

@@ -10,7 +10,22 @@
   <body>
     <div id="nav"></div>
 
-    <main class="container">
+    <!-- L2 "popup" illusion: a blurred, non-interactive mock of the home
+         page sits behind the frosted card with the aurora breathing over
+         it — signing in feels like a modal opened on top of the site. -->
+    <div class="login-bg" aria-hidden="true">
+      <div class="login-bg-page">
+        <div class="lbp-hero">
+          <h2>Bangalore Convention<br /><span>Unity in Recovery</span></h2>
+          <p>Three days of recovery, fellowship and hope.</p>
+          <div class="lbp-count"><i></i><i></i><i></i><i></i></div>
+          <div class="lbp-btns"><i></i><i></i></div>
+        </div>
+      </div>
+      <span class="login-blob"></span><span class="login-blob"></span><span class="login-blob"></span>
+    </div>
+
+    <main class="container login-main">
       <div class="card auth-card">
         <h1 class="auth-title">Sign in</h1>
         <p class="muted auth-sub">

@@ -16,18 +16,15 @@
           <h1 class="page-title" style="margin-bottom: 2px">All Registrations</h1>
           <p class="page-sub" style="margin: 0" id="count-line">Loading…</p>
         </div>
-        <a class="btn primary" href="register.html">+ New Registration</a>
       </div>
 
+      <!-- One search box, ONE filter (status + categories combined), export. -->
       <div class="toolbar">
         <input id="search" placeholder="Search name, email, phone, city…" />
-        <select id="filter-cat">
-          <option value="">All categories</option>
-        </select>
-        <select id="filter-paid">
-          <option value="">All payment status</option>
-          <option value="paid">Paid</option>
-          <option value="pending">Pending</option>
+        <select id="filter">
+          <option value="">All registrations</option>
+          <option value="paid">Paid only</option>
+          <option value="pending">Pending only</option>
         </select>
         <button class="btn small" id="export">Export CSV</button>
       </div>
@@ -55,8 +52,7 @@
 
       function applyFilters() {
         const q = document.getElementById("search").value.trim().toLowerCase();
-        const cat = document.getElementById("filter-cat").value;
-        const paid = document.getElementById("filter-paid").value;
+        const f = document.getElementById("filter").value;
         return ALL.filter((r) => {
           const matchesQ =
             !q ||
@@ -64,10 +60,14 @@
               .join(" ")
               .toLowerCase()
               .includes(q);
-          const matchesCat = !cat || r.categoryId === cat;
-          const matchesPaid =
-            !paid || (paid === "paid" ? r.paid : !r.paid);
-          return matchesQ && matchesCat && matchesPaid;
+          const matchesF =
+            !f ||
+            (f === "paid"
+              ? r.paid
+              : f === "pending"
+              ? !r.paid
+              : r.categoryId === f.slice(4)); // "cat:<id>"
+          return matchesQ && matchesF;
         });
       }
 
@@ -156,15 +156,18 @@
       async function load() {
         ALL = await api("/api/registrations");
         const pricing = await api("/api/pricing");
-        document.getElementById("filter-cat").innerHTML =
-          '<option value="">All categories</option>' +
-          pricing.map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join("");
+        // Categories join the single filter under a separator row.
+        document.getElementById("filter").innerHTML =
+          '<option value="">All registrations</option>' +
+          '<option value="paid">Paid only</option>' +
+          '<option value="pending">Pending only</option>' +
+          '<option value="" disabled>── categories ──</option>' +
+          pricing.map((c) => `<option value="cat:${c.id}">${escapeHtml(c.name)}</option>`).join("");
         render();
       }
 
       document.getElementById("search").addEventListener("input", render);
-      document.getElementById("filter-cat").addEventListener("change", render);
-      document.getElementById("filter-paid").addEventListener("change", render);
+      document.getElementById("filter").addEventListener("change", render);
 
       // Selecting a person: paint the panel; on phones it opens as the
       // frosted popup (the .open class only has an effect ≤700px).
