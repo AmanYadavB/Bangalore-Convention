@@ -539,7 +539,7 @@ function renderNav(active, opts) {
   <nav class="nav">
     <span class="brand">
       <button class="logo" id="themeToggle" type="button" title="Tap to switch theme" aria-label="Switch between light and dark theme">
-        <svg viewBox="0 0 24 24" width="21" height="21" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="12" cy="12" r="9.2" stroke="rgba(255,255,255,0.9)" stroke-width="1.5"/><polygon points="12,6 17,15.5 7,15.5" stroke="#fff" stroke-width="1.6" stroke-linejoin="round" fill="none"/></svg>
+        <svg viewBox="0 0 24 24" width="21" height="21" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="12" cy="12" r="9.2" stroke="currentColor" stroke-width="1.5"/><polygon points="12,6 17,15.5 7,15.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" fill="none"/></svg>
         <span class="theme-hint" aria-hidden="true"></span>
       </button>
       <a class="brand-name" href="index.html" aria-label="BIAAC — home"><b class="wordmark">B<i>·</i>I<i>·</i>A<i>·</i>A<i>·</i>C</b></a>

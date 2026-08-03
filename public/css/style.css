@@ -153,12 +153,14 @@ a:hover {
   padding: 0;
   position: relative;
   cursor: pointer;
-  background: linear-gradient(140deg, var(--accent-3), var(--accent) 55%, var(--accent-2));
+  /* monochrome mark: black triangle on a white tile, in both themes */
+  background: #fff;
+  border: 1px solid var(--border);
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  color: #fff;
-  box-shadow: 0 6px 16px -4px color-mix(in srgb, var(--accent) 55%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  color: #131a2b;
+  box-shadow: 0 4px 12px -4px rgba(20, 30, 60, 0.25);
   transition: transform 0.18s ease;
 }
 
@@ -581,6 +583,15 @@ a:hover {
 @keyframes name-drop {
   from { opacity: 0; transform: translateY(-30px); }
   to { opacity: 1; transform: none; }
+}
+
+/* "AA Convention" in plain ink, same as the rest of the name — no gradient.
+   Needs to outrank the .hero h1 .grad shimmer rule. */
+.hero h1 .biaac-name .grad {
+  background: none;
+  color: currentColor;
+  -webkit-text-fill-color: currentColor;
+  animation: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1819,6 +1830,17 @@ body.chat-open .chat-widget {
     width: 36px;
     height: 36px;
     font-size: 14px;
+    transition: width 0.35s cubic-bezier(0.34, 1.45, 0.64, 1), opacity 0.2s ease, transform 0.35s ease;
+  }
+  /* signed-in avatar melts away with the brand — scrolled state keeps ONLY
+     the floating ☰ */
+  .nav.shrunk .avatar-btn {
+    width: 0;
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  .nav.shrunk .nav-profile {
+    pointer-events: none;
   }
   .nav-toggle {
     width: 38px;
