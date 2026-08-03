@@ -1704,6 +1704,13 @@ function isPublicApi(method, resource, parts) {
   // Anyone can register — that is the point of the site.
   if (resource === "registrations" && method === "POST" && !parts[2]) return true;
 
+  // "I'm back from Razorpay without paying" — the client pings this and the
+  // pending ticket email goes out. Safe public: needs the unguessable
+  // registration UUID, only ever sends the pending flavour, only once, and
+  // only while the booking is actually unpaid.
+  if (resource === "registrations" && method === "POST" && parts[2] && parts[3] === "notify")
+    return true;
+
   // The reflections list is the public WhatsApp-channel landing content, and
   // Meta itself fetches the card image when sending the daily template, so
   // that URL can never require a session.
@@ -1840,6 +1847,11 @@ async function applySpendLimits(env, ctx, request, { method, resource, parts, se
   if (resource === "payment" && parts[2] === "create-order") {
     const perIp = await rateLimit(env, "order:ip", ip, 10, 60 * 60);
     if (!perIp.allowed) return deny("order:ip", perIp);
+  }
+
+  if (resource === "registrations" && parts[3] === "notify") {
+    const perIp = await rateLimit(env, "notify:ip", ip, 10, 60 * 60);
+    if (!perIp.allowed) return deny("notify:ip", perIp);
   }
 
   return null;
@@ -2299,39 +2311,43 @@ function registrationEmail(env, reg, paid) {
       'px;background:#1f2937;margin:0 1px;vertical-align:bottom"></span>'
   ).join("");
 
+  // Mobile-first: everything centred and stacked, so a 320px Gmail viewport
+  // renders the same shapes as desktop — nothing competes for width. The
+  // category band is a full-width TOP strip (like a real event ticket) and
+  // the status pill sits on its own line so it can never wrap mid-sentence.
   const inner =
     '<div style="text-align:center;font-size:19px;letter-spacing:4px;margin-top:10px">🎊 🎉 🎊</div>' +
-    '<h2 style="margin:6px 0 4px;text-align:center;font-size:25px;font-weight:900;' +
+    '<h2 style="margin:6px 0 4px;text-align:center;font-size:23px;font-weight:900;' +
     "background:linear-gradient(90deg,#10b981,#5b5bf0,#7c3aed);-webkit-background-clip:text;background-clip:text;color:transparent\">" +
     (paid ? "LET'S GOOOO — PAID &amp; IN!!" : "LET'S GOOOO — YOU'RE IN!!") +
     "</h2>" +
     '<p style="color:#4b5563;text-align:center;margin:0 0 16px;line-height:1.65">' +
     "You did it, " + first + "!! The mascot printed your ticket itself and is extremely proud of the perforation.</p>" +
-    // ---- the ticket (mirror of the wizard's) ----
+    // ---- the ticket (mirror of the wizard's, stacked for phones) ----
     '<div style="border:2px solid #c7d2fe;border-radius:16px;overflow:hidden">' +
-    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%"><tr>' +
-    '<td width="64" style="width:64px;background-color:' + grad[0] +
-    ";background-image:linear-gradient(140deg," + grad[0] + "," + grad[1] +
-    ');text-align:center;font-size:26px;vertical-align:middle">' + icon + "</td>" +
-    '<td style="padding:14px 16px">' +
-    '<div style="font-size:11px;letter-spacing:1px;color:#6b7280;font-weight:700">BANGALORE CONVENTION · 9–11 JULY 2027</div>' +
-    '<div style="font-size:19px;font-weight:800;margin:3px 0 2px;color:#111827">' + esc(reg.name || "") + "</div>" +
-    '<div style="font-size:13px;color:#4b5563">' + esc(reg.categoryName || "") + " · " + amount + " &nbsp;" + pill + "</div>" +
-    "</td></tr></table>" +
-    '<div style="border-top:2px dashed #c7d2fe;padding:10px 16px;text-align:center;background:#f8f9ff">' +
+    '<div style="background-color:' + grad[0] +
+    ";background-image:linear-gradient(120deg," + grad[0] + "," + grad[1] +
+    ');padding:9px 12px;text-align:center;font-size:22px;line-height:1">' + icon + "</div>" +
+    '<div style="padding:13px 14px 14px;text-align:center">' +
+    '<div style="font-size:10.5px;letter-spacing:0.8px;color:#6b7280;font-weight:700">BANGALORE CONVENTION · 9–11 JULY 2027</div>' +
+    '<div style="font-size:20px;font-weight:800;margin:4px 0 2px;color:#111827">' + esc(reg.name || "") + "</div>" +
+    '<div style="font-size:13.5px;color:#4b5563">' + esc(reg.categoryName || "") + " · " + amount + "</div>" +
+    '<div style="margin-top:8px">' + pill + "</div>" +
+    "</div>" +
+    '<div style="border-top:2px dashed #c7d2fe;padding:10px 12px;text-align:center;background:#f8f9ff">' +
     '<span style="font-family:ui-monospace,Consolas,monospace;font-weight:800;font-size:16px;letter-spacing:2px;color:#111827">' + ref + "</span><br>" +
     '<span style="line-height:0">' + bars + "</span></div></div>" +
     '<p style="color:#8a91a8;font-size:12.5px;text-align:center;margin:14px 0 0;line-height:1.6">' +
     "Keep this email — flash the reference at the door and you're in. " + payNote + "</p>";
 
   const html =
-    '<div style="background:#eef1fb;padding:26px 12px">' +
+    '<div style="background:#eef1fb;padding:22px 8px">' +
     '<div style="max-width:520px;margin:0 auto;border-radius:20px;overflow:hidden;border:1px solid #e2e6f8;background:#ffffff;font-family:system-ui,-apple-system,\'Segoe UI\',Roboto,sans-serif;color:#1f2937">' +
-    '<div style="background-color:#5b5bf0;background-image:linear-gradient(120deg,#38bdf8,#5b5bf0 55%,#7c3aed);padding:16px 24px 44px;text-align:center">' +
-    '<img src="' + emailLogoUrl(env) + '" width="36" height="36" alt="" style="display:inline-block;vertical-align:middle;border-radius:10px">' +
-    '<span style="color:#ffffff;font-weight:700;font-size:15px;margin-left:10px;vertical-align:middle">Bangalore Convention 2027</span></div>' +
+    '<div style="background-color:#5b5bf0;background-image:linear-gradient(120deg,#38bdf8,#5b5bf0 55%,#7c3aed);padding:14px 16px 42px;text-align:center">' +
+    '<img src="' + emailLogoUrl(env) + '" width="34" height="34" alt="" style="display:inline-block;vertical-align:middle;border-radius:10px">' +
+    '<span style="color:#ffffff;font-weight:700;font-size:14.5px;margin-left:9px;vertical-align:middle">Bangalore Convention 2027</span></div>' +
     '<div style="margin-top:-32px">' + emailMascot("dance") + "</div>" +
-    '<div style="padding:4px 28px 24px">' + inner + "</div></div>" +
+    '<div style="padding:4px 16px 22px">' + inner + "</div></div>" +
     '<p style="max-width:520px;margin:12px auto 0;text-align:center;color:#9aa1b9;font-size:11.5px;font-family:system-ui,sans-serif">Bangalore Convention 2027 · delivered by the site\'s little mascot 🤖<br>9–11 July 2027 · Bangalore, India</p>' +
     "</div>";
 
@@ -3347,10 +3363,24 @@ async function handleApi(request, env, ctx) {
       };
       list.push(record);
       await saveList(env, "registrations", list);
-      // The emailed ticket (pending flavour) — the paid one follows the
-      // moment Razorpay verifies, right next to the WhatsApp receipt.
-      sendRegistrationEmail(env, ctx, record, false);
+      // No email yet: the paid ticket goes out when Razorpay verifies, and
+      // the pending ticket only when the visitor comes BACK from checkout
+      // without paying (the client pings /:id/notify at that moment).
       return json(record, 201);
+    }
+
+    // "Back from Razorpay unpaid" — send the pending ticket email. Guarded
+    // three ways: the unguessable UUID is the capability, it only ever sends
+    // the pending flavour while the booking is really unpaid, and the
+    // emailedPendingAt flag makes it once-only however often it's called.
+    if (method === "POST" && id && parts[3] === "notify") {
+      const item = list.find((r) => r.id === id);
+      if (!item) return json({ error: "Not found." }, 404);
+      if (item.paid || item.emailedPendingAt) return json({ ok: true, skipped: true });
+      item.emailedPendingAt = new Date().toISOString();
+      await saveList(env, "registrations", list);
+      sendRegistrationEmail(env, ctx, item, false);
+      return json({ ok: true });
     }
 
     if (method === "PATCH" && id) {
