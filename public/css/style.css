@@ -137,7 +137,7 @@ a:hover {
 .brand {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 17px;
   font-weight: 700;
   font-size: 16px;
   letter-spacing: -0.01em;
@@ -173,6 +173,8 @@ a:hover {
 }
 
 .brand .logo .theme-hint {
+  /* corner, not centre — a centred badge sits exactly on top of the AA
+     triangle mark and hides it */
   position: absolute;
   left: -4px;
   bottom: -4px;
@@ -186,12 +188,12 @@ a:hover {
   line-height: 1;
   display: grid;
   place-items: center;
-  animation: theme-hint-pulse 2.8s ease-in-out infinite;
+  animation: theme-hint-pulse 4.5s ease-in-out infinite;
 }
 
 @keyframes theme-hint-pulse {
   0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 transparent; }
-  50% { transform: scale(1.22); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent); }
+  50% { transform: scale(1.1); box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--accent) 16%, transparent); }
 }
 
 .brand .logo.theme-flip {
@@ -1799,7 +1801,7 @@ body.chat-open .chat-widget {
     /* no overflow:hidden here — it clipped the logo's badge and shadow;
        the melt clips only the wordmark box and shrinks the logo itself */
     min-width: 0;
-    gap: 8px;
+    gap: 12px;
   }
   .brand-name {
     overflow: hidden;
