@@ -12,8 +12,23 @@
 
     <section class="hero">
       <div class="hero-grid"></div>
-      <h1>Bangalore Convention<br /><span class="grad">Unity in Recovery</span></h1>
-      <p>Three days of recovery, fellowship and hope — open to all in the AA programme.</p>
+      <!-- B5: accent waves drifting along the hero floor. currentColor keeps
+           them on-theme in daylight and midnight alike. -->
+      <div class="hero-waves" aria-hidden="true">
+        <svg viewBox="0 0 1200 130" preserveAspectRatio="none" style="color: color-mix(in srgb, var(--accent) 14%, transparent)">
+          <path d="M0,70 C150,30 300,110 450,70 C600,30 750,110 900,70 C1050,30 1150,90 1200,70 L1200,130 L0,130 Z" fill="currentColor"/>
+        </svg>
+        <svg class="w2" viewBox="0 0 1200 130" preserveAspectRatio="none" style="color: color-mix(in srgb, var(--accent-3) 16%, transparent)">
+          <path d="M0,80 C180,40 360,115 540,80 C720,45 900,115 1080,80 C1140,68 1180,75 1200,78 L1200,130 L0,130 Z" fill="currentColor"/>
+        </svg>
+      </div>
+      <!-- T3: the acronym is the monument; the full name takes the old
+           tagline's seat. The ghost is aria-hidden so the page's accessible
+           title is the full convention name. -->
+      <h1>
+        <span class="biaac-ghost" aria-hidden="true">BIAAC</span>
+        <span class="biaac-name">Bangalore International <span class="grad">AA Convention</span></span>
+      </h1>
 
       <div class="countdown" id="countdown" aria-label="Countdown to the convention"></div>
 

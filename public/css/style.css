@@ -116,6 +116,10 @@ a:hover {
 }
 
 /* ---------- Nav ---------- */
+/* Desktop: the bar scrolls away with the page, exactly as it always has.
+   Only MOBILE pins the holder (see the 720px block) so the bar can melt
+   into a floating menu button while you scroll. */
+
 /* N4 · minimal hairline: flat ground, one thin border, no glass, no glow. */
 .nav {
   display: flex;
@@ -229,6 +233,22 @@ a:hover {
 .brand-name:hover {
   color: var(--text);
   min-width: 0;
+}
+
+/* K6 wordmark: B·I·A·A·C with accent interpuncts. */
+.wordmark {
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: 1px;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.wordmark i {
+  font-style: normal;
+  color: var(--accent);
+  font-weight: 900;
+  padding: 0 2.5px;
 }
 
 .brand-name b {
@@ -422,36 +442,9 @@ a:hover {
   isolation: isolate;
 }
 
-.hero::before,
-.hero::after {
-  content: "";
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(70px);
-  z-index: -1;
-  opacity: 0.75;
-  pointer-events: none;
-}
-
-.hero::before {
-  width: 460px;
-  height: 460px;
-  top: -160px;
-  left: 50%;
-  transform: translateX(-60%);
-  background: radial-gradient(circle, var(--accent), transparent 68%);
-  animation: floatA 14s ease-in-out infinite;
-}
-
-.hero::after {
-  width: 380px;
-  height: 380px;
-  top: -80px;
-  right: 8%;
-  background: radial-gradient(circle, var(--accent-3), transparent 68%);
-  opacity: 0.5;
-  animation: floatB 18s ease-in-out infinite;
-}
+/* (The two big blurred colour blobs that floated here since the old hero
+   are gone — the BIAAC monument sits on clean ground now; the drifting
+   waves at the hero floor are the only colour accents.) */
 
 /* faint dotted grid behind hero */
 .hero-grid {
@@ -500,6 +493,69 @@ a:hover {
   line-height: 1.02;
   font-weight: 800;
   letter-spacing: -0.04em;
+}
+
+/* T3 hero: the acronym IS the monument — huge outlined BIAAC — with the
+   full name sitting small in the old tagline's seat right beneath it. */
+.biaac-ghost {
+  display: block;
+  font-size: clamp(84px, 19vw, 164px);
+  font-weight: 900;
+  /* Positive tracking so the hollow letterforms never touch — the proposal's
+     tight -0.04em made B/I and A/A collide, which read as jumbled. */
+  letter-spacing: 0.04em;
+  line-height: 0.95;
+  /* The lined look from the approved T3 proposal: a thin stroke in a
+     38%-translucent accent. The translucency is what keeps the hollow
+     letterforms soft — an opaque stroke reads harsh and doubled. */
+  color: transparent;
+  -webkit-text-stroke: 2px color-mix(in srgb, var(--accent) 38%, transparent);
+  white-space: nowrap;
+}
+
+.biaac-name {
+  display: block;
+  font-size: clamp(15px, 2vw, 19px);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  margin-top: 12px;
+  line-height: 1.3;
+}
+
+/* B5: two accent waves drifting along the hero floor, opposite directions. */
+.hero-waves {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -2px;
+  height: 130px;
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.hero-waves svg {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 200%;
+  height: 100%;
+  animation: hero-wave-drift 16s linear infinite;
+}
+
+.hero-waves svg.w2 {
+  bottom: -16px;
+  opacity: 0.6;
+  animation-duration: 23s;
+  animation-direction: reverse;
+}
+
+@keyframes hero-wave-drift {
+  to { transform: translateX(-50%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-waves svg { animation: none; }
 }
 
 .hero h1 .grad {
@@ -674,7 +730,7 @@ body::before {
    would override the .rv classes and split the motion language in two. */
 
 @media (prefers-reduced-motion: reduce) {
-  .hero::before, .hero::after, .hero h1 .grad { animation: none; }
+  .hero h1 .grad { animation: none; }
 }
 
 /* ---------- Buttons ---------- */
@@ -1655,26 +1711,68 @@ body.chat-open .chat-widget {
 }
 
 @media (max-width: 720px) {
-  .nav {
-    padding: 12px 16px;
-    gap: 6px;
-    /* One row, always: the brand truncates instead of pushing the hamburger
-       (or the avatar) onto a second line. */
-    flex-wrap: nowrap;
-    /* Above the frosted menu overlay (64) and the chat widget (60), so the
-       bar and its ✕ stay crisp and tappable while the menu is open. */
+  /* MOBILE bar: styled exactly like the laptop bar — flat ground, hairline,
+     no rounding. The holder pins it; scrolling down melts the whole brand
+     away and fades the bar chrome, leaving just the menu button (and the
+     avatar when signed in) floating at the top right. Back at the top,
+     everything returns. .shrunk is set by paintNav's scroll listener. */
+  #nav {
+    position: sticky;
+    top: 0;
     z-index: 66;
   }
-  .brand {
-    font-size: 16px;
-    min-width: 0;
-    flex: 1 1 auto;
+  .nav {
+    padding: 10px 16px;
+    gap: 8px;
+    flex-wrap: nowrap;
+    z-index: 66;
+    transition: background 0.3s ease, border-color 0.3s ease;
   }
-  .brand-name b {
-    display: block;
+  .brand {
+    min-width: 0;
+    gap: 8px;
     overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
+    max-width: 240px;
+    transition: max-width 0.35s cubic-bezier(0.34, 1.45, 0.64, 1), opacity 0.25s ease;
+  }
+  .brand .logo {
+    width: 34px;
+    height: 34px;
+    flex-shrink: 0;
+  }
+  .brand-name .wordmark { font-size: 14px; white-space: nowrap; }
+  .avatar-btn {
+    width: 36px;
+    height: 36px;
+    font-size: 14px;
+  }
+  .nav-toggle {
+    width: 38px;
+    height: 38px;
+    transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+  }
+  .nav.shrunk {
+    background: transparent;
+    border-bottom-color: transparent;
+    /* the see-through strip must not swallow taps meant for the page */
+    pointer-events: none;
+  }
+  .nav.shrunk > * { pointer-events: auto; }
+  .nav.shrunk .brand {
+    /* keep the base margin-right:auto — even at zero width it's what
+       pushes the surviving ☰/avatar to the right edge */
+    max-width: 0;
+    opacity: 0;
+    pointer-events: none;
+  }
+  /* the surviving controls get their own little glass footing */
+  .nav.shrunk .nav-toggle {
+    background: color-mix(in srgb, var(--card) 85%, transparent);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    box-shadow: var(--shadow-sm);
   }
   .nav-toggle {
     display: flex;
@@ -1846,12 +1944,8 @@ body.chat-open .chat-widget {
 }
 
 @media (max-width: 460px) {
-  .brand small {
-    display: none;
-  }
   .nav {
-    gap: 4px;
-    padding: 11px 14px;
+    gap: 6px;
   }
   .hero h1 {
     font-size: 25px;

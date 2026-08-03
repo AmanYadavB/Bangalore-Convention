@@ -542,9 +542,7 @@ function renderNav(active, opts) {
         <svg viewBox="0 0 24 24" width="21" height="21" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="12" cy="12" r="9.2" stroke="rgba(255,255,255,0.9)" stroke-width="1.5"/><polygon points="12,6 17,15.5 7,15.5" stroke="#fff" stroke-width="1.6" stroke-linejoin="round" fill="none"/></svg>
         <span class="theme-hint" aria-hidden="true"></span>
       </button>
-      <a class="brand-name" href="index.html"><b>Bangalore Convention</b>
-        <small>Unity · Service · Recovery</small>
-      </a>
+      <a class="brand-name" href="index.html" aria-label="BIAAC — home"><b class="wordmark">B<i>·</i>I<i>·</i>A<i>·</i>A<i>·</i>C</b></a>
     </span>
     ${profile}${bare ? "" : `
     <button class="nav-toggle" id="navToggle" type="button" title="Menu" aria-label="Menu" aria-expanded="false">
@@ -646,6 +644,18 @@ function paintNav(active, opts) {
       if (e.target === navOverlay || e.target.closest("a")) setMenu(false);
     });
   }
+
+  // Mobile melting capsule: past the top of the page the B·I·A·A·C wordmark
+  // melts away leaving logo + menu; back at the top it breathes back in.
+  // (The class is harmless on desktop — only the ≤720px styles react to it.)
+  const navBar = holder.querySelector(".nav");
+  const meltNav = () => {
+    if (navBar) navBar.classList.toggle("shrunk", window.scrollY > 90);
+  };
+  meltNav();
+  if (document.__navMelt) window.removeEventListener("scroll", document.__navMelt);
+  document.__navMelt = meltNav;
+  window.addEventListener("scroll", document.__navMelt, { passive: true });
 
   applyTheme(currentTheme());
 }
