@@ -748,19 +748,29 @@ function mountReveals() {
       });
     }
   };
-  scan();
+  const begin = () => {
+    scan();
 
-  // Pages draw cards/tables after their API calls — catch those too. One
-  // rAF-debounced scan per DOM burst (the per-second countdown rebuild lands
-  // here as a no-op: its boxes belong to no group and #countdown stays tagged).
-  const mo = new MutationObserver(() => {
-    if (mountReveals.__raf) return;
-    mountReveals.__raf = requestAnimationFrame(() => {
-      mountReveals.__raf = 0;
-      scan();
+    // Pages draw cards/tables after their API calls — catch those too. One
+    // rAF-debounced scan per DOM burst (the per-second countdown rebuild lands
+    // here as a no-op: its boxes belong to no group and #countdown stays tagged).
+    const mo = new MutationObserver(() => {
+      if (mountReveals.__raf) return;
+      mountReveals.__raf = requestAnimationFrame(() => {
+        mountReveals.__raf = 0;
+        scan();
+      });
     });
-  });
-  mo.observe(document.body, { childList: true, subtree: true });
+    mo.observe(document.body, { childList: true, subtree: true });
+  };
+
+  // Under the L2 veil nothing may spend its entrance out of sight — the
+  // veil's lift is the cue that starts every reveal.
+  if (document.documentElement.classList.contains("veiling")) {
+    document.addEventListener("bc:veil-up", begin, { once: true });
+  } else {
+    begin();
+  }
 }
 
 // ---- Animated dropdowns --------------------------------------------------
@@ -924,6 +934,15 @@ function mountNav(active, opts) {
     }
     document.dispatchEvent(new CustomEvent("bc:user", { detail: user }));
   });
+
+  // L2 veil: the head snippet covers the first paint with the monogram; lift
+  // it once the bar is painted and the fonts are in. The snippet's own 900ms
+  // hard cap races this, so a slow font can never hold the page hostage.
+  if (window.__liftVeil) {
+    const lift = () => window.__liftVeil();
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(lift, lift);
+    else setTimeout(lift, 0);
+  }
 }
 
 // Pages that need the real role before rendering await this instead of
@@ -1432,6 +1451,17 @@ function mountMascot() {
 // onSuccess(record) – called after payment succeeds OR if payment is skipped/dismissed
 //
 async function openRazorpay(record, onSuccess) {
+  // "Back from Razorpay without paying" — tell the server, which emails the
+  // pending ticket. Server-guarded: at most once, and only while unpaid, so
+  // calling it on every abandoned path is safe. Deliberately NOT called when
+  // a payment went through but verification failed — a "pay any time" email
+  // right after money left someone's account invites double payment.
+  const notifyPending = () => {
+    api("/api/registrations/" + encodeURIComponent(record.id) + "/notify", {
+      method: "POST",
+    }).catch(() => {});
+  };
+
   // Lazily load the Razorpay checkout SDK.
   if (!window.Razorpay) {
     await new Promise((resolve, reject) => {
@@ -1456,6 +1486,7 @@ async function openRazorpay(record, onSuccess) {
     // Say so. This used to fall through silently to onSuccess(), so a failed
     // order looked exactly like a completed one.
     console.warn("[payment] create-order failed:", err);
+    notifyPending();
     toast("We couldn't start the payment. Your registration is saved — you can pay at the venue.", "error");
     onSuccess(record);
     return;
@@ -1464,6 +1495,7 @@ async function openRazorpay(record, onSuccess) {
   // If keys are not configured yet, show a clear warning instead of silently skipping.
   if (orderData.skipped || !window.Razorpay) {
     console.warn("[payment] Razorpay not configured — add RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET to your Cloudflare Worker env vars.");
+    notifyPending();
     toast("⚠️ Payment gateway not configured yet — registration saved, payment pending.", "info");
     onSuccess(record);
     return;
@@ -1512,7 +1544,7 @@ async function openRazorpay(record, onSuccess) {
 
     modal: {
       // User closed the checkout without paying — show registration with pending status.
-      ondismiss: function () { onSuccess(record); },
+      ondismiss: function () { notifyPending(); onSuccess(record); },
     },
   };
 
@@ -1521,6 +1553,7 @@ async function openRazorpay(record, onSuccess) {
     rzp.open();
   } catch (err) {
     console.warn("[payment] checkout failed to open:", err);
+    notifyPending();
     toast("The payment window couldn't open. Your registration is saved — you can pay at the venue.", "error");
     onSuccess(record);
   }

@@ -4729,6 +4729,72 @@ select.dd-native {
   min-height: 46px;
 }
 
+/* ---------- L2 monogram veil ---------- */
+/* Painted by the tiny head snippet on every page. The stylesheet is
+   render-blocking, so these rules are always ready before first paint —
+   nothing half-composed ever reaches the screen. The lift (html.veil-up)
+   is what cues the page's entrance animations. */
+/* The veil lives on html's own pseudo-elements — body::before is already
+   the ambient drift layer, whose background ANIMATION would trump any
+   cascade override (animations beat declarations). */
+html.veiling::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  background: var(--bg);
+}
+
+html.veiling::after {
+  content: "B · I · A · A · C";
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 44%;
+  z-index: 9999;
+  text-align: center;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 24px;
+  letter-spacing: 4px;
+  color: var(--text);
+  animation: veil-breathe 1.15s ease-in-out infinite;
+}
+
+html.veil-up::before {
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+html.veil-up::after {
+  opacity: 0;
+  transform: scale(1.05);
+  transition: opacity 0.4s ease, transform 0.4s ease;
+  animation: none;
+}
+
+@keyframes veil-breathe {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+/* The hero's own entrance holds its breath until the veil starts lifting. */
+html.veiling:not(.veil-up) .biaac-tiles i,
+html.veiling:not(.veil-up) .biaac-tiles i b,
+html.veiling:not(.veil-up) .biaac-name {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.veiling::after {
+    animation: none;
+  }
+  html.veil-up::before,
+  html.veil-up::after {
+    transition: none;
+  }
+}
+
 /* ---------- A1 account: identity card + bento tiles ---------- */
 /* The gradient-edged ID card up top; password / sessions / access sit in a
    two-column bento beneath it (access spans the full width). */

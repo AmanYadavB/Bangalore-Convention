@@ -5,6 +5,31 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Register · Bangalore Convention</title>
     <link rel="stylesheet" href="css/style.css" />
+    <!-- L2 veil: cover the very first paint so nothing half-drawn ever shows.
+         Cold entries and reloads only - in-site navigation skips it. The
+         lift cues the page's entrance animations (see mountReveals). -->
+    <script>
+      (function () {
+        try {
+          var nav = performance.getEntriesByType("navigation")[0];
+          var reload = nav && nav.type === "reload";
+          if (!reload && sessionStorage.getItem("bcVeil")) return;
+          sessionStorage.setItem("bcVeil", "1");
+        } catch (e) {}
+        var d = document.documentElement;
+        d.classList.add("veiling");
+        var lifted = false;
+        window.__liftVeil = function () {
+          if (lifted) return;
+          lifted = true;
+          d.classList.add("veil-up");
+          document.dispatchEvent(new CustomEvent("bc:veil-up"));
+          setTimeout(function () { d.classList.remove("veiling", "veil-up"); }, 460);
+        };
+        // Hard cap: the veil may never itself become the lag.
+        setTimeout(window.__liftVeil, 900);
+      })();
+    </script>
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
   </head>
   <body>
