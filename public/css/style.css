@@ -4785,6 +4785,38 @@ html.veiling:not(.veil-up) .biaac-name {
   animation-play-state: paused;
 }
 
+/* ---------- The ONE in-page loading mark ---------- */
+/* Every surface that waits on data shows the same breathing B·I·A·A·C —
+   the pocket version of the veil. .bc-loading centres it in a block
+   (lists, tables, grids); the bare .bc-load-mark sits in text lines. */
+.bc-load-mark {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 12px;
+  letter-spacing: 2.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  animation: veil-breathe 1.15s ease-in-out infinite;
+}
+
+.bc-load-mark i {
+  font-style: normal;
+  color: var(--accent);
+  padding: 0 1px;
+}
+
+.bc-loading {
+  display: grid;
+  place-items: center;
+  padding: 30px 10px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bc-load-mark {
+    animation: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html.veiling::after {
     animation: none;

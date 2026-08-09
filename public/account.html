@@ -39,12 +39,12 @@
       <h1 class="page-title" id="pageTitle">Your account</h1>
       <!-- Setup mode speaks through this plain line; the normal page uses
            the ID card below instead. -->
-      <p class="page-sub" id="whoami" hidden>Loading…</p>
+      <p class="page-sub" id="whoami" hidden><span class="bc-load-mark" role="status" aria-label="Loading">B<i>·</i>I<i>·</i>A<i>·</i>A<i>·</i>C</span></p>
 
       <section class="acct-id" id="acctId">
         <span class="acct-ava" id="acctAva" aria-hidden="true">·</span>
         <div class="acct-who">
-          <b id="acctEmail">Loading…</b><span class="role-chip" id="acctRole" hidden></span>
+          <b id="acctEmail"><span class="bc-load-mark" role="status" aria-label="Loading">B<i>·</i>I<i>·</i>A<i>·</i>A<i>·</i>C</span></b><span class="role-chip" id="acctRole" hidden></span>
           <span class="acct-meta" id="acctMeta"></span>
         </div>
       </section>
@@ -86,7 +86,7 @@
           <button class="btn ghost small" id="revokeOthers" type="button">Sign out everywhere else</button>
         </div>
         <div class="ses-list" id="sessionRows">
-          <div class="empty">Loading…</div>
+          <div class="bc-loading" role="status" aria-label="Loading"><span class="bc-load-mark">B<i>·</i>I<i>·</i>A<i>·</i>A<i>·</i>C</span></div>
         </div>
       </div>
 
@@ -112,7 +112,7 @@
               </tr>
             </thead>
             <tbody id="staffRows">
-              <tr><td colspan="5" class="empty">Loading…</td></tr>
+              <tr><td colspan="5"><div class="bc-loading" role="status" aria-label="Loading"><span class="bc-load-mark">B<i>·</i>I<i>·</i>A<i>·</i>A<i>·</i>C</span></div></td></tr>
             </tbody>
           </table>
         </div>
