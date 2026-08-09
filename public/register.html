@@ -22,6 +22,13 @@
         window.__liftVeil = function () {
           if (lifted) return;
           lifted = true;
+          // A page still fetching keeps the same cover (html.data-wait);
+          // its pageLoading(false) will do the fade instead.
+          if (d.classList.contains("data-wait") || window.__bcDataWait) {
+            d.classList.remove("veiling");
+            d.classList.add("data-wait");
+            return;
+          }
           d.classList.add("veil-up");
           document.dispatchEvent(new CustomEvent("bc:veil-up"));
           setTimeout(function () { d.classList.remove("veiling", "veil-up"); }, 460);
@@ -248,22 +255,24 @@
       }
 
       (async () => {
+        pageLoading(true);
         try {
           PRICING = await api("/api/pricing");
+          // ?category= lands directly on the details step, ticket pre-stamped.
+          const preset = new URLSearchParams(location.search).get("category");
+          const presetIdx = PRICING.findIndex((c) => c.id === preset);
+          if (presetIdx !== -1) {
+            state.sel = presetIdx;
+            go(1, true);
+          } else {
+            go(0, true);
+          }
         } catch (err) {
           stageEl.innerHTML =
             '<div class="empty">Couldn\'t load the ticket categories — refresh the page and they\'ll show up.</div>';
           toast("couldn't load the ticket categories — refresh the page and they'll show up", "error");
-          return;
-        }
-        // ?category= lands directly on the details step, ticket pre-stamped.
-        const preset = new URLSearchParams(location.search).get("category");
-        const presetIdx = PRICING.findIndex((c) => c.id === preset);
-        if (presetIdx !== -1) {
-          state.sel = presetIdx;
-          go(1, true);
-        } else {
-          go(0, true);
+        } finally {
+          pageLoading(false);
         }
       })();
 

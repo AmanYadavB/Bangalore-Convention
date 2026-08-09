@@ -4737,7 +4737,8 @@ select.dd-native {
 /* The veil lives on html's own pseudo-elements — body::before is already
    the ambient drift layer, whose background ANIMATION would trump any
    cascade override (animations beat declarations). */
-html.veiling::before {
+html.veiling::before,
+html.data-wait::before {
   content: "";
   position: fixed;
   inset: 0;
@@ -4745,7 +4746,8 @@ html.veiling::before {
   background: var(--bg);
 }
 
-html.veiling::after {
+html.veiling::after,
+html.data-wait::after {
   content: "B · I · A · A · C";
   position: fixed;
   left: 0;
@@ -4778,10 +4780,13 @@ html.veil-up::after {
   50% { opacity: 1; }
 }
 
-/* The hero's own entrance holds its breath until the veil starts lifting. */
+/* The hero's own entrance holds its breath until the cover starts lifting. */
 html.veiling:not(.veil-up) .biaac-tiles i,
 html.veiling:not(.veil-up) .biaac-tiles i b,
-html.veiling:not(.veil-up) .biaac-name {
+html.veiling:not(.veil-up) .biaac-name,
+html.data-wait:not(.veil-up) .biaac-tiles i,
+html.data-wait:not(.veil-up) .biaac-tiles i b,
+html.data-wait:not(.veil-up) .biaac-name {
   animation-play-state: paused;
 }
 
@@ -4818,7 +4823,8 @@ html.veiling:not(.veil-up) .biaac-name {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  html.veiling::after {
+  html.veiling::after,
+  html.data-wait::after {
     animation: none;
   }
   html.veil-up::before,

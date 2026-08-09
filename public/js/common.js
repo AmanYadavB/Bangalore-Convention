@@ -764,13 +764,70 @@ function mountReveals() {
     mo.observe(document.body, { childList: true, subtree: true });
   };
 
-  // Under the L2 veil nothing may spend its entrance out of sight — the
-  // veil's lift is the cue that starts every reveal.
-  if (document.documentElement.classList.contains("veiling")) {
+  // Under the cover (veil or data-wait) nothing may spend its entrance out
+  // of sight — the final uncover ("bc:veil-up") is the cue for every reveal.
+  const de = document.documentElement;
+  if (de.classList.contains("veiling") || de.classList.contains("data-wait") || window.__bcDataWait) {
     document.addEventListener("bc:veil-up", begin, { once: true });
   } else {
     begin();
   }
+}
+
+// ---- The ONE page-loading cover ------------------------------------------
+// Every data page brackets its fetches with pageLoading(true/false). The
+// cover is the SAME full-screen monogram as the L2 veil — same mark, same
+// size, same centre — so loading looks identical on every page. Fast
+// fetches (<180ms) never show it at all; once shown it stays ≥350ms so it
+// can never blink. The fade-out dispatches "bc:veil-up", which is what
+// releases the tilt-tumble entrances.
+let __dwShowTimer = null;
+let __dwMinUntil = 0;
+
+function pageLoading(on) {
+  const d = document.documentElement;
+  if (on) {
+    if (window.__bcDataWait) return;
+    window.__bcDataWait = true;
+    if (d.classList.contains("veiling")) {
+      // The veil is already up — continue it seamlessly, no grace delay.
+      d.classList.add("data-wait");
+      __dwMinUntil = 0;
+      return;
+    }
+    __dwShowTimer = setTimeout(() => {
+      __dwShowTimer = null;
+      __dwMinUntil = Date.now() + 350;
+      d.classList.add("data-wait");
+    }, 180);
+    return;
+  }
+
+  if (!window.__bcDataWait) return;
+  window.__bcDataWait = false;
+  if (__dwShowTimer) {
+    clearTimeout(__dwShowTimer);
+    __dwShowTimer = null;
+  }
+  // The veil is still holding (fonts/bar not ready): just stand down and
+  // let the veil's own lift do the fade + dispatch.
+  if (d.classList.contains("veiling")) {
+    d.classList.remove("data-wait");
+    return;
+  }
+  const finish = () => {
+    if (!d.classList.contains("data-wait")) {
+      // Never shown (fast fetch) — still release any gated reveals.
+      document.dispatchEvent(new CustomEvent("bc:veil-up"));
+      return;
+    }
+    d.classList.add("veil-up");
+    document.dispatchEvent(new CustomEvent("bc:veil-up"));
+    setTimeout(() => d.classList.remove("data-wait", "veil-up"), 460);
+  };
+  const hold = __dwMinUntil - Date.now();
+  if (hold > 0) setTimeout(finish, hold);
+  else finish();
 }
 
 // ---- Animated dropdowns --------------------------------------------------

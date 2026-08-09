@@ -22,6 +22,13 @@
         window.__liftVeil = function () {
           if (lifted) return;
           lifted = true;
+          // A page still fetching keeps the same cover (html.data-wait);
+          // its pageLoading(false) will do the fade instead.
+          if (d.classList.contains("data-wait") || window.__bcDataWait) {
+            d.classList.remove("veiling");
+            d.classList.add("data-wait");
+            return;
+          }
           d.classList.add("veil-up");
           document.dispatchEvent(new CustomEvent("bc:veil-up"));
           setTimeout(function () { d.classList.remove("veiling", "veil-up"); }, 460);
@@ -354,26 +361,31 @@
       });
 
       (async function () {
-        const me = await requireUser();
-        // Stale bookmark or manual ?setup=1 with a password already set:
-        // there is nothing to set up — show the normal account page.
-        if (setupMode && me && me.hasPassword) {
-          location.replace("account.html");
-          return;
+        // ONE BIAAC cover until the whole page is real — no partial cards.
+        pageLoading(true);
+        try {
+          const me = await requireUser();
+          // Stale bookmark or manual ?setup=1 with a password already set:
+          // there is nothing to set up — show the normal account page.
+          if (setupMode && me && me.hasPassword) {
+            location.replace("account.html");
+            return;
+          }
+          // The reverse: arrived at the plain account page while a password is
+          // still owed (e.g. via the profile menu) — that IS the setup step.
+          if (!setupMode && needsPasswordSetup(me)) {
+            location.replace("account.html?setup=1");
+            return;
+          }
+          paintMe();
+          if (setupMode) {
+            document.getElementById("newPassword").focus();
+            return; // the other cards are hidden — don't fetch for them
+          }
+          await Promise.allSettled([loadSessions(), loadStaff()]);
+        } finally {
+          pageLoading(false);
         }
-        // The reverse: arrived at the plain account page while a password is
-        // still owed (e.g. via the profile menu) — that IS the setup step.
-        if (!setupMode && needsPasswordSetup(me)) {
-          location.replace("account.html?setup=1");
-          return;
-        }
-        paintMe();
-        if (setupMode) {
-          document.getElementById("newPassword").focus();
-          return; // the other cards are hidden — don't fetch for them
-        }
-        loadSessions();
-        loadStaff();
       })();
     </script>
   </body>

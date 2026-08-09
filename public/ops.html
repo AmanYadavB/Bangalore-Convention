@@ -22,6 +22,13 @@
         window.__liftVeil = function () {
           if (lifted) return;
           lifted = true;
+          // A page still fetching keeps the same cover (html.data-wait);
+          // its pageLoading(false) will do the fade instead.
+          if (d.classList.contains("data-wait") || window.__bcDataWait) {
+            d.classList.remove("veiling");
+            d.classList.add("data-wait");
+            return;
+          }
           d.classList.add("veil-up");
           document.dispatchEvent(new CustomEvent("bc:veil-up"));
           setTimeout(function () { d.classList.remove("veiling", "veil-up"); }, 460);
@@ -235,7 +242,10 @@
       gate.innerHTML = "";
       bodyEl.hidden = false;
       wire();
-      refreshStatus();
+      pageLoading(true);
+      refreshStatus()
+        .catch(() => {})
+        .finally(() => pageLoading(false));
     </script>
   </body>
 </html>
