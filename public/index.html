@@ -5,35 +5,38 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Bangalore Convention</title>
     <link rel="stylesheet" href="css/style.css" />
-    <!-- L2 veil: cover the very first paint so nothing half-drawn ever shows.
-         Cold entries and reloads only - in-site navigation skips it. The
-         lift cues the page's entrance animations (see mountReveals). -->
+    <!-- L2 veil: EVERY page load starts covered from the first paint, so an
+         empty layout is never visible - not on cold entry, not on reload,
+         not when clicking between pages. It lifts when the page is ready
+         (data pages hand it to html.data-wait until their fetches land),
+         with a 350ms minimum so it never blinks and a 900ms cap so the veil
+         itself never becomes the lag. The lift cues the entrance
+         animations (see mountReveals). -->
     <script>
       (function () {
-        try {
-          var nav = performance.getEntriesByType("navigation")[0];
-          var reload = nav && nav.type === "reload";
-          if (!reload && sessionStorage.getItem("bcVeil")) return;
-          sessionStorage.setItem("bcVeil", "1");
-        } catch (e) {}
         var d = document.documentElement;
         d.classList.add("veiling");
         var lifted = false;
+        var t0 = Date.now();
         window.__liftVeil = function () {
           if (lifted) return;
           lifted = true;
-          // A page still fetching keeps the same cover (html.data-wait);
-          // its pageLoading(false) will do the fade instead.
-          if (d.classList.contains("data-wait") || window.__bcDataWait) {
-            d.classList.remove("veiling");
-            d.classList.add("data-wait");
-            return;
-          }
-          d.classList.add("veil-up");
-          document.dispatchEvent(new CustomEvent("bc:veil-up"));
-          setTimeout(function () { d.classList.remove("veiling", "veil-up"); }, 460);
+          var go = function () {
+            // A page still fetching keeps the same cover (html.data-wait);
+            // its pageLoading(false) will do the fade instead.
+            if (d.classList.contains("data-wait") || window.__bcDataWait) {
+              d.classList.remove("veiling");
+              d.classList.add("data-wait");
+              return;
+            }
+            d.classList.add("veil-up");
+            document.dispatchEvent(new CustomEvent("bc:veil-up"));
+            setTimeout(function () { d.classList.remove("veiling", "veil-up"); }, 460);
+          };
+          var hold = 350 - (Date.now() - t0);
+          if (hold > 0) setTimeout(go, hold);
+          else go();
         };
-        // Hard cap: the veil may never itself become the lag.
         setTimeout(window.__liftVeil, 900);
       })();
     </script>
