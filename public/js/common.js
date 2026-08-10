@@ -1152,7 +1152,7 @@ function mountMascot() {
   function idleBox() {
     // Long rests: the mascot appears, does ONE thing, then stays a quiet
     // chat bubble for a good while (18–32s) before its next appearance.
-    return 18000 + Math.random() * 14000;
+    return 6000 + Math.random() * 5000;
   }
   function wave() {
     fab.classList.add("waving");
@@ -1201,13 +1201,6 @@ function mountMascot() {
     return 13700;
   }
   
-  function antic() {
-    const r = Math.random();
-    if (r < 0.4) return wave();
-    if (r < 0.7) return jump();
-    return roll();
-  }
-
   // (Toast announcements are handled by toast() itself now — it parks the
   // button with .away and holds this scene loop via __mascotSayUntil.)
 
@@ -1235,18 +1228,16 @@ function mountMascot() {
     })();
   }
   // Every scene stays in the show — grow and the flight included — but each
-  // appearance is ONE act: morph, a single move (occasionally the flight or
-  // the grow instead), morph back, then a long rest. No back-to-back antics.
+  // appearance is ONE act: morph, a single move, morph back, then a long rest.
+  // Acts play in a fixed, escalating order — the calm ones first, the big
+  // spectacles (grow, flight) only after the smaller ones have had their turn.
+  const ACTS = [wave, jump, roll, grow, takeOff];
+  let actIdx = 0;
   function cycle() {
     chain(
       [
         toMascot,
-        () => {
-          const r = Math.random();
-          if (r < 0.1) return grow();
-          if (r < 0.28) return takeOff();
-          return antic();
-        },
+        () => ACTS[actIdx++ % ACTS.length](),
         toBox,
         idleBox,
       ],
@@ -1486,9 +1477,10 @@ function mountMascot() {
   //   }, 1880);
   // }, 500);
 
-  // Start life as the chat bubble in the corner, then begin the loop.
+  // Start life as the chat bubble in the corner, then begin the loop after a
+  // short settle-in — first act about 5–6s after page load.
   setForm("box");
-  setTimeout(cycle, 1000);
+  setTimeout(cycle, 5000 + Math.random() * 1000);
 
   // When the chat opens, calm down and stay a plain chat button.
   const obs = new MutationObserver(() => {
