@@ -559,7 +559,7 @@ function renderNav(active, opts) {
   <nav class="nav">
     <span class="brand">
       <button class="logo" id="themeToggle" type="button" title="Tap to switch theme" aria-label="Switch between light and dark theme">
-        <img class="logo-img" src="img/biaac-logo-wide.png" alt="" aria-hidden="true" />
+        <img class="logo-img" src="img/biaac-logo-square.png" alt="" aria-hidden="true" />
         <span class="theme-hint" aria-hidden="true"></span>
       </button>
       <a class="brand-name" href="index.html" aria-label="BIAAC — home"><b class="wordmark">B<i>·</i>I<i>·</i>A<i>·</i>A<i>·</i>C</b></a>
