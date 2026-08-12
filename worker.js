@@ -4389,6 +4389,7 @@ async function handleApi(request, env, ctx) {
     const firstName = String(name).trim().split(/\s+/)[0] || "them";
     const committeeHtml = mascotEmail({
       mood: "happy",
+      logo: emailLogoUrl(env),
       title: "Someone wrote in — the mascot is holding the envelope 📮",
       intro:
         esc(name) + " · " + esc(category || "General") +
@@ -4436,6 +4437,7 @@ async function handleApi(request, env, ctx) {
             "Got it — the committee has your message" + (ref ? " · " + ref : ""),
             mascotEmail({
               mood: "happy",
+              logo: emailLogoUrl(env),
               title: "Your message is with the committee",
               intro:
                 "A real person reads every message and replies within 48 hours — usually much sooner." +
