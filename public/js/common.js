@@ -537,6 +537,24 @@ function renderNav(active, opts) {
     ? ""
     : `<a class="link" style="--i:${links.length}" href="login.html"><span class="link-ico" aria-hidden="true">🔑</span><span class="link-label">Sign in</span></a>`;
 
+  // Contact Us renders AFTER Sign in on both surfaces. Not a page — it
+  // opens the help-desk ticket overlay (see openContact).
+  // Desktop shows just the postbox emoji — the label lives in the tooltip
+  // and the accessible name.
+  // A drawn envelope, not the emoji — the ✉️ glyph renders as a faint
+  // monochrome character on desktop browsers; an SVG stays crisp, sized
+  // right, and follows the theme colours.
+  const contactText = bare
+    ? ""
+    : `<a class="link contact-link" data-contact="1" href="#contact" aria-label="Contact Us" title="Contact Us">` +
+      `<svg width="25" height="25" viewBox="0 0 24 24" fill="none" aria-hidden="true">` +
+      `<rect x="2.5" y="5" width="19" height="14" rx="3.2" stroke="currentColor" stroke-width="1.9"/>` +
+      `<path d="M4 7.5l8 5.8 8-5.8" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>` +
+      `</svg></a>`;
+  const contactIcon = bare
+    ? ""
+    : `<a class="link" style="--i:${links.length + (isSignedIn() ? 0 : 1)}" data-contact="1" href="#contact"><span class="link-ico" aria-hidden="true">✉️</span><span class="link-label">Contact Us</span></a>`;
+
   return `
   <nav class="nav">
     <span class="brand">
@@ -553,11 +571,13 @@ function renderNav(active, opts) {
     <div class="nav-links" id="navLinks">
       ${linkItems(false)}
       ${authBtn}
+      ${contactText}
     </div>`}
   </nav>${bare ? "" : `
   <div class="nav-overlay" id="navOverlay">
     ${linkItems(true)}
     ${overlayAuth}
+    ${contactIcon}
   </div>`}`;
 }
 
@@ -641,11 +661,24 @@ function paintNav(active, opts) {
     };
     navToggle.addEventListener("click", () => setMenu(!navOverlay.classList.contains("open")));
     // A tap on the frost itself (not on a link) closes; picking a link also
-    // closes so the menu isn't still open when you navigate back.
+    // closes so the menu isn't still open when you navigate back. EXCEPT
+    // Contact Us: it opens an overlay on top, and closing that overlay
+    // should land you back on the still-open menu.
     navOverlay.addEventListener("click", (e) => {
-      if (e.target === navOverlay || e.target.closest("a")) setMenu(false);
+      const a = e.target.closest("a");
+      if (a && a.hasAttribute("data-contact")) return;
+      if (e.target === navOverlay || a) setMenu(false);
     });
   }
+
+  // "Contact" opens the help-desk ticket overlay instead of navigating —
+  // wired on both the desktop link and the burst-menu icon.
+  holder.querySelectorAll("[data-contact]").forEach((a) =>
+    a.addEventListener("click", (e) => {
+      e.preventDefault();
+      openContact();
+    })
+  );
 
   // Mobile melting capsule: past the top of the page the B·I·A·A·C wordmark
   // melts away leaving logo + menu; back at the top it breathes back in.
@@ -964,6 +997,162 @@ function mountDropdowns() {
   mo.observe(document.body, { childList: true, subtree: true });
 }
 
+// ---- Contact the committee: the help-desk ticket -------------------------
+// One overlay, three entrances: the nav "Contact" link, the footer human bar
+// and the chat's contact_organiser action. The form is styled as a ticket;
+// on success the stub's reference stays with the visitor while the mascot
+// flies the envelope off-screen. Delivery is the existing /api/contact
+// (support@biaac.com, reply-to the sender).
+const CONTACT_TOPICS = ["Registration", "Payment", "Stay", "Travel", "Something else"];
+
+function contactRef() {
+  // No lookalike characters — people read this over the phone.
+  const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+  let s = "";
+  for (let i = 0; i < 4; i++) s += chars[Math.floor(Math.random() * chars.length)];
+  return "BC-" + s;
+}
+
+function mountContactOverlay() {
+  if (document.getElementById("contactOv")) return;
+  const ov = document.createElement("div");
+  ov.className = "contact-ov";
+  ov.id = "contactOv";
+  ov.innerHTML =
+    '<button type="button" class="contact-x" aria-label="Close">✕</button>' +
+    '<div class="cticket" role="dialog" aria-modal="true" aria-label="Write to the committee">' +
+      '<form class="ct-main" id="ctForm">' +
+        '<span class="ct-kick">BIAAC HELP DESK · 09–11 JULY 2027</span>' +
+        "<h3>What can we help with?</h3>" +
+        '<div class="ct-chips" id="ctChips">' +
+        CONTACT_TOPICS.map(
+          (t, i) =>
+            '<button type="button" class="ct-chip' + (i === 0 ? " on" : "") + '" data-topic="' +
+            escapeHtml(t) + '">' + escapeHtml(t) + "</button>"
+        ).join("") +
+        "</div>" +
+        '<textarea class="ct-inp" id="ctMsg" rows="4" required placeholder="Your message — a real person reads this"></textarea>' +
+        '<div class="ct-two">' +
+          '<input class="ct-inp" id="ctName" required placeholder="Your name" autocomplete="name" />' +
+          '<input class="ct-inp" id="ctEmail" type="email" required placeholder="you@email.com" autocomplete="email" />' +
+        "</div>" +
+        '<div class="ct-foot">' +
+          '<button class="btn primary" type="submit" id="ctSend">Send it ➤</button>' +
+          '<span class="ct-err" id="ctErr" hidden></span>' +
+        "</div>" +
+      "</form>" +
+      '<div class="ct-stub" aria-hidden="true">' +
+        '<b class="ct-ref" id="ctRef"></b>' +
+        '<span class="ct-bars"><i style="height:7px"></i><i style="height:13px"></i><i style="height:9px"></i><i style="height:15px"></i><i style="height:8px"></i><i style="height:12px"></i><i style="height:10px"></i></span>' +
+        "<small>your stub —<br>we reply in 48h</small>" +
+      "</div>" +
+    "</div>" +
+    '<div class="ct-scene">' +
+      '<div class="ct-fly" aria-hidden="true">' +
+        '<div class="ct-carry">' +
+          '<span class="ct-heli"><span class="fm-rotor"></span>' + mascotHTML("happy") + "</span>" +
+          '<span class="ct-env">✉️</span>' +
+        "</div>" +
+      "</div>" +
+      '<div class="ct-done" role="status">' +
+        "<b>On its way ✓</b>" +
+        '<span id="ctDoneTxt"></span>' +
+        '<button type="button" class="btn ghost small" id="ctDoneBtn">Done</button>' +
+      "</div>" +
+    "</div>";
+  document.body.appendChild(ov);
+
+  const close = () => ov.classList.remove("open", "sent");
+  ov.querySelector(".contact-x").addEventListener("click", close);
+  ov.querySelector("#ctDoneBtn").addEventListener("click", close);
+  ov.addEventListener("click", (e) => {
+    if (e.target === ov) close();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && ov.classList.contains("open")) close();
+  });
+
+  ov.querySelector("#ctChips").addEventListener("click", (e) => {
+    const b = e.target.closest(".ct-chip");
+    if (!b) return;
+    ov.querySelectorAll(".ct-chip").forEach((c) => c.classList.toggle("on", c === b));
+  });
+
+  ov.querySelector("#ctForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    if (!form.reportValidity()) return;
+    const name = ov.querySelector("#ctName").value.trim();
+    const email = ov.querySelector("#ctEmail").value.trim();
+    const msg = ov.querySelector("#ctMsg").value.trim();
+    const onChip = ov.querySelector(".ct-chip.on");
+    const topic = onChip ? onChip.getAttribute("data-topic") : "General";
+    const ref = ov.querySelector("#ctRef").textContent;
+    const err = ov.querySelector("#ctErr");
+    const btn = ov.querySelector("#ctSend");
+    btn.disabled = true;
+    btn.textContent = "Sending…";
+    err.hidden = true;
+    try {
+      const res = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          email,
+          category: topic,
+          subject: msg.slice(0, 64) + (msg.length > 64 ? "…" : ""),
+          description: msg,
+          reference: ref,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) throw new Error(data.error || "Couldn't send — please try again.");
+      ov.querySelector("#ctDoneTxt").innerHTML =
+        "Reference <b>" + escapeHtml(ref) + "</b> — a real person replies to <b>" +
+        escapeHtml(email) + "</b> within 48 hours.<br>A copy of the reference is on its way to your inbox.";
+      ov.classList.add("sent");
+    } catch (ex) {
+      err.hidden = false;
+      err.textContent = ex.message;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Send it ➤";
+    }
+  });
+}
+
+function openContact(prefill) {
+  mountContactOverlay();
+  const ov = document.getElementById("contactOv");
+  ov.classList.remove("sent");
+  ov.querySelector("#ctForm").reset();
+  ov.querySelectorAll(".ct-chip").forEach((c, i) => c.classList.toggle("on", i === 0));
+  ov.querySelector("#ctErr").hidden = true;
+  ov.querySelector("#ctRef").textContent = contactRef();
+  if (prefill && prefill.message) ov.querySelector("#ctMsg").value = prefill.message;
+  // Commit the closed state first, or the very first open skips the
+  // corner-burst flight entirely (class lands before the initial paint).
+  void ov.offsetWidth;
+  ov.classList.add("open");
+  setTimeout(() => ov.querySelector("#ctMsg").focus(), 500);
+}
+
+// The quiet baseline on every page: a strip above the footer line.
+function mountHumanBar() {
+  const foot = document.querySelector(".footer");
+  if (!foot || document.getElementById("humanBar")) return;
+  const bar = document.createElement("div");
+  bar.className = "human-bar";
+  bar.id = "humanBar";
+  bar.innerHTML =
+    "<b>Need a human?</b>" +
+    '<button type="button" class="human-btn" id="humanBtn">✉️ Write to the committee</button>' +
+    "<small>a real person replies within 48 hours</small>";
+  foot.parentNode.insertBefore(bar, foot);
+  bar.querySelector("#humanBtn").addEventListener("click", () => openContact());
+}
+
 // opts.chat === false suppresses the chat widget. The login page passes it:
 // a floating mascot that overlaps the password field is not what you want on
 // a sign-in screen.
@@ -977,6 +1166,7 @@ function mountNav(active, opts) {
   if (options.chat !== false) mountChat();
   mountReveals();
   mountDropdowns();
+  mountHumanBar();
 
   // Compare against what was just painted. (This used to compare against the
   // hint AFTER refreshUser had overwritten it — fresh against fresh, always
@@ -2253,7 +2443,9 @@ function mountChat() {
     } else if (action.action === "show_map") {
       showMapCard(action.from, action.to);
     } else if (action.action === "contact_organiser") {
-      showContactCard(action.subject || "");
+      // The escalation now opens the site-wide help-desk ticket, pre-filled
+      // with the question the assistant couldn't answer.
+      openContact({ message: action.subject || "" });
     }
   }
 

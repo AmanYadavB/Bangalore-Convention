@@ -4990,3 +4990,453 @@ html.data-wait:not(.veil-up) .biaac-name {
   font-size: 13px;
   padding: 6px 0;
 }
+
+/* ---------- Contact the committee: the help-desk ticket ---------- */
+/* Desktop nav shows a drawn envelope alone — clearly bigger than the text
+   links, its label carried by the tooltip and aria-label. */
+.nav-links .contact-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 9px;
+  color: var(--muted);
+}
+
+.nav-links .contact-link:hover {
+  color: var(--accent);
+}
+
+/* The footer human bar — the always-there baseline. */
+.human-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  max-width: 620px;
+  margin: 40px auto -18px;
+  padding: 10px 20px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  box-shadow: var(--shadow-sm);
+}
+
+.human-bar b {
+  font-size: 13px;
+}
+
+.human-btn {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.human-btn:hover {
+  color: var(--accent-2);
+}
+
+.human-bar small {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* The overlay: same frost language as the burst menu, above the chat (70).
+   Deliberately LIGHT — whatever was open stays visible underneath, just
+   blurred, so contact feels like a layer, not a different place. */
+.contact-ov {
+  position: fixed;
+  inset: 0;
+  z-index: 76;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: color-mix(in srgb, var(--bg) 40%, transparent);
+  -webkit-backdrop-filter: blur(9px);
+  backdrop-filter: blur(9px);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.25s ease, visibility 0s linear 0.25s;
+}
+
+.contact-ov.open {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition: opacity 0.25s ease;
+}
+
+.contact-x {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 3;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  font-size: 16px;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+}
+
+/* The ticket itself — main body + perforated stub. It flies in from the
+   top-right corner with the SAME spring as the burst-menu icons, and its
+   innards stagger in behind it exactly like the menu's flying circles. */
+.cticket {
+  display: flex;
+  width: min(560px, 100%);
+  filter: drop-shadow(0 14px 30px rgba(30, 41, 90, 0.2));
+  opacity: 0;
+  transform: translate(32vw, -28vh) rotate(9deg) scale(0.25);
+  transition: transform 0.55s cubic-bezier(0.34, 1.45, 0.64, 1), opacity 0.22s ease;
+}
+
+.contact-ov.open .cticket {
+  opacity: 1;
+  transform: none;
+}
+
+.ct-main > *,
+.ct-stub > * {
+  opacity: 0;
+  transform: translate(26px, -26px) scale(0.55);
+  transition: transform 0.5s cubic-bezier(0.34, 1.45, 0.64, 1), opacity 0.2s ease;
+}
+
+.contact-ov.open .ct-main > *,
+.contact-ov.open .ct-stub > * {
+  opacity: 1;
+  transform: none;
+}
+
+.contact-ov.open .ct-main > *:nth-child(1) { transition-delay: 0.12s; }
+.contact-ov.open .ct-main > *:nth-child(2) { transition-delay: 0.17s; }
+.contact-ov.open .ct-main > *:nth-child(3) { transition-delay: 0.22s; }
+.contact-ov.open .ct-main > *:nth-child(4) { transition-delay: 0.27s; }
+.contact-ov.open .ct-main > *:nth-child(5) { transition-delay: 0.32s; }
+.contact-ov.open .ct-main > *:nth-child(6) { transition-delay: 0.37s; }
+.contact-ov.open .ct-stub > *:nth-child(1) { transition-delay: 0.3s; }
+.contact-ov.open .ct-stub > *:nth-child(2) { transition-delay: 0.36s; }
+.contact-ov.open .ct-stub > *:nth-child(3) { transition-delay: 0.42s; }
+
+.ct-main {
+  flex: 1;
+  min-width: 0;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px 0 0 16px;
+  padding: 18px 20px;
+}
+
+.ct-kick {
+  font-size: 9px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.ct-main h3 {
+  font-family: var(--font-display);
+  font-size: 17px;
+  margin: 4px 0 12px;
+}
+
+.ct-chips {
+  margin-bottom: 6px;
+}
+
+.ct-chip {
+  display: inline-block;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 13px;
+  margin: 0 6px 8px 0;
+  color: var(--muted);
+  background: var(--card);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.ct-chip.on {
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  border-color: transparent;
+  color: var(--accent);
+}
+
+.ct-inp {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 13.5px;
+  padding: 10px 12px;
+  margin: 6px 0;
+  resize: vertical;
+}
+
+.ct-inp:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
+
+.ct-two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.ct-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.ct-err {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--danger);
+}
+
+.ct-stub {
+  width: 118px;
+  flex-shrink: 0;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-left: 1.5px dashed var(--accent);
+  border-radius: 0 16px 16px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 8px;
+  text-align: center;
+}
+
+.ct-ref {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: 0.5px;
+}
+
+.ct-bars {
+  display: flex;
+  gap: 1.5px;
+  align-items: flex-end;
+}
+
+.ct-bars i {
+  width: 2px;
+  background: var(--text);
+  opacity: 0.6;
+}
+
+.ct-stub small {
+  font-size: 9.5px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+/* The send: ticket bows out, the mascot flies the envelope away, the
+   confirmation (with the stub's reference) settles in. */
+.contact-ov.sent .cticket {
+  animation: ct-away 0.4s ease forwards;
+  pointer-events: none;
+}
+
+@keyframes ct-away {
+  to { opacity: 0; transform: translateY(10px) scale(0.92); }
+}
+
+.ct-scene {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: none;
+  pointer-events: none;
+}
+
+.contact-ov.sent .ct-scene {
+  display: block;
+}
+
+/* The REAL mascot does the delivery: rotor spinning, envelope slung on a
+   tether beneath it, and a wobbly helicopter climb-out — the same flying
+   language as the home page's corner mascot. */
+.ct-fly {
+  position: absolute;
+  left: 50%;
+  top: 44%;
+  opacity: 0;
+  transform: translate(-50%, calc(-50% + 14px));
+  /* ONE smooth path, no mid-flight waypoints: rise, then a single
+     accelerating exit curve. The helicopter sway lives on .ct-carry so it
+     never fights the path. */
+  animation: ct-flight 2.5s linear 0.35s forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes ct-flight {
+  0% { opacity: 0; transform: translate(-50%, calc(-50% + 14px)); animation-timing-function: ease-out; }
+  10% { opacity: 1; }
+  30% { transform: translate(-50%, calc(-50% - 52px)); animation-timing-function: cubic-bezier(0.55, 0, 0.85, 0.55); }
+  92% { opacity: 1; }
+  100% { opacity: 0; transform: translate(calc(-50% + 58vw), calc(-50% - 52vh)); }
+}
+
+.ct-carry {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  animation: ct-sway 1.1s ease-in-out 0.35s infinite alternate;
+}
+
+@keyframes ct-sway {
+  from { transform: rotate(-5deg); }
+  to { transform: rotate(5deg); }
+}
+
+.ct-heli {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 56px;
+}
+
+/* the rotor only shows while the FAB flies; here it's always on */
+.ct-fly .fm-rotor {
+  opacity: 1;
+}
+
+/* the envelope hangs from the mascot on a little tether */
+.ct-fly .ct-env {
+  position: relative;
+  margin-top: 9px;
+}
+
+.ct-fly .ct-env::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: -10px;
+  width: 2px;
+  height: 10px;
+  transform: translateX(-50%);
+  background: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.ct-env {
+  width: 104px;
+  height: 66px;
+  background: var(--card);
+  border: 1.5px solid var(--accent);
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  font-size: 20px;
+  box-shadow: var(--shadow-sm);
+  background-image:
+    linear-gradient(to bottom right, transparent 46%, color-mix(in srgb, var(--accent) 26%, transparent) 47%, transparent 55%),
+    linear-gradient(to bottom left, transparent 46%, color-mix(in srgb, var(--accent) 26%, transparent) 47%, transparent 55%);
+}
+
+.ct-done {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(420px, 88vw);
+  text-align: center;
+  pointer-events: auto;
+  opacity: 0;
+  animation: ct-donein 0.45s ease 2.9s forwards;
+}
+
+@keyframes ct-donein {
+  to { opacity: 1; }
+}
+
+.ct-done b {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 20px;
+  color: var(--green);
+  margin-bottom: 8px;
+}
+
+.ct-done span {
+  display: block;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.6;
+  margin-bottom: 14px;
+}
+
+.ct-done span b {
+  display: inline;
+  font-family: inherit;
+  font-size: inherit;
+  color: var(--text);
+}
+
+@media (max-width: 560px) {
+  .cticket {
+    flex-direction: column;
+  }
+  .ct-main {
+    border-radius: 16px 16px 0 0;
+  }
+  .ct-stub {
+    width: 100%;
+    border-left: 1px solid var(--border);
+    border-top: 1.5px dashed var(--accent);
+    border-radius: 0 0 16px 16px;
+    flex-direction: row;
+    justify-content: space-between;
+    padding: 10px 16px;
+  }
+  .ct-stub br {
+    display: none;
+  }
+  .ct-two {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cticket,
+  .ct-main > *,
+  .ct-stub > * {
+    transition: none;
+  }
+  .contact-ov.sent .cticket {
+    animation: none;
+    opacity: 0;
+  }
+  .ct-fly {
+    display: none;
+  }
+  .ct-done {
+    animation: none;
+    opacity: 1;
+  }
+}

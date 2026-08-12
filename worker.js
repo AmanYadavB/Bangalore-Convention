@@ -4366,19 +4366,48 @@ async function handleApi(request, env, ctx) {
 
   // ---- Contact / email forwarding to support@biaac.com ----
   if (resource === "contact" && method === "POST") {
-    const { name, email, subject, category, description } = body;
+    const { name, email, subject, category, description, reference } = body;
     if (!name || !email || !subject || !description) {
       return json({ error: "name, email, subject and description are required." }, 400);
     }
+    // The help-desk ticket's stub code — shown to the visitor, quoted in both
+    // emails so a reply thread can always be matched to the conversation.
+    const ref = String(reference || "").replace(/[^\w-]/g, "").slice(0, 16);
     const emailBody = [
       "New message from the Convention Helper contact form",
       "",
       "From    : " + name + " <" + email + ">",
       "Category: " + (category || "General"),
       "Subject : " + subject,
+      "Ref     : " + (ref || "—"),
       "",
       description,
     ].join("\n");
+    // E2 "mascot memo": the site's robot-over-banner email identity carrying
+    // the visitor's message, with a one-tap reply button. The plain-text part
+    // stays first as the fallback for clients that refuse HTML.
+    const firstName = String(name).trim().split(/\s+/)[0] || "them";
+    const committeeHtml = mascotEmail({
+      mood: "happy",
+      title: "Someone wrote in — the mascot is holding the envelope 📮",
+      intro:
+        esc(name) + " · " + esc(category || "General") +
+        (ref ? " · ref " + ref : "") + " · " + istClock() + " IST",
+      bodyHtml:
+        '<div style="border-left:3px solid #c9cdf5;background:#f4f5fd;padding:13px 16px;border-radius:0 10px 10px 0;margin:18px 0 4px;color:#1f2937;font-size:14.5px;line-height:1.65;text-align:left;white-space:pre-wrap">' +
+        esc(description) +
+        "</div>" +
+        '<p style="margin:10px 0 0;font-size:13.5px;color:#4b5563;text-align:left">— <b>' +
+        esc(name) + "</b> &lt;" + esc(email) + "&gt;</p>",
+      button: {
+        href:
+          "mailto:" + encodeURIComponent(String(email).slice(0, 254)) +
+          "?subject=" + encodeURIComponent("Re: " + subject + (ref ? " · " + ref : "")),
+        label: "↩ Reply to " + esc(firstName),
+      },
+      note: "The mascot promised a reply within 48 hours. Don't make it a liar.",
+    });
+
     try {
       const mcRes = await fetch("https://api.mailchannels.net/tx/v1/send", {
         method: "POST",
@@ -4389,11 +4418,35 @@ async function handleApi(request, env, ctx) {
             reply_to: { email: String(email).slice(0, 254), name: String(name).slice(0, 100) },
           }],
           from: { email: "noreply@biaac.com", name: "Convention Helper" },
-          subject: "[" + (category || "General") + "] " + subject,
-          content: [{ type: "text/plain", value: emailBody }],
+          subject: "[" + (category || "General") + "] " + subject + (ref ? " · " + ref : ""),
+          content: [
+            { type: "text/plain", value: emailBody },
+            { type: "text/html", value: committeeHtml },
+          ],
         }),
       });
-      if (mcRes.ok || mcRes.status === 202) return json({ ok: true });
+      if (mcRes.ok || mcRes.status === 202) {
+        // Fire-and-forget receipt to the visitor: the reference they saw on
+        // the stub, in the mascot's voice. A receipt hiccup must never turn
+        // a delivered message into an error.
+        ctx.waitUntil(
+          sendMail(
+            env,
+            String(email).slice(0, 254),
+            "Got it — the committee has your message" + (ref ? " · " + ref : ""),
+            mascotEmail({
+              mood: "happy",
+              title: "Your message is with the committee",
+              intro:
+                "A real person reads every message and replies within 48 hours — usually much sooner." +
+                (ref ? " Keep this reference handy: " + ref + "." : ""),
+              note: "The mascot carried it over personally and refuses to confirm whether it peeked on the way.",
+            }),
+            { toName: String(name).slice(0, 100) }
+          ).catch(() => {})
+        );
+        return json({ ok: true });
+      }
       const errText = await mcRes.text().catch(() => "");
       return json({ error: "Email service error: " + mcRes.status, detail: errText }, 502);
     } catch (err) {
