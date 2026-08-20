@@ -113,11 +113,11 @@
           <!-- The address sits on its own line (.auth-email) so a long one
                wraps cleanly on phones instead of overflowing the card. -->
           <p class="muted" id="waitText">
-            If <b id="waitEmail" class="auth-email"></b> is on the committee
-            list, an approval link is sprinting to your inbox right now.
-            Approve it there — even from your mail app — and this page signs
-            itself in like magic. The mascot will wait right here. It's very
-            used to waiting.
+            An approval link is sprinting to
+            <b id="waitEmail" class="auth-email"></b> right now. Approve it
+            there — even from your mail app — and this page signs itself in
+            like magic. The mascot will wait right here. It's very used to
+            waiting.
           </p>
           <button class="btn ghost small" id="waitCancel" type="button">Use a different email</button>
         </div>
@@ -215,8 +215,9 @@
 
         function startWaiting(waitToken, email) {
           waitDeadline = Date.now() + WAIT_TTL_MS;
-          // Same wording whether or not the account exists — anything else
-          // would let anyone probe for staff addresses.
+          // Only reached once the server has confirmed the address is on the
+          // committee list, so this panel can promise the mail outright — an
+          // address that isn't on the list never gets here, it gets told.
           document.getElementById("waitEmail").textContent = email;
           setWaiting(true);
 

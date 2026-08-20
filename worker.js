@@ -930,26 +930,47 @@ async function handleAuth(request, env, ctx, parts, url) {
     const next = safeNext(body.next);
 
     // The wait token lets THIS tab poll /magic/wait until the emailed link is
-    // approved. It is minted for every request — known, unknown, disabled, or
-    // rate-limited — so the response is uniform and cannot be used to probe
-    // for staff addresses. For an unknown email no row is ever written, so
-    // its wait token simply polls "pending" until the page gives up.
+    // approved. Only a real send mints one — an address that isn't on the
+    // committee list is told so outright rather than being parked on a
+    // "check your inbox" screen for mail that is never coming.
+    //
+    // That candour is a deliberate trade: this endpoint now answers "is this
+    // address on the committee", which the uniform response used to hide. The
+    // list is a handful of people who already know each other, and the per-IP
+    // limit below keeps it from being enumerated at any useful speed.
     const bindId = randomToken(16);
-    const uniform = json({ ok: true, mode: "link", wait: bindId });
+    const linkSent = json({ ok: true, mode: "link", wait: bindId });
 
-    if (!isValidEmail(email)) return uniform;
+    if (!isValidEmail(email)) return json({ error: "That doesn't look like an email address." }, 400);
+
+    const probeRl = await rateLimit(env, "probe:ip", ip, 30, 15 * 60);
+    if (!probeRl.allowed) return tooManyRequests(probeRl.retryAfter);
+
+    // Config is the authority on membership (resolveRoleFromConfig), not the
+    // staff table: a row can linger for someone who has been taken off the
+    // list, and staffForEmail re-activates a disabled row that is still on it.
+    if (!resolveRoleFromConfig(env, email)) {
+      audit(env, ctx, auditFrom(request, {
+        type: "magic_unknown",
+        outcome: "deny",
+        detail: "not on the committee list " + (await sha256Hex(email)).slice(0, 16),
+      }));
+      return json(
+        {
+          error:
+            "This email isn't on the committee list, so there's no account to sign in to. " +
+            "If it should be, ask an organiser to add it.",
+          code: "not_committee",
+        },
+        403
+      );
+    }
 
     // Email-first sign-in: the page sends just the address and the server
     // answers how to continue. An active account WITH a password types it —
     // no email goes out unless the client asks explicitly (force: the
-    // "email me a link instead" fallback for a forgotten password). Every
-    // other case — no password, unknown, disabled — falls through to the
-    // uniform link flow, so the one thing this branch reveals is "this
-    // committee member uses a password"; accepted, with its own rate limit,
-    // in exchange for a one-field sign-in screen.
+    // "email me a link instead" fallback for a forgotten password).
     if (body.force !== true) {
-      const probeRl = await rateLimit(env, "probe:ip", ip, 30, 15 * 60);
-      if (!probeRl.allowed) return uniform;
       const existing = await staffByEmail(env, email);
       if (existing && existing.status === "active" && existing.password_hash) {
         return json({ ok: true, mode: "password" });
@@ -960,7 +981,17 @@ async function handleAuth(request, env, ctx, parts, url) {
     const perEmail = await rateLimit(env, "magic:email", emailKey, 3, 60 * 60);
     const perIp = await rateLimit(env, "magic:ip", ip, 10, 60 * 60);
     const global = await rateLimit(env, "magic:day", istDate(0), 100, 24 * 60 * 60);
-    if (!perEmail.allowed || !perIp.allowed || !global.allowed) return uniform;
+    if (!perEmail.allowed || !perIp.allowed || !global.allowed) {
+      // Say so, rather than claiming a link went out. A committee member who
+      // has asked three times in an hour needs to know the fourth mail is not
+      // on its way.
+      const retryAfter = Math.max(
+        perEmail.allowed ? 0 : perEmail.retryAfter,
+        perIp.allowed ? 0 : perIp.retryAfter,
+        global.allowed ? 0 : global.retryAfter
+      );
+      return tooManyRequests(retryAfter);
+    }
 
     // The whole send runs in waitUntil so the response time is identical
     // whether or not the account exists — a stopwatch is as good an oracle as
@@ -1020,7 +1051,7 @@ async function handleAuth(request, env, ctx, parts, url) {
     })();
 
     if (ctx && ctx.waitUntil) ctx.waitUntil(work);
-    return uniform;
+    return linkSent;
   }
 
   // ---- Magic link: wait for approval -------------------------------------

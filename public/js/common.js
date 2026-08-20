@@ -492,12 +492,11 @@ function renderNav(active, opts) {
   const links = bare ? [] : NAV_LINKS.filter((l) => !l.need || hasRole(l.need));
   const user = currentUser();
 
-  // Signed out: a Sign in button among the links. Signed in: the usual
-  // corner profile chip — an avatar opening a small menu (account, sign out).
-  const authBtn = isSignedIn()
-    ? ""
-    : `<a class="btn primary small auth-btn" id="authBtn" href="login.html">Sign in</a>`;
-
+  // There is no Sign in entry point in the nav, on purpose. The public pages
+  // are for visitors; a committee member who needs the sign-in screen goes to
+  // /login directly, or is sent there by the server when they open one of the
+  // protected pages. Signed in, the usual corner profile chip — an avatar
+  // opening a small menu (account, sign out).
   const profile = isSignedIn()
     ? `<div class="nav-profile">
       <button class="avatar-btn" id="profileBtn" type="button" aria-haspopup="menu"
@@ -533,11 +532,7 @@ function renderNav(active, opts) {
       )
       .join("");
 
-  const overlayAuth = isSignedIn()
-    ? ""
-    : `<a class="link" style="--i:${links.length}" href="login.html"><span class="link-ico" aria-hidden="true">🔑</span><span class="link-label">Sign in</span></a>`;
-
-  // Contact Us renders AFTER Sign in on both surfaces. Not a page — it
+  // Contact Us is the last item on both surfaces. Not a page — it
   // opens the help-desk ticket overlay (see openContact).
   // Desktop shows just the postbox emoji — the label lives in the tooltip
   // and the accessible name.
@@ -553,7 +548,7 @@ function renderNav(active, opts) {
       `</svg></a>`;
   const contactIcon = bare
     ? ""
-    : `<a class="link" style="--i:${links.length + (isSignedIn() ? 0 : 1)}" data-contact="1" href="#contact"><span class="link-ico" aria-hidden="true">✉️</span><span class="link-label">Contact Us</span></a>`;
+    : `<a class="link" style="--i:${links.length}" data-contact="1" href="#contact"><span class="link-ico" aria-hidden="true">✉️</span><span class="link-label">Contact Us</span></a>`;
 
   return `
   <nav class="nav">
@@ -570,13 +565,11 @@ function renderNav(active, opts) {
     </button>
     <div class="nav-links" id="navLinks">
       ${linkItems(false)}
-      ${authBtn}
       ${contactText}
     </div>`}
   </nav>${bare ? "" : `
   <div class="nav-overlay" id="navOverlay">
     ${linkItems(true)}
-    ${overlayAuth}
     ${contactIcon}
   </div>`}`;
 }
@@ -1170,13 +1163,15 @@ function mountNav(active, opts) {
 
   // Compare against what was just painted. (This used to compare against the
   // hint AFTER refreshUser had overwritten it — fresh against fresh, always
-  // equal — so the nav kept showing "Sign in" until the next page load.)
+  // equal — so the nav kept showing the signed-out bar until the next page
+  // load.)
   const painted = JSON.stringify(CURRENT_USER);
   refreshUser().then((user) => {
     if (enforcePasswordSetup(user)) return;
-    // Signed out the corner control is #authBtn; signed in it's #profileBtn.
-    const hasControl = document.getElementById("authBtn") || document.getElementById("profileBtn");
-    if (JSON.stringify(user) !== painted || !hasControl) {
+    // Signed in, the corner control is #profileBtn. Signed out there is no
+    // control to look for — the nav carries no Sign in button.
+    const controlOk = user ? Boolean(document.getElementById("profileBtn")) : true;
+    if (JSON.stringify(user) !== painted || !controlOk) {
       paintNav(active, options);
     }
     document.dispatchEvent(new CustomEvent("bc:user", { detail: user }));
