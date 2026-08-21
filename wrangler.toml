@@ -24,7 +24,10 @@ run_worker_first = true
 binding = "CONVENTION_KV"
 id = "523334e302664ae8a883e5a0c44119a0"
 
-# D1 database stores developer-generated pages (the AI agent writes here).
+# D1 database. Holds the staff/auth tables, developer-generated pages, and —
+# since Aug 2026 — registrations and expenses, which used to be single JSON
+# blobs in KV where concurrent writes silently overwrote each other.
+# Existing KV data is imported automatically on first boot and left in place.
 # Create it once:  npx wrangler d1 create convention-db
 # then paste the printed database_id below.
 [[d1_databases]]
@@ -66,6 +69,18 @@ crons = ["*/10 * * * *"]
 #
 # Local development uses .dev.vars (gitignored) instead — see that file.
 
+# ---------------------------------------------------------------------------
+# NOTHING SECRET BELONGS IN THIS FILE. It is committed, and the repository was
+# public — every value ever written here should be treated as disclosed and
+# rotated. Secrets and personal contact details go in:
+#   production  ->  npx wrangler secret put NAME
+#   local dev   ->  .dev.vars  (gitignored, never committed)
+# What may stay here: resource ids, timings, feature flags, and identifiers
+# that are public by design (a Google OAuth client id, a Razorpay key id —
+# both are sent to the browser anyway).
+# See docs/SECURITY-ROTATION.md for what to rotate and in what order.
+# ---------------------------------------------------------------------------
+
 [vars]
 # Public origin. Used to build redirect URLs and to validate request Origin
 # headers. NEVER derived from the Host header (host-header injection).
@@ -83,12 +98,12 @@ AUTH_ORIGIN = "https://biaac.com"
 #
 # DEVELOPER_EMAILS also get Ops (email digests, Deepgram/Cloudflare billing
 # figures) and Feed AI (the knowledge base injected into every chat reply).
-DEVELOPER_EMAILS = "amankumaryadavasasmd@gmail.com"
-
+# Set as a secret so the address is not published:
+#   npx wrangler secret put DEVELOPER_EMAILS
 # The organising committee: registrations, dashboard, expenses, reflections.
 # Comma-separated, e.g. "asha@example.com, ravi@example.com"
-STAFF_EMAILS = "amankumaryadav96250@gmail.com, himanshu77626@gmail.com"
-
+# Set as a secret so committee addresses are not published:
+#   npx wrangler secret put STAFF_EMAILS
 # Google OAuth client id (public — the secret is set with `wrangler secret put`).
 # Create at console.cloud.google.com -> APIs & Services -> Credentials ->
 # OAuth client ID -> Web application, and register these redirect URIs:
@@ -110,14 +125,13 @@ PBKDF2_ITERATIONS = "12000"
 # recover a locked-out owner (POST /api/auth/bootstrap, capped at 3/day, always
 # audited, always emails DASHBOARD_EMAIL) and trigger ops reports from curl.
 # Prefer setting it as a secret:  npx wrangler secret put DEV_KEY
-DEV_KEY = "amankumaryadavasasmd"
-# MAILCHANNELS_API_KEY = "uqrnax8EQ8hveVhcTZTKjkFAdl9Q6iQb"
+# ROTATE + set as a secret, never here:  npx wrangler secret put DEV_KEY
+# ROTATE + set as a secret:  npx wrangler secret put MAILCHANNELS_API_KEY
 RAZORPAY_KEY_ID = "rzp_test_TIK9lJop7jGPPi"
-# RAZORPAY_KEY_SECRET = "0aYSxQjaJf95wOOczK5k1fLm"
-# DEEPGRAM_API_KEY = "60167b8e4cf80a81095ba76f3e465283b507fd03"
-
+# ROTATE + set as a secret:  npx wrangler secret put RAZORPAY_KEY_SECRET
+# ROTATE + set as a secret:  npx wrangler secret put DEEPGRAM_API_KEY
 # Where the ops dashboard emails go. CHANGE THIS to your Gmail address.
-DASHBOARD_EMAIL = "amankumaryadavasasmd@gmail.com"
+# Set as a secret:  npx wrangler secret put DASHBOARD_EMAIL
 # Daily digest time in IST (24h "HH:MM"). Can also be changed live without a
 # redeploy:  POST /api/report/schedule  {"devKey":"...","time":"18:40"}
 DIGEST_TIME_IST = "17:00"
@@ -129,7 +143,7 @@ DEEPGRAM_CREDIT_TOTAL = "200"
 # The main DEEPGRAM_API_KEY can speak but may lack permission to read the
 # account balance (403). To show "dollars remaining", create a key with
 # Owner/Administrator scope in the Deepgram console and paste it here:
-# DEEPGRAM_BALANCE_KEY = "c6e0cd2a8d85b8fbe794c8bd7813cc46d04cee38"
+# ROTATE + set as a secret:  npx wrangler secret put DEEPGRAM_BALANCE_KEY
 # Optional — enables the "Cloudflare requests (24h)" row in the digest:
 #   CF_ACCOUNT_ID  = your account id (dash.cloudflare.com → Workers → right sidebar)
 #   CF_API_TOKEN   = create an API token with "Account Analytics: Read", then run
@@ -156,7 +170,8 @@ WHATSAPP_CHANNEL_URL = "https://whatsapp.com/channel/0029VbDRqVyJkK77DOFXs00o"
 # "919876543210" all normalise the same way. Leave EMPTY to disable the
 # broadcast entirely; the free WhatsApp Channel above is unaffected either way.
 # While on the Meta test number, only your 5 verified test recipients can receive.
-REFLECTION_RECIPIENTS = "919625018330"
+# Personal phone numbers — set as a secret, not in a tracked file:
+#   npx wrangler secret put REFLECTION_RECIPIENTS
 # When the broadcast goes out, IST 24h "HH:MM". The 10-minute cron means the
 # real send lands within 10 minutes after this.
 REFLECTION_TIME_IST = "07:00"

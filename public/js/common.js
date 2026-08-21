@@ -473,6 +473,10 @@ function goToLogin() {
 // The icon only shows in the mobile overlay menu; desktop links stay text.
 const NAV_LINKS = [
   { href: "index.html", label: "Home", key: "home", icon: "🏠" },
+  // One public information page — what the convention is, how to reach it, and
+  // the FAQ, as three sections. Someone deciding whether to register needs it
+  // one click away; the policy pages below do not belong in a visitor's nav.
+  { href: "about.html", label: "About", key: "about", icon: "🕊️" },
   { href: "register.html", label: "Register", key: "register", icon: "📝" },
   { href: "reflections.html", label: "Reflections", key: "reflections", need: "developer", icon: "📖" },
   { href: "registrations.html", label: "Registrations", key: "registrations", need: "staff", icon: "🧾" },
@@ -731,7 +735,12 @@ function mountReveals() {
     { sel: ".reg-layout > *", stagger: true },
     // .mem-wall runs its own per-tile pop (index.html) and .auth-card its
     // own cascade (login.html), so both opt out here.
-    { sel: ".container > *:not(.grid):not(.reg-layout):not(.mem-wall):not(.auth-card):not(script):not(style)", stagger: false },
+    // .pg-layout is the whole body of a content page, rail included. Revealing
+    // it as one unit meant the entire page sat at opacity 0 — and .rv's 46px
+    // translate made it overflow sideways — until the observer happened to
+    // fire. Its cards reveal individually instead, one group down.
+    { sel: ".sec-block > *", stagger: false },
+    { sel: ".container > *:not(.grid):not(.reg-layout):not(.mem-wall):not(.auth-card):not(.pg-layout):not(script):not(style)", stagger: false },
   ];
 
   // Strip the classes once the entrance ends so the card :hover lifts (and
@@ -757,6 +766,19 @@ function mountReveals() {
     { rootMargin: "0px 0px -8% 0px", threshold: 0.05 }
   );
 
+  // Safety floor. `rv` is opacity:0, so anything the observer never reports on
+  // stays invisible for good — and that is not hypothetical: landing on a deep
+  // link like terms.html#payment scrolls the page before the observer is wired
+  // up, and every card below the fold can sit hidden indefinitely. An entrance
+  // animation must never be the reason a page has no content, so after a short
+  // grace period anything still waiting is simply shown.
+  const revealStragglers = () => {
+    document.querySelectorAll(".rv:not(.rv-in)").forEach((el) => {
+      io.unobserve(el);
+      finish(el);
+    });
+  };
+
   const scan = () => {
     for (const g of GROUPS) {
       const counts = g.stagger ? new Map() : null;
@@ -773,6 +795,8 @@ function mountReveals() {
         io.observe(el);
       });
     }
+    clearTimeout(scan.__floor);
+    scan.__floor = setTimeout(revealStragglers, 1600);
   };
   const begin = () => {
     scan();
@@ -1131,6 +1155,86 @@ function openContact(prefill) {
   setTimeout(() => ov.querySelector("#ctMsg").focus(), 500);
 }
 
+// The policy pages have to be reachable from anywhere on the site: Razorpay's
+// live-mode review looks for them, and someone about to pay should be one click
+// from any of them. Injected into whatever .footer the page already has, so a
+// new policy page is added here and appears everywhere at once.
+// Refund and Privacy keep their own URLs on purpose: Razorpay's activation
+// form asks for each as a separate link, and an anchor into a combined page is
+// the kind of thing that turns a review into a query. Payment terms sit inside
+// Terms, where they conventionally belong.
+const LEGAL_LINKS = [
+  { href: "terms.html", label: "Terms & Payment" },
+  { href: "refund.html", label: "Refund & Cancellation" },
+  { href: "privacy.html", label: "Privacy" },
+];
+
+function mountLegalStrip() {
+  const foot = document.querySelector(".footer");
+  if (!foot || document.getElementById("legalStrip")) return;
+  const strip = document.createElement("div");
+  strip.className = "legal-strip";
+  strip.id = "legalStrip";
+  strip.innerHTML = LEGAL_LINKS.map(
+    (l) => `<a href="${l.href}">${escapeHtml(l.label)}</a>`
+  ).join('<span class="legal-dot" aria-hidden="true">·</span>');
+  foot.appendChild(strip);
+}
+
+// Content pages (about, terms): keep the section rail in step with the scroll,
+// and open a FAQ row when someone arrives on its direct link.
+function mountContentPage() {
+  const rail = document.getElementById("pgRail");
+  if (rail) {
+    const pairs = [];
+    rail.querySelectorAll("a").forEach((a) => {
+      const el = document.getElementById(a.hash.slice(1));
+      if (el) pairs.push({ a, el });
+    });
+    if (pairs.length) {
+      // Deliberately a scroll pass rather than an IntersectionObserver: these
+      // sections are taller than the viewport, so a scroll that starts and
+      // ends inside one crosses no boundary and never fires an observer.
+      let queued = false;
+      const sync = () => {
+        let current = pairs[0].a;
+        for (const p of pairs) {
+          if (p.el.getBoundingClientRect().top <= 140) current = p.a;
+        }
+        pairs.forEach((p) => p.a.classList.toggle("on", p.a === current));
+      };
+      const onScroll = () => {
+        if (queued) return;
+        queued = true;
+        requestAnimationFrame(() => {
+          queued = false;
+          sync();
+        });
+      };
+      sync();
+      window.addEventListener("scroll", onScroll, { passive: true });
+      window.addEventListener("resize", onScroll, { passive: true });
+    }
+  }
+
+  // A link straight to one answer should arrive with that answer open.
+  const openFromHash = () => {
+    if (!location.hash || location.hash.length < 2) return;
+    let el = null;
+    try {
+      el = document.querySelector(location.hash);
+    } catch (e) {
+      return; // a hash that is not a valid selector is not ours to handle
+    }
+    if (el && el.tagName === "DETAILS" && !el.open) {
+      el.open = true;
+      el.scrollIntoView({ block: "center" });
+    }
+  };
+  openFromHash();
+  window.addEventListener("hashchange", openFromHash);
+}
+
 // The quiet baseline on every page: a strip above the footer line.
 function mountHumanBar() {
   const foot = document.querySelector(".footer");
@@ -1160,6 +1264,8 @@ function mountNav(active, opts) {
   mountReveals();
   mountDropdowns();
   mountHumanBar();
+  mountLegalStrip();
+  mountContentPage();
 
   // Compare against what was just painted. (This used to compare against the
   // hint AFTER refreshUser had overwritten it — fresh against fresh, always

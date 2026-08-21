@@ -5450,3 +5450,242 @@ html.data-wait:not(.veil-up) .biaac-name {
     opacity: 1;
   }
 }
+
+/* ==========================================================================
+   CONTENT PAGES — about, terms, refund, privacy
+   Built from the existing tokens only, so the midnight theme comes along for
+   free. Mobile-first in behaviour: every grid uses auto-fit so it reflows on
+   its own, and the two components that cannot (the section rail and the
+   refund timeline) change shape at a breakpoint instead.
+   ========================================================================== */
+
+/* Tinted washes. Declared per-theme rather than hardcoded, because an rgba()
+   mixed for a white page turns to mud on the midnight one. */
+:root {
+  --wash-accent: rgba(91, 91, 240, 0.09);
+  --wash-sky: rgba(14, 165, 233, 0.12);
+  --wash-violet: rgba(124, 58, 237, 0.12);
+  --wash-green: rgba(16, 157, 91, 0.12);
+  --wash-amber: rgba(185, 119, 15, 0.08);
+  --wash-amber-2: rgba(185, 119, 15, 0.16);
+}
+[data-theme="midnight"] {
+  --wash-accent: rgba(129, 140, 248, 0.14);
+  --wash-sky: rgba(56, 189, 248, 0.16);
+  --wash-violet: rgba(167, 139, 250, 0.16);
+  --wash-green: rgba(52, 211, 153, 0.15);
+  --wash-amber: rgba(251, 191, 36, 0.1);
+  --wash-amber-2: rgba(251, 191, 36, 0.2);
+}
+
+/* ---- H2 · page hero ------------------------------------------------------ */
+.phero { padding: 6px 0 4px; }
+.phero .eyebrow {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 11px; font-weight: 800; letter-spacing: 1.6px;
+  color: var(--accent); background: var(--wash-accent);
+  border: 1px solid var(--wash-accent); border-radius: 999px; padding: 6px 14px;
+}
+.phero h1 {
+  font-family: var(--font-display); font-weight: 800;
+  font-size: clamp(28px, 7.5vw, 44px); line-height: 1.08;
+  letter-spacing: -0.9px; margin: 14px 0 10px; text-wrap: balance;
+}
+.ink-grad {
+  background: linear-gradient(96deg, var(--accent), var(--accent-2) 55%, var(--accent-3));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.phero-sub { color: var(--muted); font-size: clamp(14px, 3.6vw, 16px); margin: 0; max-width: 62ch; }
+.phero-wave { display: block; width: 100%; height: clamp(24px, 6vw, 44px); margin: 12px 0 0; }
+
+/* ---- N2 · section rail + coloured sections ------------------------------- */
+.pg-layout { display: grid; grid-template-columns: 186px minmax(0, 1fr); gap: 36px; align-items: start; }
+.pg-rail { position: sticky; top: 82px; }
+.pg-rail a {
+  display: block; padding: 9px 13px; margin-bottom: 2px; border-radius: 10px;
+  border-left: 3px solid transparent; font-size: 14px; font-weight: 600;
+  color: var(--muted); text-decoration: none;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.pg-rail a:hover { color: var(--text); }
+.pg-rail a.on { color: var(--accent); background: var(--wash-accent); border-left-color: var(--accent); }
+
+/* Below the rail's breakpoint it becomes a sticky scrolling chip bar, which is
+   what actually works on a phone. The scroll lives on an inner track, not on
+   .pg-rail itself: overflow would clip the full-bleed background below, and
+   without that background the cards passing underneath show through in the
+   container's side gutters. */
+@media (max-width: 860px) {
+  /* Block, not a one-column grid: a sticky grid item is confined to its own
+     grid area, which here is just the rail's own height — nothing to stick
+     within. As a plain block it sticks against .pg-layout instead. */
+  .pg-layout { display: block; }
+  .pg-rail { top: 59px; z-index: 30; margin: 0 0 18px; }
+  /* Bleed exactly as far as the container's own gutter — no further. An
+     approximate -50vw would paint the same but push the document 195px wider
+     and hand every phone a horizontal scrollbar. */
+  .pg-rail {
+    margin-left: -24px; margin-right: -24px;
+    padding-left: 24px; padding-right: 24px;
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    box-shadow: 0 10px 14px -12px rgba(20, 30, 60, 0.35);
+  }
+  .pg-rail-track {
+    display: flex; gap: 8px; padding: 10px 0; overflow-x: auto;
+    scrollbar-width: none; -webkit-overflow-scrolling: touch;
+  }
+  .pg-rail-track::-webkit-scrollbar { display: none; }
+  .pg-rail a {
+    flex: none; margin: 0; padding: 8px 15px; border-left: 0;
+    border: 1px solid var(--border); border-radius: 999px; white-space: nowrap;
+    background: var(--card);
+  }
+  .pg-rail a.on { border-color: var(--accent); background: var(--wash-accent); }
+}
+
+.sec-block { scroll-margin-top: 96px; }
+.sec-head-row { display: flex; align-items: center; gap: 12px; margin: 44px 0 8px; }
+.sec-block:first-of-type .sec-head-row { margin-top: 6px; }
+.sec-ico {
+  width: 38px; height: 38px; border-radius: 12px; flex: none;
+  display: grid; place-items: center; font-size: 18px;
+}
+.sec-head-row h2 { font-family: var(--font-display); font-size: clamp(19px, 4.6vw, 25px); margin: 0; }
+.sec-rule { height: 3px; width: 52px; border-radius: 3px; margin: 0 0 18px 50px; }
+.s-indigo .sec-ico { background: var(--wash-accent); }
+.s-indigo .sec-rule { background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+.s-sky .sec-ico { background: var(--wash-sky); }
+.s-sky .sec-rule { background: linear-gradient(90deg, var(--accent-3), var(--accent)); }
+.s-violet .sec-ico { background: var(--wash-violet); }
+.s-violet .sec-rule { background: linear-gradient(90deg, var(--accent-2), var(--accent-3)); }
+@media (max-width: 640px) { .sec-rule { margin-left: 0; } }
+
+/* ---- F1 · fact strip ----------------------------------------------------- */
+.fact-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 12px; }
+.fact {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow-sm);
+}
+.fact-l { display: block; font-size: 10.5px; font-weight: 800; letter-spacing: 1.3px; color: var(--muted); margin-bottom: 5px; }
+.fact-v { font-family: var(--font-display); font-weight: 700; font-size: 15px; }
+.fact.pending .fact-v { color: var(--amber); }
+@media (max-width: 460px) { .fact-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* ---- P1 · price cards ---------------------------------------------------- */
+.price-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(178px, 1fr)); gap: 14px; }
+.price-card {
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+  overflow: hidden; box-shadow: var(--shadow-sm);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+.price-card:hover { transform: translateY(-3px); box-shadow: var(--shadow); }
+.price-cap { height: 5px; }
+.price-body { padding: 15px 17px 17px; }
+.price-name { font-size: 12.5px; font-weight: 700; color: var(--muted); }
+.price-amt {
+  font-family: var(--font-display); font-weight: 800;
+  font-size: clamp(23px, 5.5vw, 28px); margin: 7px 0; letter-spacing: -0.5px;
+}
+.price-inc { font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+.cap-sky { background: linear-gradient(90deg, var(--accent-3), var(--accent)); }
+.cap-green { background: linear-gradient(90deg, var(--green), var(--accent-3)); }
+.cap-indigo { background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+.cap-violet { background: linear-gradient(90deg, var(--accent-2), var(--accent-3)); }
+
+/* ---- T1 · travel mode cards ---------------------------------------------- */
+.mode-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(198px, 1fr)); gap: 14px; }
+.mode-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 17px; box-shadow: var(--shadow-sm);
+}
+.mode-ico { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; font-size: 20px; margin-bottom: 11px; }
+.mode-card h3 { font-family: var(--font-display); font-size: 15px; margin: 0 0 6px; }
+.mode-card p { font-size: 13.5px; margin: 0; color: var(--muted); line-height: 1.5; }
+
+/* ---- Q1 · FAQ accordion --------------------------------------------------- */
+.faq {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow);
+}
+.faq details { border-top: 1px solid var(--border-soft); scroll-margin-top: 96px; }
+.faq details:first-of-type { border-top: 0; }
+.faq summary {
+  cursor: pointer; list-style: none; display: flex; align-items: center;
+  justify-content: space-between; gap: 14px; min-height: 54px;
+  padding: 14px 18px; font-weight: 600; font-size: 15px; line-height: 1.4;
+}
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after {
+  content: "+"; flex: none; font-family: var(--font-display);
+  font-size: 21px; font-weight: 700; line-height: 1; color: var(--accent);
+}
+.faq details[open] summary { color: var(--accent); }
+.faq details[open] summary::after { content: "\2212"; }
+.faq summary:hover { background: var(--card-2); }
+.faq summary:focus-visible { outline: none; box-shadow: var(--ring); }
+.faq details:target > summary { background: var(--wash-accent); }
+.faq-a { padding: 0 18px 17px; color: var(--muted); font-size: 14px; line-height: 1.6; }
+.faq-a p { margin: 0 0 10px; }
+.faq-a p:last-child { margin: 0; }
+
+/* ---- R1 · refund timeline -------------------------------------------------- */
+.tl-bar { display: flex; height: 10px; border-radius: 999px; overflow: hidden; }
+.tl-bar i { display: block; }
+.tl-marks { display: grid; grid-template-columns: 3fr 2fr 1.2fr; gap: 12px; margin-top: 14px; }
+.tl-marks > div { text-align: center; font-size: 12.5px; color: var(--muted); border-left: 0 solid transparent; }
+.tl-marks b { display: block; font-family: var(--font-display); font-size: 15px; color: var(--text); margin-bottom: 3px; }
+.m-green { --m: var(--green); }
+.m-amber { --m: var(--amber); }
+.m-red { --m: var(--red); }
+/* On a phone the three bands stack as rows, each carrying its own colour —
+   a 1.2fr column of text is unreadable at 360px. */
+@media (max-width: 560px) {
+  .tl-bar { display: none; }
+  .tl-marks { grid-template-columns: 1fr; gap: 0; margin-top: 4px; }
+  .tl-marks > div {
+    text-align: left; border-left-width: 4px; border-left-color: var(--m);
+    padding: 11px 0 11px 13px; margin-bottom: 8px; border-radius: 0 8px 8px 0;
+    background: var(--card-2);
+  }
+}
+
+/* ---- D1 · unfinished copy -------------------------------------------------
+   Hidden unless <body class="draft">, so these pages can go public before the
+   last committee decision lands instead of waiting on it. */
+body:not(.draft) .tbd,
+body:not(.draft) .tbd-card { display: none !important; }
+.tbd {
+  border: 1px dashed var(--amber); border-radius: var(--radius-sm);
+  background: repeating-linear-gradient(135deg, var(--wash-amber) 0 10px, var(--wash-amber-2) 10px 20px);
+  padding: 14px 16px; margin: 14px 0 0; font-size: 14px; line-height: 1.55;
+}
+.tbd-card { border: 1px dashed var(--amber); background: var(--wash-amber); }
+.tbd-tag {
+  display: inline-block; font-family: ui-monospace, Consolas, monospace;
+  font-size: 10px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase;
+  color: var(--bg); background: var(--amber); border-radius: 4px;
+  padding: 3px 8px; margin-bottom: 9px;
+}
+.tbd-inline { font-family: ui-monospace, Consolas, monospace; background: var(--wash-amber-2); border-radius: 4px; padding: 0 6px; }
+
+/* ---- Policy link strip in the footer -------------------------------------- */
+.legal-strip {
+  margin-top: 10px; display: flex; flex-wrap: wrap; justify-content: center;
+  align-items: center; gap: 8px; font-size: 0.85rem; opacity: 0.85;
+}
+.legal-strip a { color: inherit; text-decoration: none; border-bottom: 1px solid currentColor; }
+.legal-strip a:hover, .legal-strip a:focus-visible { opacity: 1; }
+.legal-dot { opacity: 0.5; }
+
+@media (prefers-reduced-motion: reduce) {
+  .price-card, .pg-rail a { transition: none; }
+  .price-card:hover { transform: none; }
+}
+
+/* The rail's bleed must track .container's padding exactly at every width. */
+@media (max-width: 720px) {
+  .pg-rail { margin-left: -16px; margin-right: -16px; padding-left: 16px; padding-right: 16px; }
+}
+@media (max-width: 640px) {
+  .pg-rail { margin-left: -14px; margin-right: -14px; padding-left: 14px; padding-right: 14px; }
+}

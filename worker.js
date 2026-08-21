@@ -59,6 +59,235 @@ async function saveList(env, key, list) {
   await env.CONVENTION_KV.put(key, JSON.stringify(list));
 }
 
+// ---- Registrations and expenses: D1, not a KV blob -------------------------
+// These two used to live in CONVENTION_KV as one JSON array each, which meant
+// every write was read-whole-list, mutate, write-whole-list. Two people
+// registering in the same second both read the same array and the second write
+// silently erased the first — a lost registration, with no error anywhere. The
+// KV free tier also caps writes at 1,000/day, which a launch morning can spend.
+//
+// In D1 a registration is a row. Adding one is an INSERT that cannot disturb
+// its neighbours, and the state changes that must happen exactly once (marking
+// paid, sending the pending email) are conditional UPDATEs whose guard lives in
+// the WHERE clause. Two simultaneous callers cannot both win: the second
+// matches no row and is told so.
+let dataTablesReady = false;
+
+const DATA_DDL = [
+  `CREATE TABLE IF NOT EXISTS registrations (
+     id TEXT PRIMARY KEY,
+     name TEXT NOT NULL,
+     email TEXT NOT NULL,
+     phone TEXT NOT NULL,
+     city TEXT NOT NULL DEFAULT '',
+     gender TEXT NOT NULL DEFAULT '',
+     notes TEXT NOT NULL DEFAULT '',
+     category_id TEXT NOT NULL,
+     category_name TEXT NOT NULL,
+     amount REAL NOT NULL DEFAULT 0,
+     paid INTEGER NOT NULL DEFAULT 0,
+     payment_id TEXT,
+     paid_at TEXT,
+     order_id TEXT,
+     order_amount INTEGER,
+     emailed_pending_at TEXT,
+     created_at TEXT NOT NULL
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_registrations_created ON registrations (created_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_registrations_order ON registrations (order_id)`,
+  `CREATE TABLE IF NOT EXISTS expenses (
+     id TEXT PRIMARY KEY,
+     title TEXT NOT NULL,
+     category TEXT NOT NULL DEFAULT 'General',
+     amount REAL NOT NULL DEFAULT 0,
+     date TEXT NOT NULL,
+     notes TEXT NOT NULL DEFAULT '',
+     created_at TEXT NOT NULL
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses (date)`,
+];
+
+// The API shape the pages already consume. Kept exactly as the KV records were
+// so nothing downstream — dashboard, ticket email, agent summary — has to know
+// the storage changed. Absent values stay absent rather than becoming null.
+function rowToRegistration(row) {
+  if (!row) return null;
+  const r = {
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    phone: row.phone,
+    city: row.city || "",
+    gender: row.gender || "",
+    notes: row.notes || "",
+    categoryId: row.category_id,
+    categoryName: row.category_name,
+    amount: Number(row.amount) || 0,
+    paid: !!row.paid,
+    createdAt: row.created_at,
+  };
+  if (row.payment_id) r.paymentId = row.payment_id;
+  if (row.paid_at) r.paidAt = row.paid_at;
+  if (row.order_id) r.orderId = row.order_id;
+  if (row.order_amount != null) r.orderAmount = row.order_amount;
+  if (row.emailed_pending_at) r.emailedPendingAt = row.emailed_pending_at;
+  return r;
+}
+
+function rowToExpense(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    title: row.title,
+    category: row.category,
+    amount: Number(row.amount) || 0,
+    date: row.date,
+    notes: row.notes || "",
+    createdAt: row.created_at,
+  };
+}
+
+// One-time lift of whatever is already in KV. Runs only when the table is
+// empty and the marker is unset, so an emptied table is not silently refilled
+// from a stale blob. The KV copy is deliberately left in place as a fallback.
+async function importListFromKv(env, key, insertOne) {
+  const marker = "migrated:d1:" + key;
+  if (await env.CONVENTION_KV.get(marker)) return 0;
+  const legacy = await loadList(env, key);
+  if (!legacy.length) {
+    await env.CONVENTION_KV.put(marker, new Date().toISOString());
+    return 0;
+  }
+  let moved = 0;
+  for (const item of legacy) {
+    try {
+      await insertOne(env, item);
+      moved++;
+    } catch (e) {
+      console.log("d1 import: skipped one " + key + " row:", e && e.message);
+    }
+  }
+  await env.CONVENTION_KV.put(marker, new Date().toISOString());
+  console.log("d1 import: moved " + moved + "/" + legacy.length + " " + key);
+  return moved;
+}
+
+async function ensureDataTables(env) {
+  if (dataTablesReady) return;
+  if (!env.CONVENTION_DB) throw new Error("D1 binding CONVENTION_DB is required for registrations.");
+  await env.CONVENTION_DB.batch(DATA_DDL.map((sql) => env.CONVENTION_DB.prepare(sql)));
+  dataTablesReady = true;
+
+  const regs = await env.CONVENTION_DB.prepare("SELECT COUNT(*) AS n FROM registrations").first();
+  if (!regs || !regs.n) await importListFromKv(env, "registrations", insertRegistration);
+  const exps = await env.CONVENTION_DB.prepare("SELECT COUNT(*) AS n FROM expenses").first();
+  if (!exps || !exps.n) await importListFromKv(env, "expenses", insertExpense);
+}
+
+async function listRegistrations(env) {
+  await ensureDataTables(env);
+  const { results } = await env.CONVENTION_DB.prepare(
+    "SELECT * FROM registrations ORDER BY created_at ASC"
+  ).all();
+  return (results || []).map(rowToRegistration);
+}
+
+async function getRegistration(env, id) {
+  await ensureDataTables(env);
+  const row = await env.CONVENTION_DB.prepare("SELECT * FROM registrations WHERE id = ?").bind(id).first();
+  return rowToRegistration(row);
+}
+
+async function insertRegistration(env, r) {
+  await ensureDataTables(env);
+  await env.CONVENTION_DB.prepare(
+    `INSERT INTO registrations
+       (id, name, email, phone, city, gender, notes, category_id, category_name,
+        amount, paid, payment_id, paid_at, order_id, order_amount, emailed_pending_at, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(
+    r.id, r.name, r.email, r.phone, r.city || "", r.gender || "", r.notes || "",
+    r.categoryId, r.categoryName, Number(r.amount) || 0, r.paid ? 1 : 0,
+    r.paymentId || null, r.paidAt || null, r.orderId || null,
+    r.orderAmount == null ? null : Number(r.orderAmount),
+    r.emailedPendingAt || null, r.createdAt || new Date().toISOString()
+  ).run();
+  return r;
+}
+
+// Staff toggling paid/unpaid by hand. Unconditional on purpose — this is the
+// override, and it is the caller's decision, not a race to be won.
+async function setRegistrationPaidFlag(env, id, paid) {
+  await ensureDataTables(env);
+  const res = await env.CONVENTION_DB.prepare(
+    "UPDATE registrations SET paid = ?, paid_at = CASE WHEN ? = 1 THEN COALESCE(paid_at, ?) ELSE NULL END WHERE id = ?"
+  ).bind(paid ? 1 : 0, paid ? 1 : 0, new Date().toISOString(), id).run();
+  if (!res.meta || !res.meta.changes) return null;
+  return getRegistration(env, id);
+}
+
+async function setRegistrationOrder(env, id, orderId, orderAmount) {
+  await ensureDataTables(env);
+  await env.CONVENTION_DB.prepare(
+    "UPDATE registrations SET order_id = ?, order_amount = ? WHERE id = ?"
+  ).bind(orderId || null, orderAmount == null ? null : Number(orderAmount), id).run();
+}
+
+// `AND paid = 0` is the whole point: a double-submitted payment, or two edges
+// verifying the same callback, produces one winner and one no-op instead of two
+// "successful" writes racing over the same row.
+async function markRegistrationPaid(env, id, paymentId) {
+  await ensureDataTables(env);
+  const res = await env.CONVENTION_DB.prepare(
+    "UPDATE registrations SET paid = 1, payment_id = ?, paid_at = ? WHERE id = ? AND paid = 0"
+  ).bind(paymentId, new Date().toISOString(), id).run();
+  if (!res.meta || !res.meta.changes) return null;
+  return getRegistration(env, id);
+}
+
+// Same shape of guard, so the pending-ticket email can only ever be claimed
+// once however many times the browser pings the endpoint.
+async function claimPendingEmail(env, id) {
+  await ensureDataTables(env);
+  const at = new Date().toISOString();
+  const res = await env.CONVENTION_DB.prepare(
+    "UPDATE registrations SET emailed_pending_at = ? WHERE id = ? AND paid = 0 AND emailed_pending_at IS NULL"
+  ).bind(at, id).run();
+  return res.meta && res.meta.changes ? at : null;
+}
+
+async function deleteRegistration(env, id) {
+  await ensureDataTables(env);
+  const res = await env.CONVENTION_DB.prepare("DELETE FROM registrations WHERE id = ?").bind(id).run();
+  return !!(res.meta && res.meta.changes);
+}
+
+async function listExpenses(env) {
+  await ensureDataTables(env);
+  const { results } = await env.CONVENTION_DB.prepare(
+    "SELECT * FROM expenses ORDER BY date DESC, created_at DESC"
+  ).all();
+  return (results || []).map(rowToExpense);
+}
+
+async function insertExpense(env, e) {
+  await ensureDataTables(env);
+  await env.CONVENTION_DB.prepare(
+    `INSERT INTO expenses (id, title, category, amount, date, notes, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  ).bind(
+    e.id, e.title, e.category || "General", Number(e.amount) || 0,
+    e.date, e.notes || "", e.createdAt || new Date().toISOString()
+  ).run();
+  return e;
+}
+
+async function deleteExpense(env, id) {
+  await ensureDataTables(env);
+  const res = await env.CONVENTION_DB.prepare("DELETE FROM expenses WHERE id = ?").bind(id).run();
+  return !!(res.meta && res.meta.changes);
+}
+
 // ---- Usage tracking (feeds the daily dashboard email) ----------------------
 // One KV JSON blob per day: counters for chat/TTS/provider wins. Kept 45 days.
 // Days are bucketed by IST date so "today" in the email matches the organiser's
@@ -1980,8 +2209,8 @@ function b64urlDecodeBytes(str) {
 
 // Compact live snapshot of registrations + expenses for the agent to reason over.
 async function buildDataSummary(env) {
-  const registrations = await loadList(env, "registrations");
-  const expenses = await loadList(env, "expenses");
+  const registrations = await listRegistrations(env);
+  const expenses = await listExpenses(env);
   const money = (n) => "\u20b9" + Number(n || 0).toLocaleString("en-IN");
 
   const paid = registrations.filter((r) => r.paid);
@@ -2442,8 +2671,8 @@ async function collectDashboardData(env) {
     getDeepgramBalance(env),
     getCloudflareRequests(env),
     getWorkersAiNeurons(env),
-    loadList(env, "registrations"),
-    loadList(env, "expenses"),
+    listRegistrations(env),
+    listExpenses(env),
     env.CONVENTION_KV.get("groq:limits", { type: "json" }),
   ]);
   const paid = registrations.filter((r) => r.paid);
@@ -3356,9 +3585,7 @@ async function handleApi(request, env, ctx) {
 
   // ---- Registrations ----
   if (resource === "registrations") {
-    const list = await loadList(env, "registrations");
-
-    if (method === "GET" && !id) return json(list);
+    if (method === "GET" && !id) return json(await listRegistrations(env));
 
     if (method === "POST" && !id) {
       const name = (body.name || "").trim();
@@ -3392,8 +3619,7 @@ async function handleApi(request, env, ctx) {
         paid: false,
         createdAt: new Date().toISOString(),
       };
-      list.push(record);
-      await saveList(env, "registrations", list);
+      await insertRegistration(env, record);
       // No email yet: the paid ticket goes out when Razorpay verifies, and
       // the pending ticket only when the visitor comes BACK from checkout
       // without paying (the client pings /:id/notify at that moment).
@@ -3405,36 +3631,34 @@ async function handleApi(request, env, ctx) {
     // the pending flavour while the booking is really unpaid, and the
     // emailedPendingAt flag makes it once-only however often it's called.
     if (method === "POST" && id && parts[3] === "notify") {
-      const item = list.find((r) => r.id === id);
+      const item = await getRegistration(env, id);
       if (!item) return json({ error: "Not found." }, 404);
-      if (item.paid || item.emailedPendingAt) return json({ ok: true, skipped: true });
-      item.emailedPendingAt = new Date().toISOString();
-      await saveList(env, "registrations", list);
-      sendRegistrationEmail(env, ctx, item, false);
+      // The once-only guard is the UPDATE's WHERE clause rather than an if:
+      // two pings in the same instant cannot both claim the send.
+      const claimedAt = await claimPendingEmail(env, id);
+      if (!claimedAt) return json({ ok: true, skipped: true });
+      sendRegistrationEmail(env, ctx, { ...item, emailedPendingAt: claimedAt }, false);
       return json({ ok: true });
     }
 
     if (method === "PATCH" && id) {
-      const item = list.find((r) => r.id === id);
-      if (!item) return json({ error: "Not found." }, 404);
-      if (typeof body.paid === "boolean") item.paid = body.paid;
-      await saveList(env, "registrations", list);
-      return json(item);
+      if (typeof body.paid !== "boolean") {
+        const current = await getRegistration(env, id);
+        return current ? json(current) : json({ error: "Not found." }, 404);
+      }
+      const updated = await setRegistrationPaidFlag(env, id, body.paid);
+      return updated ? json(updated) : json({ error: "Not found." }, 404);
     }
 
     if (method === "DELETE" && id) {
-      const next = list.filter((r) => r.id !== id);
-      if (next.length === list.length) return json({ error: "Not found." }, 404);
-      await saveList(env, "registrations", next);
-      return json({ ok: true });
+      const removed = await deleteRegistration(env, id);
+      return removed ? json({ ok: true }) : json({ error: "Not found." }, 404);
     }
   }
 
   // ---- Expenses ----
   if (resource === "expenses") {
-    const list = await loadList(env, "expenses");
-
-    if (method === "GET" && !id) return json(list);
+    if (method === "GET" && !id) return json(await listExpenses(env));
 
     if (method === "POST" && !id) {
       const title = (body.title || "").trim();
@@ -3454,23 +3678,20 @@ async function handleApi(request, env, ctx) {
         notes: (body.notes || "").trim(),
         createdAt: new Date().toISOString(),
       };
-      list.push(record);
-      await saveList(env, "expenses", list);
+      await insertExpense(env, record);
       return json(record, 201);
     }
 
     if (method === "DELETE" && id) {
-      const next = list.filter((e) => e.id !== id);
-      if (next.length === list.length) return json({ error: "Not found." }, 404);
-      await saveList(env, "expenses", next);
-      return json({ ok: true });
+      const removed = await deleteExpense(env, id);
+      return removed ? json({ ok: true }) : json({ error: "Not found." }, 404);
     }
   }
 
   // ---- Dashboard ----
   if (resource === "dashboard" && method === "GET") {
-    const registrations = await loadList(env, "registrations");
-    const expenses = await loadList(env, "expenses");
+    const registrations = await listRegistrations(env);
+    const expenses = await listExpenses(env);
 
     const totalPledged = registrations.reduce((s, r) => s + (r.amount || 0), 0);
     const totalCollected = registrations
@@ -4298,8 +4519,7 @@ async function handleApi(request, env, ctx) {
     const { registrationId } = body;
     if (!registrationId) return json({ error: "registrationId required" }, 400);
 
-    const regList = await loadList(env, "registrations");
-    const reg = regList.find((r) => r.id === registrationId);
+    const reg = await getRegistration(env, registrationId);
     if (!reg) return json({ error: "Registration not found" }, 404);
     if (reg.paid) return json({ error: "This registration is already paid." }, 409);
 
@@ -4329,15 +4549,7 @@ async function handleApi(request, env, ctx) {
     // the payment was for. Without this binding, someone could pay for their
     // own ₹1500 booking and then submit that same valid signature against a
     // ₹6000 registration to mark it paid.
-    {
-      const fresh = await loadList(env, "registrations");
-      const idx = fresh.findIndex((r) => r.id === registrationId);
-      if (idx !== -1) {
-        fresh[idx].orderId = rzpOrder.id;
-        fresh[idx].orderAmount = rzpOrder.amount;
-        await saveList(env, "registrations", fresh);
-      }
-    }
+    await setRegistrationOrder(env, registrationId, rzpOrder.id, rzpOrder.amount);
 
     return json({
       orderId: rzpOrder.id,
@@ -4368,31 +4580,33 @@ async function handleApi(request, env, ctx) {
     }
 
     // Mark the registration as paid.
-    const list = await loadList(env, "registrations");
-    const idx = list.findIndex((r) => r.id === registrationId);
-    if (idx === -1) return json({ error: "Registration not found" }, 404);
+    const reg = await getRegistration(env, registrationId);
+    if (!reg) return json({ error: "Registration not found" }, 404);
 
     // The signature above proves Razorpay processed THIS order — not that the
     // order belongs to THIS registration. Bind them, or a valid signature from
     // a cheap booking could be replayed against an expensive one.
-    if (list[idx].orderId && list[idx].orderId !== razorpayOrderId) {
+    if (reg.orderId && reg.orderId !== razorpayOrderId) {
       return json({ error: "That payment does not belong to this registration." }, 409);
     }
-    if (list[idx].paid) return json({ ok: true, registration: list[idx], already: true });
+    if (reg.paid) return json({ ok: true, registration: reg, already: true });
 
-    list[idx].paid = true;
-    list[idx].paymentId = razorpayPaymentId;
-    list[idx].paidAt = new Date().toISOString();
-    await saveList(env, "registrations", list);
+    // Conditional on paid = 0, so a double-submit settles into one winner and
+    // one honest "already paid" rather than two writes fighting over the row.
+    const paidReg = await markRegistrationPaid(env, registrationId, razorpayPaymentId);
+    if (!paidReg) {
+      const current = await getRegistration(env, registrationId);
+      return json({ ok: true, registration: current, already: true });
+    }
 
     // Fire-and-forget: a WhatsApp outage (or an unapproved template) must never
     // turn a successful payment into a failed request. No-ops until the
     // WHATSAPP_* config is in place.
-    ctx.waitUntil(waSendConfirmation(env, list[idx], url.origin));
+    ctx.waitUntil(waSendConfirmation(env, paidReg, url.origin));
     // The emailed ticket, paid flavour — same moment as the WhatsApp receipt.
-    sendRegistrationEmail(env, ctx, list[idx], true);
+    sendRegistrationEmail(env, ctx, paidReg, true);
 
-    return json({ ok: true, registration: list[idx] });
+    return json({ ok: true, registration: paidReg });
   }
 
   // ---- Contact / email forwarding to support@biaac.com ----
