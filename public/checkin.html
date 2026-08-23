@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Check-in · Bangalore Convention</title>
+    <link rel="stylesheet" href="css/style.css" />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  </head>
+  <body>
+    <div id="nav"></div>
+
+    <div class="container">
+      <h1 class="page-title">Check-in</h1>
+      <p class="page-sub" id="windowNote">Scan a delegate's ticket, or type the code from it.</p>
+
+      <div class="ci-grid">
+        <div class="card">
+          <h2>Scan</h2>
+          <div class="ci-scanwrap">
+            <video id="cam" playsinline muted></video>
+            <div class="ci-reticle" aria-hidden="true"></div>
+            <div class="ci-camoff" id="camOff">
+              <p>Camera off</p>
+              <button class="btn primary" id="startCam" type="button">Start camera</button>
+              <small id="camNote" class="muted"></small>
+            </div>
+          </div>
+
+          <form id="manualForm" class="ci-manual" autocomplete="off">
+            <label for="codeInput" class="muted">Or type the ten-character code</label>
+            <div class="ci-row">
+              <input id="codeInput" class="input" type="text" inputmode="latin"
+                     maxlength="12" placeholder="e.g. 7QK4M2XR9T" spellcheck="false" />
+              <button class="btn primary" type="submit">Check in</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="card">
+          <h2>Result</h2>
+          <div id="result" class="ci-result idle">
+            <div class="ci-icon" aria-hidden="true">🎫</div>
+            <div class="ci-headline">Ready</div>
+            <div class="ci-detail muted">Nothing scanned yet.</div>
+          </div>
+          <div id="recent"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      Bangalore Convention · A not-for-profit fellowship gathering · All funds go
+      toward hosting the event.
+    </div>
+
+    <script src="js/common.js"></script>
+    <script>
+      mountNav("checkin");
+
+      (async () => {
+        // The API is the real gate; this only avoids showing a door screen to
+        // someone who could never use it.
+        const user = await requireUser();
+        if (!user) return;
+
+        const resultBox = document.getElementById("result");
+        const recent = document.getElementById("recent");
+        const codeInput = document.getElementById("codeInput");
+        const seen = [];
+
+        const LOOK = {
+          ok:      { cls: "good",  icon: "✅", head: "Checked in" },
+          already: { cls: "warn",  icon: "🔁", head: "Already checked in" },
+          early:   { cls: "warn",  icon: "🕘", head: "Not yet — valid ticket" },
+          late:    { cls: "bad",   icon: "🚪", head: "Check-in closed" },
+          unpaid:  { cls: "bad",   icon: "💳", head: "Not paid" },
+          invalid: { cls: "bad",   icon: "✖", head: "Not a valid ticket" },
+        };
+
+        function show(res) {
+          const look = LOOK[res.status] || LOOK.invalid;
+          resultBox.className = "ci-result " + look.cls;
+          const when = res.at ? new Date(res.at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "";
+          resultBox.innerHTML =
+            `<div class="ci-icon" aria-hidden="true">${look.icon}</div>` +
+            `<div class="ci-headline">${look.head}</div>` +
+            (res.name ? `<div class="ci-name">${escapeHtml(res.name)}</div>` : "") +
+            (res.category ? `<div class="ci-cat">${escapeHtml(res.category)}</div>` : "") +
+            `<div class="ci-detail">${escapeHtml(res.message || "")}` +
+            (res.status === "early" && res.opens
+              ? ` Doors open ${escapeHtml(res.opens)}.`
+              : "") +
+            (when ? ` <b>${escapeHtml(when)}</b>` : "") +
+            `</div>` +
+            (res.ticketCode ? `<div class="ci-code">${escapeHtml(res.ticketCode)}</div>` : "");
+
+          if (res.name) {
+            seen.unshift({ name: res.name, status: res.status, t: Date.now() });
+            recent.innerHTML =
+              '<div class="ci-recent-h muted">This session</div>' +
+              seen.slice(0, 8).map((s) =>
+                `<div class="ci-recent"><span class="ci-dot ${(LOOK[s.status] || LOOK.invalid).cls}"></span>` +
+                `${escapeHtml(s.name)}<small>${new Date(s.t).toLocaleTimeString("en-IN", { timeStyle: "short" })}</small></div>`
+              ).join("");
+          }
+        }
+
+        let busy = false;
+        let lastCode = "";
+        let lastAt = 0;
+        async function submitCode(code) {
+          code = String(code || "").trim().toUpperCase();
+          if (!code || busy) return;
+          // A camera fires many frames a second; without this the same badge
+          // would be posted a dozen times before the first reply lands.
+          if (code === lastCode && Date.now() - lastAt < 4000) return;
+          lastCode = code; lastAt = Date.now();
+          busy = true;
+          try {
+            show(await api("/api/checkin", { method: "POST", body: JSON.stringify({ code }) }));
+          } catch (err) {
+            show({ status: "invalid", message: (err && err.message) || "Could not reach the server." });
+          } finally {
+            busy = false;
+            codeInput.value = "";
+          }
+        }
+
+        document.getElementById("manualForm").addEventListener("submit", (e) => {
+          e.preventDefault();
+          submitCode(codeInput.value);
+        });
+
+        // A ticket link opened on this device carries the code in the hash.
+        if (location.hash.length > 1) submitCode(location.hash.slice(1));
+        window.addEventListener("hashchange", () => {
+          if (location.hash.length > 1) submitCode(location.hash.slice(1));
+        });
+
+        // ---- Camera ---------------------------------------------------------
+        // BarcodeDetector is not everywhere (Safari has no support at the time
+        // of writing), so the typed code is the guaranteed path and the camera
+        // is the convenience. The screen never depends on it.
+        const cam = document.getElementById("cam");
+        const camOff = document.getElementById("camOff");
+        const camNote = document.getElementById("camNote");
+        const supported = "BarcodeDetector" in window;
+        if (!supported) {
+          camNote.textContent = "This browser cannot scan. Type the code instead — Chrome on Android scans.";
+          document.getElementById("startCam").disabled = true;
+        }
+
+        document.getElementById("startCam").addEventListener("click", async () => {
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+              video: { facingMode: "environment" },
+            });
+            cam.srcObject = stream;
+            await cam.play();
+            camOff.style.display = "none";
+            const detector = new BarcodeDetector({ formats: ["qr_code"] });
+            const tick = async () => {
+              if (!cam.srcObject) return;
+              try {
+                const codes = await detector.detect(cam);
+                for (const c of codes) {
+                  const raw = String(c.rawValue || "");
+                  const hash = raw.includes("#") ? raw.slice(raw.lastIndexOf("#") + 1) : raw;
+                  if (hash) await submitCode(hash);
+                }
+              } catch (e) {
+                /* a dropped frame is not worth stopping the loop for */
+              }
+              setTimeout(tick, 350);
+            };
+            tick();
+          } catch (err) {
+            camNote.textContent = "Camera unavailable: " + ((err && err.message) || "permission denied");
+          }
+        });
+      })();
+    </script>
+  </body>
+</html>

@@ -4066,6 +4066,20 @@ select.dd-native {
 
 .reg-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
 
+/* The copy control is an icon in the corner rather than a button in the action
+   row: it is a convenience, not a decision, and it should not sit at the same
+   weight as Delete. */
+.reg-detail-copy {
+  position: absolute; top: 14px; right: 14px;
+  width: 38px; height: 38px; border-radius: 11px;
+  display: grid; place-items: center;
+  border: 1px solid var(--border); background: var(--card); color: var(--muted);
+  font-size: 17px; line-height: 1; cursor: pointer; z-index: 2;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.reg-detail-copy:hover { color: var(--accent); border-color: var(--accent); }
+.reg-detail-copy:focus-visible { outline: none; box-shadow: var(--ring); }
+
 .reg-detail-x {
   display: none;
   position: absolute; top: 14px; right: 14px;
@@ -4100,6 +4114,8 @@ select.dd-native {
     overflow-y: auto;
   }
   .reg-detail-x { display: grid; place-items: center; }
+  /* Mobile shows the close button in that corner, so the copy icon steps aside. */
+  .reg-detail-copy { right: 60px; }
   /* Actions: the pair shares the first row, Delete takes a full row —
      no half-width button hanging off the left edge. */
   .reg-actions .btn {
@@ -5689,3 +5705,76 @@ body:not(.draft) .tbd-card { display: none !important; }
 @media (max-width: 640px) {
   .pg-rail { margin-left: -14px; margin-right: -14px; padding-left: 14px; padding-right: 14px; }
 }
+
+/* ---- Check-in screen ------------------------------------------------------
+   Built for a phone held at a door: big result, high contrast, and a typed
+   fallback that works when the camera or the browser will not. */
+.ci-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+@media (max-width: 860px) { .ci-grid { grid-template-columns: 1fr; } }
+
+.ci-scanwrap {
+  position: relative; aspect-ratio: 4 / 3; border-radius: var(--radius);
+  overflow: hidden; background: #0b0f1a; margin-bottom: 14px;
+}
+.ci-scanwrap video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ci-reticle {
+  position: absolute; inset: 18%; border: 3px solid rgba(255, 255, 255, 0.85);
+  border-radius: 14px; pointer-events: none;
+}
+.ci-camoff {
+  position: absolute; inset: 0; display: grid; place-items: center; gap: 10px;
+  align-content: center; color: #fff; text-align: center; padding: 18px;
+}
+.ci-camoff p { margin: 0; opacity: 0.75; }
+.ci-camoff small { max-width: 34ch; color: rgba(255, 255, 255, 0.7); }
+
+.ci-manual label { display: block; font-size: 12.5px; margin-bottom: 6px; }
+.ci-row { display: flex; gap: 8px; }
+.ci-row .input {
+  flex: 1; font-family: ui-monospace, Consolas, monospace;
+  font-size: 18px; letter-spacing: 2px; text-transform: uppercase;
+}
+
+.ci-result {
+  border-radius: var(--radius); padding: 26px 20px; text-align: center;
+  border: 1px solid var(--border); background: var(--card-2);
+}
+.ci-result .ci-icon { font-size: 40px; line-height: 1; }
+.ci-headline { font-family: var(--font-display); font-size: 21px; font-weight: 700; margin-top: 8px; }
+.ci-name { font-size: 20px; font-weight: 700; margin-top: 10px; }
+.ci-cat { color: var(--muted); font-size: 13.5px; }
+.ci-detail { margin-top: 10px; font-size: 14px; color: var(--muted); }
+.ci-code {
+  margin-top: 12px; display: inline-block; font-family: ui-monospace, Consolas, monospace;
+  letter-spacing: 2px; font-size: 13px; padding: 5px 12px; border-radius: 8px;
+  background: var(--card); border: 1px solid var(--border); color: var(--muted);
+}
+/* Colour carries the verdict, but never alone — the icon and the headline say
+   the same thing, because a door is exactly where someone is colour-blind and
+   in a hurry. */
+.ci-result.good { border-color: var(--green); background: var(--wash-green); }
+.ci-result.warn { border-color: var(--amber); background: var(--wash-amber-2); }
+.ci-result.bad  { border-color: var(--red); background: rgba(216, 67, 58, 0.1); }
+.ci-result.good .ci-headline { color: var(--green); }
+.ci-result.warn .ci-headline { color: var(--amber); }
+.ci-result.bad .ci-headline  { color: var(--red); }
+
+.ci-recent-h { font-size: 11px; font-weight: 700; letter-spacing: 1.3px; text-transform: uppercase; margin: 18px 0 6px; }
+.ci-recent { display: flex; align-items: center; gap: 9px; padding: 7px 0; border-top: 1px solid var(--border-soft); font-size: 14px; }
+.ci-recent small { margin-left: auto; color: var(--muted); }
+.ci-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--muted); }
+.ci-dot.good { background: var(--green); }
+.ci-dot.warn { background: var(--amber); }
+.ci-dot.bad { background: var(--red); }
+
+/* ---- Ticket QR on the confirmation screen -------------------------------- */
+.tk-qr { text-align: center; margin: 18px 0 4px; }
+.tk-qr img {
+  width: 180px; height: 180px; border-radius: 12px;
+  border: 1px solid var(--border); background: #fff; padding: 8px;
+}
+.tk-qr-code {
+  font-family: ui-monospace, Consolas, monospace; font-weight: 700;
+  font-size: 17px; letter-spacing: 3px; margin-top: 10px;
+}
+.tk-qr-note { font-size: 12.5px; margin: 6px auto 0; max-width: 42ch; }

@@ -480,6 +480,7 @@ const NAV_LINKS = [
   { href: "register.html", label: "Register", key: "register", icon: "📝" },
   { href: "reflections.html", label: "Reflections", key: "reflections", need: "developer", icon: "📖" },
   { href: "registrations.html", label: "Registrations", key: "registrations", need: "staff", icon: "🧾" },
+  { href: "checkin.html", label: "Check-in", key: "checkin", need: "staff", icon: "🎫" },
   { href: "dashboard.html", label: "Dashboard", key: "dashboard", need: "staff", icon: "📊" },
   { href: "expenses.html", label: "Expenses", key: "expenses", need: "staff", icon: "💸" },
   { href: "ops.html", label: "Ops", key: "ops", need: "developer", icon: "🛠️" },
@@ -1152,7 +1153,11 @@ function openContact(prefill) {
   // corner-burst flight entirely (class lands before the initial paint).
   void ov.offsetWidth;
   ov.classList.add("open");
-  setTimeout(() => ov.querySelector("#ctMsg").focus(), 500);
+  // Focus only where focusing does not also summon an on-screen keyboard. On
+  // a phone the keyboard covers half the dialog before the person has decided
+  // what to write; they can tap the field themselves when they are ready.
+  const coarse = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+  if (!coarse) setTimeout(() => ov.querySelector("#ctMsg").focus(), 500);
 }
 
 // The policy pages have to be reachable from anywhere on the site: Razorpay's

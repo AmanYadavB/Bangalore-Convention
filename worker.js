@@ -6,6 +6,7 @@
 // prompt's price line is generated from the same array so a price change can
 // never leave the bot quoting stale numbers.
 import { PRICING, findCategory, pricingPhrase } from "./shared/pricing.mjs";
+import { qrPng, qrSvg } from "./shared/qr.mjs";
 import { factsPromptBlock, groundingRuleBlock, STYLE_REMINDER } from "./shared/facts.mjs";
 import {
   b64urlEncode,
@@ -131,6 +132,9 @@ function rowToRegistration(row) {
   if (row.order_id) r.orderId = row.order_id;
   if (row.order_amount != null) r.orderAmount = row.order_amount;
   if (row.emailed_pending_at) r.emailedPendingAt = row.emailed_pending_at;
+  if (row.ticket_code) r.ticketCode = row.ticket_code;
+  if (row.checked_in_at) r.checkedInAt = row.checked_in_at;
+  if (row.checked_in_by) r.checkedInBy = row.checked_in_by;
   return r;
 }
 
@@ -172,16 +176,59 @@ async function importListFromKv(env, key, insertOne) {
   return moved;
 }
 
+// Columns added after the table first shipped. CREATE TABLE IF NOT EXISTS will
+// not add them to an existing database, so they are applied separately and the
+// "duplicate column" error is the expected no-op on later boots.
+const DATA_MIGRATIONS = [
+  "ALTER TABLE registrations ADD COLUMN ticket_code TEXT",
+  "ALTER TABLE registrations ADD COLUMN checked_in_at TEXT",
+  "ALTER TABLE registrations ADD COLUMN checked_in_by TEXT",
+  "CREATE UNIQUE INDEX IF NOT EXISTS idx_registrations_ticket ON registrations (ticket_code)",
+];
+
+// Crockford-style alphabet: no I, L, O or U, so a code read aloud at a noisy
+// door — or typed in when a phone screen is cracked — cannot be misheard.
+const TICKET_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+
+function newTicketCode() {
+  const bytes = crypto.getRandomValues(new Uint8Array(10));
+  let out = "";
+  for (const b of bytes) out += TICKET_ALPHABET[b % 32];
+  return out;
+}
+
+// Every registration needs one, including the rows lifted out of KV.
+async function backfillTicketCodes(env) {
+  const { results } = await env.CONVENTION_DB.prepare(
+    "SELECT id FROM registrations WHERE ticket_code IS NULL OR ticket_code = ''"
+  ).all();
+  for (const row of results || []) {
+    await env.CONVENTION_DB.prepare("UPDATE registrations SET ticket_code = ? WHERE id = ?")
+      .bind(newTicketCode(), row.id).run();
+  }
+  if (results && results.length) console.log("ticket codes backfilled: " + results.length);
+}
+
 async function ensureDataTables(env) {
   if (dataTablesReady) return;
   if (!env.CONVENTION_DB) throw new Error("D1 binding CONVENTION_DB is required for registrations.");
   await env.CONVENTION_DB.batch(DATA_DDL.map((sql) => env.CONVENTION_DB.prepare(sql)));
+  for (const sql of DATA_MIGRATIONS) {
+    try {
+      await env.CONVENTION_DB.prepare(sql).run();
+    } catch (e) {
+      if (!/duplicate column/i.test(String(e && e.message))) {
+        console.log("data migration failed:", sql, e && e.message);
+      }
+    }
+  }
   dataTablesReady = true;
 
   const regs = await env.CONVENTION_DB.prepare("SELECT COUNT(*) AS n FROM registrations").first();
   if (!regs || !regs.n) await importListFromKv(env, "registrations", insertRegistration);
   const exps = await env.CONVENTION_DB.prepare("SELECT COUNT(*) AS n FROM expenses").first();
   if (!exps || !exps.n) await importListFromKv(env, "expenses", insertExpense);
+  await backfillTicketCodes(env);
 }
 
 async function listRegistrations(env) {
@@ -203,27 +250,18 @@ async function insertRegistration(env, r) {
   await env.CONVENTION_DB.prepare(
     `INSERT INTO registrations
        (id, name, email, phone, city, gender, notes, category_id, category_name,
-        amount, paid, payment_id, paid_at, order_id, order_amount, emailed_pending_at, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        amount, paid, payment_id, paid_at, order_id, order_amount, emailed_pending_at,
+        created_at, ticket_code)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(
     r.id, r.name, r.email, r.phone, r.city || "", r.gender || "", r.notes || "",
     r.categoryId, r.categoryName, Number(r.amount) || 0, r.paid ? 1 : 0,
     r.paymentId || null, r.paidAt || null, r.orderId || null,
     r.orderAmount == null ? null : Number(r.orderAmount),
-    r.emailedPendingAt || null, r.createdAt || new Date().toISOString()
+    r.emailedPendingAt || null, r.createdAt || new Date().toISOString(),
+    r.ticketCode || newTicketCode()
   ).run();
   return r;
-}
-
-// Staff toggling paid/unpaid by hand. Unconditional on purpose — this is the
-// override, and it is the caller's decision, not a race to be won.
-async function setRegistrationPaidFlag(env, id, paid) {
-  await ensureDataTables(env);
-  const res = await env.CONVENTION_DB.prepare(
-    "UPDATE registrations SET paid = ?, paid_at = CASE WHEN ? = 1 THEN COALESCE(paid_at, ?) ELSE NULL END WHERE id = ?"
-  ).bind(paid ? 1 : 0, paid ? 1 : 0, new Date().toISOString(), id).run();
-  if (!res.meta || !res.meta.changes) return null;
-  return getRegistration(env, id);
 }
 
 async function setRegistrationOrder(env, id, orderId, orderAmount) {
@@ -253,6 +291,36 @@ async function claimPendingEmail(env, id) {
   const res = await env.CONVENTION_DB.prepare(
     "UPDATE registrations SET emailed_pending_at = ? WHERE id = ? AND paid = 0 AND emailed_pending_at IS NULL"
   ).bind(at, id).run();
+  return res.meta && res.meta.changes ? at : null;
+}
+
+async function getRegistrationByTicket(env, code) {
+  await ensureDataTables(env);
+  const row = await env.CONVENTION_DB.prepare(
+    "SELECT * FROM registrations WHERE ticket_code = ?"
+  ).bind(String(code || "").trim().toUpperCase()).first();
+  return rowToRegistration(row);
+}
+
+// The doors are open for three days and not a minute before. The window is
+// configurable because a venue change moves it, and it is compared in IST —
+// the gate is in Bangalore, and a UTC comparison would open the doors at
+// half past five in the morning on the wrong day.
+function checkinWindow(env) {
+  return {
+    opens: env.CHECKIN_OPENS_IST || "2027-07-09",
+    closes: env.CHECKIN_CLOSES_IST || "2027-07-11",
+  };
+}
+
+// One UPDATE, guarded, so two volunteers scanning the same badge at two doors
+// cannot both record the arrival.
+async function markCheckedIn(env, id, by) {
+  await ensureDataTables(env);
+  const at = new Date().toISOString();
+  const res = await env.CONVENTION_DB.prepare(
+    "UPDATE registrations SET checked_in_at = ?, checked_in_by = ? WHERE id = ? AND checked_in_at IS NULL"
+  ).bind(at, String(by || "").slice(0, 120), id).run();
   return res.meta && res.meta.changes ? at : null;
 }
 
@@ -1942,6 +2010,11 @@ const API_POLICY = [
   ["DELETE", "expenses", "staff"],
   ["GET", "dashboard", "staff"],
 
+  // Door duty. Recording an arrival is committee work, and the response
+  // carries a delegate's name and category, so it is never public — only the
+  // QR image itself is (see isPublicApi).
+  ["POST", "checkin", "staff"],
+
   // Reflections: reading stays public (see isPublicApi — Meta fetches the
   // card image when sending the daily template). Writing, and the paid
   // broadcast that costs money per recipient, are developer-only.
@@ -1976,6 +2049,10 @@ function isPublicApi(method, resource, parts) {
   // that URL can never require a session.
   if (resource === "reflections" && method === "GET") return true;
   if (resource === "reflections" && method === "POST" && parts[3] === "image") return false;
+
+  // The ticket QR has to be fetchable without a session: a mail client loads
+  // it with no cookies, and the unguessable code in the URL is the capability.
+  if (resource === "ticket" && method === "GET") return true;
 
   // Payment: create-order now prices server-side from the stored registration,
   // and verify is authenticated by Razorpay's HMAC signature.
@@ -2562,14 +2639,15 @@ function registrationEmail(env, reg, paid) {
   const payNote = paid
     ? "Payment received, spot reserved, nothing left to do — just count the days with us."
     : "You can pay online any time or hand it to the team at the venue — zero stress either way. Your spot is saved.";
-  // Deterministic decorative barcode, same formula as the wizard's stub bars.
-  const bars = Array.from(
-    { length: 26 },
-    (_, i) =>
-      '<span style="display:inline-block;width:3px;height:' +
-      (8 + ((i * 7) % 14)) +
-      'px;background:#1f2937;margin:0 1px;vertical-align:bottom"></span>'
-  ).join("");
+  // The stub carries a real QR now, not a decorative barcode: it is what the
+  // door scans. Served as PNG because no mail client renders SVG, and from an
+  // absolute URL because an email has no origin of its own.
+  const origin = (env.SITE_ORIGIN || "https://biaac.com").replace(/\/+$/, "");
+  const qrImg = reg.ticketCode
+    ? '<img src="' + origin + "/api/ticket/" + encodeURIComponent(reg.ticketCode) + '/qr.png" ' +
+      'width="150" height="150" alt="Ticket QR code" ' +
+      'style="display:block;margin:0 auto;width:150px;height:150px;border:0;background:#ffffff">'
+    : "";
 
   // Mobile-first: everything centred and stacked, so a 320px Gmail viewport
   // renders the same shapes as desktop — nothing competes for width. The
@@ -2594,11 +2672,17 @@ function registrationEmail(env, reg, paid) {
     '<div style="font-size:13.5px;color:#4b5563">' + esc(reg.categoryName || "") + " · " + amount + "</div>" +
     '<div style="margin-top:8px">' + pill + "</div>" +
     "</div>" +
-    '<div style="border-top:2px dashed #c7d2fe;padding:10px 12px;text-align:center;background:#f8f9ff">' +
-    '<span style="font-family:ui-monospace,Consolas,monospace;font-weight:800;font-size:16px;letter-spacing:2px;color:#111827">' + ref + "</span><br>" +
-    '<span style="line-height:0">' + bars + "</span></div></div>" +
+    '<div style="border-top:2px dashed #c7d2fe;padding:12px 12px 14px;text-align:center;background:#f8f9ff">' +
+    qrImg +
+    (reg.ticketCode
+      ? '<div style="font-family:ui-monospace,Consolas,monospace;font-weight:800;font-size:15px;letter-spacing:3px;color:#111827;margin-top:8px">' +
+        esc(reg.ticketCode) + "</div>"
+      : "") +
+    '<div style="font-family:ui-monospace,Consolas,monospace;font-size:11.5px;letter-spacing:1px;color:#6b7280;margin-top:4px">' + ref + "</div>" +
+    "</div></div>" +
     '<p style="color:#8a91a8;font-size:12.5px;text-align:center;margin:14px 0 0;line-height:1.6">' +
-    "Keep this email — flash the reference at the door and you're in. " + payNote + "</p>";
+    "Keep this email — the code above is your ticket. Show it at the door and we'll scan you straight in; " +
+    "if the picture doesn't load, the ten characters underneath work just as well. " + payNote + "</p>";
 
   const html =
     '<div style="background:#eef1fb;padding:22px 8px">' +
@@ -3583,6 +3667,75 @@ async function handleApi(request, env, ctx) {
     });
   }
 
+  // ---- Ticket QR ----
+  // GET /api/ticket/:code/qr.png   (email; clients will not render SVG)
+  // GET /api/ticket/:code/qr.svg   (the web ticket, where it stays crisp)
+  if (resource === "ticket" && id && method === "GET") {
+    const want = String(parts[3] || "qr.png").toLowerCase();
+    const reg = await getRegistrationByTicket(env, id);
+    if (!reg) return json({ error: "Unknown ticket." }, 404);
+    const origin = env.SITE_ORIGIN || url.origin;
+    const payload = origin.replace(/\/+$/, "") + "/checkin.html#" + reg.ticketCode;
+    // Private: the image is personal to one delegate, so it must not sit in a
+    // shared cache, but it never changes, so the delegate's own browser may
+    // keep it.
+    const headers = { "cache-control": "private, max-age=86400" };
+    if (want === "qr.svg") {
+      return new Response(qrSvg(payload, 8, 4), {
+        headers: { ...headers, "content-type": "image/svg+xml; charset=utf-8" },
+      });
+    }
+    return new Response(qrPng(payload, 8, 4), {
+      headers: { ...headers, "content-type": "image/png" },
+    });
+  }
+
+  // ---- Check-in ----
+  // POST /api/checkin {code}. Staff only, and the outcome is a status rather
+  // than a bare pass/fail: a volunteer at the door needs to know WHY a ticket
+  // did not open, not merely that it did not.
+  if (resource === "checkin" && method === "POST") {
+    const code = String(body.code || "").trim().toUpperCase();
+    if (!code) return json({ error: "No ticket code." }, 400);
+
+    const reg = await getRegistrationByTicket(env, code);
+    if (!reg) return json({ status: "invalid", message: "Not a ticket we issued." });
+
+    const who = {
+      name: reg.name,
+      category: reg.categoryName,
+      ticketCode: reg.ticketCode,
+    };
+    if (!reg.paid) {
+      return json({ status: "unpaid", message: "This registration was never paid.", ...who });
+    }
+
+    const { opens, closes } = checkinWindow(env);
+    const today = istDate(0);
+    if (today < opens) {
+      return json({
+        status: "early",
+        message: "Valid ticket — but check-in has not started yet.",
+        opens,
+        closes,
+        ...who,
+      });
+    }
+    if (today > closes) {
+      return json({ status: "late", message: "Check-in closed after " + closes + ".", opens, closes, ...who });
+    }
+
+    if (reg.checkedInAt) {
+      return json({ status: "already", message: "Already checked in.", at: reg.checkedInAt, ...who });
+    }
+    const at = await markCheckedIn(env, reg.id, (gate.session && gate.session.email) || "");
+    if (!at) {
+      const fresh = await getRegistrationByTicket(env, code);
+      return json({ status: "already", message: "Already checked in.", at: fresh && fresh.checkedInAt, ...who });
+    }
+    return json({ status: "ok", message: "Welcome in.", at, ...who });
+  }
+
   // ---- Registrations ----
   if (resource === "registrations") {
     if (method === "GET" && !id) return json(await listRegistrations(env));
@@ -3641,14 +3794,11 @@ async function handleApi(request, env, ctx) {
       return json({ ok: true });
     }
 
-    if (method === "PATCH" && id) {
-      if (typeof body.paid !== "boolean") {
-        const current = await getRegistration(env, id);
-        return current ? json(current) : json({ error: "Not found." }, 404);
-      }
-      const updated = await setRegistrationPaidFlag(env, id, body.paid);
-      return updated ? json(updated) : json({ error: "Not found." }, 404);
-    }
+    // No PATCH route, deliberately. Paid is not an opinion staff can hold: a
+    // registration is paid because Razorpay verified a payment against it, and
+    // there is no legitimate reason to assert otherwise by hand. A refund or a
+    // correction belongs in the money trail, not in a toggle that leaves the
+    // gateway and this database disagreeing about what happened.
 
     if (method === "DELETE" && id) {
       const removed = await deleteRegistration(env, id);

@@ -129,12 +129,18 @@
       </div>
 
       <div class="section-head">
-        <h2>Memories</h2>
+        <h2>Attractions in Bangalore</h2>
       </div>
+      <p class="muted" style="margin: -6px 0 16px; max-width: 62ch">
+        Quiet corners of the city — gardens, water and early mornings. Chosen
+        with the fellowship in mind, so there is nothing here you would have to
+        walk out of.
+      </p>
       <!-- The living wall: tiles breathe, and every few seconds one flips to
-           show a memory quote. Placeholder tiles until real photos land in
-           img/gallery/ — see the GALLERY manifest in the script below. -->
-      <div class="mem-wall" id="memWall" aria-label="Moments from past conventions"></div>
+           show why the place is worth the trip. Gradient placeholders until
+           real photographs land in img/gallery/ — set `img` on an entry in the
+           ATTRACTIONS manifest below and the tile and lightbox both use it. -->
+      <div class="mem-wall" id="memWall" aria-label="Peaceful places to visit in Bangalore"></div>
     </div>
 
     <!-- "View Pricing" burst overlay (P2d) -->
@@ -143,7 +149,7 @@
       <div class="pburst-grid" id="pburstGrid"></div>
     </div>
 
-    <!-- Memories lightbox -->
+    <!-- Attraction lightbox -->
     <div class="mem-lightbox" id="memLightbox">
       <button class="mem-x" type="button" aria-label="Close">✕</button>
       <figure class="mem-fig">
@@ -292,25 +298,24 @@
         }, 3200);
       })();
 
-      // ---- Memories: the living photo wall -------------------------------
-      // Drop real photos into img/gallery/ and set `img` on an entry (e.g.
-      // img: "img/gallery/opening-2025.jpg") — it replaces the placeholder
-      // tile AND the lightbox image. Add or remove entries freely.
+      // ---- Attractions in Bangalore: the living wall ----------------------
+      // Places a delegate can reach in a spare morning. Deliberately no
+      // breweries, no bar streets, no "nightlife" — the usual Bangalore list is
+      // half pubs, and this convention is the last place that belongs.
+      // `img: null` renders the gradient placeholder; drop a photograph into
+      // img/gallery/ and set `img` to use it in the tile and the lightbox.
       (() => {
-        // Stock stand-ins live in img/gallery/ (Lorem Picsum, free to use).
-        // Overwrite any file with a real convention photo of the same name —
-        // or point `img` somewhere else / set it null to get the gradient
-        // placeholder tile back.
-        const GALLERY = [
-          { img: "img/gallery/opening-circle.jpg", e: "🙏", t: "Opening circle", y: "July 2025", q: "“The room felt like home in five minutes.”", g: "linear-gradient(150deg,#f59e0b,#ef4444)", h: 150 },
-          { img: "img/gallery/saturday-speaker.jpg", e: "🎤", t: "Saturday speaker", y: "July 2025", q: "“One story changed my whole weekend.”", g: "linear-gradient(150deg,#38bdf8,#5b5bf0)", h: 210 },
-          { img: "img/gallery/lunch-together.jpg", e: "🍛", t: "Lunch together", y: "July 2025", q: "“Nobody eats alone here.”", g: "linear-gradient(150deg,#34d399,#0ea5e9)", h: 170 },
-          { img: "img/gallery/music-night.jpg", e: "🎶", t: "Music night", y: "July 2026", q: "“We sang until the lights came on.”", g: "linear-gradient(150deg,#a78bfa,#7c3aed)", h: 230 },
-          { img: "img/gallery/fellowship-hall.jpg", e: "🤝", t: "Fellowship hall", y: "July 2026", q: "“Handshakes that turned into friendships.”", g: "linear-gradient(150deg,#fb7185,#f59e0b)", h: 160 },
-          { img: "img/gallery/morning-meditation.jpg", e: "🌅", t: "Morning meditation", y: "July 2026", q: "“Sunrise, silence, serenity.”", g: "linear-gradient(150deg,#0ea5e9,#34d399)", h: 200 },
-          { img: "img/gallery/sobriety-birthdays.jpg", e: "🎂", t: "Sobriety birthdays", y: "July 2026", q: "“Cake for the bravest people I know.”", g: "linear-gradient(150deg,#5b5bf0,#a78bfa)", h: 180 },
-          { img: "img/gallery/workshop-hour.jpg", e: "📖", t: "Workshop hour", y: "July 2026", q: "“Notes I still read every week.”", g: "linear-gradient(150deg,#ef4444,#7c3aed)", h: 150 },
+        const ATTRACTIONS = [
+          { img: null, e: "🌳", t: "Cubbon Park", y: "City centre · free", q: "Three hundred acres in the middle of everything. A few trees in and the traffic simply stops existing.", g: "linear-gradient(150deg,#34d399,#0ea5e9)", h: 190 },
+          { img: null, e: "🌺", t: "Lalbagh Botanical Garden", y: "Glass House & lake", q: "Two-hundred-year-old trees and a lake loop. Walk it at opening time and you get the quietest hour in the city.", g: "linear-gradient(150deg,#f59e0b,#ef4444)", h: 160 },
+          { img: null, e: "💧", t: "Sankey Tank", y: "Malleswaram", q: "One slow lap of the water is a whole morning's thinking. Locals have walked it daily for decades.", g: "linear-gradient(150deg,#0ea5e9,#5b5bf0)", h: 210 },
+          { img: null, e: "🕯️", t: "Ramakrishna Math", y: "Basavanagudi", q: "A shrine, a reading room, and nobody in any hurry. Sit at the back as long as you like.", g: "linear-gradient(150deg,#a78bfa,#7c3aed)", h: 170 },
+          { img: null, e: "🪨", t: "Bugle Rock Park", y: "Beside the Bull Temple", q: "Granite outcrops and old shade trees. A place to sit rather than a place to see.", g: "linear-gradient(150deg,#fb7185,#f59e0b)", h: 150 },
+          { img: null, e: "🧘", t: "Art of Living Centre", y: "Kanakapura Road", q: "Guided meditation on a hilltop campus, open to visitors. Go for a morning session and leave the afternoon free.", g: "linear-gradient(150deg,#5b5bf0,#a78bfa)", h: 220 },
+          { img: null, e: "🌄", t: "Nandi Hills", y: "60 km north · sunrise", q: "Above the clouds by six in the morning. Worth one early alarm while you are here.", g: "linear-gradient(150deg,#38bdf8,#34d399)", h: 200 },
+          { img: null, e: "🚣", t: "Ulsoor Lake", y: "Central · boating", q: "Herons, rowing boats and a path that asks nothing of you.", g: "linear-gradient(150deg,#0ea5e9,#a78bfa)", h: 165 },
         ];
+        const GALLERY = ATTRACTIONS;
 
         const wall = document.getElementById("memWall");
         const lb = document.getElementById("memLightbox");

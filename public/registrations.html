@@ -122,6 +122,8 @@
         }
         card.innerHTML =
           `<button class="reg-detail-x" id="detailClose" type="button" aria-label="Close">✕</button>` +
+          `<button class="reg-detail-copy" data-copy="${r.id}" type="button"
+                   aria-label="Copy details" title="Copy details">⧉</button>` +
           `<div style="display:flex;align-items:center;gap:11px;margin-bottom:10px">
             <span class="reg-avat" style="width:42px;height:42px;font-size:16px">${escapeHtml(
               (r.name || "?").charAt(0).toUpperCase()
@@ -142,8 +144,6 @@
             ? `<div class="reg-drow"><span class="muted">Notes</span><span>${escapeHtml(r.notes)}</span></div>`
             : "") +
           `<div class="reg-actions">
-            <button class="btn primary small" data-toggle="${r.id}">${r.paid ? "Mark Unpaid" : "Mark Paid"}</button>
-            <button class="btn small" data-copy="${r.id}">Copy details</button>
             <button class="btn danger" data-del="${r.id}">Delete</button>
           </div>`;
         if (retum) {
@@ -226,24 +226,13 @@
       });
 
       document.getElementById("detailCard").addEventListener("click", async (e) => {
-        const toggle = e.target.closest("[data-toggle]");
         const del = e.target.closest("[data-del]");
         const copy = e.target.closest("[data-copy]");
         try {
-          if (toggle) {
-            const id = toggle.getAttribute("data-toggle");
-            const cur = ALL.find((r) => r.id === id);
-            // The row can be stale if the list reloaded underneath us.
-            if (!cur) return toast("that row changed behind your back — refresh the page for the fresh version", "error");
-            const updated = await api(`/api/registrations/${id}`, {
-              method: "PATCH",
-              body: JSON.stringify({ paid: !cur.paid }),
-            });
-            cur.paid = updated.paid;
-            render();
-            paintDetail(true);
-            toast(updated.paid ? "marked as paid — the mascot heard a tiny cash register go off" : "marked as pending — the mascot is keeping one eye on that payment");
-          } else if (copy) {
+          // Paid/unpaid is not a switch anyone gets to flip: a registration is
+          // paid because Razorpay said so, and nothing else. The status below
+          // is a readout, not a control.
+          if (copy) {
             const r = ALL.find((x) => x.id === copy.getAttribute("data-copy"));
             if (!r) return;
             const text = [

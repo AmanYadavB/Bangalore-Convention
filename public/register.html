@@ -313,6 +313,14 @@
                 <span class="pill ${isPaid ? "paid" : "pending"}">${isPaid ? "Paid ✓" : "Pending"}</span>
               </div>
             </div>
+            ${r.ticketCode
+              ? `<div class="tk-qr">
+                   <img src="/api/ticket/${encodeURIComponent(r.ticketCode)}/qr.svg"
+                        alt="Your ticket QR code" width="180" height="180" />
+                   <div class="tk-qr-code">${escapeHtml(r.ticketCode)}</div>
+                   <div class="tk-qr-note muted">Show this at the door. The same code is in your email — and if the picture won't load, the ten characters work on their own.</div>
+                 </div>`
+              : ""}
             <p class="muted" style="font-size:13px;margin:16px 0 20px">
               ${isPaid
                 ? "Your payment is in, safe and sound. The team will be in touch shortly — until then, the mascot is counting down the days right there with you."
