@@ -145,13 +145,27 @@
         const cam = document.getElementById("cam");
         const camOff = document.getElementById("camOff");
         const camNote = document.getElementById("camNote");
-        const supported = "BarcodeDetector" in window;
-        if (!supported) {
-          camNote.textContent = "This browser cannot scan. Type the code instead — Chrome on Android scans.";
-          document.getElementById("startCam").disabled = true;
+        const startBtn = document.getElementById("startCam");
+        // Two separate reasons the camera can be off, and they need different
+        // words: this browser cannot DECODE a QR, or it cannot REACH a camera.
+        // getUserMedia only exists in a secure context, so a phone pointed at
+        // http://<lan-ip>:8787 has no navigator.mediaDevices at all — which
+        // used to surface as a baffling "Cannot read properties of undefined".
+        const canDecode = "BarcodeDetector" in window;
+        const canCapture = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+        if (!canDecode) {
+          camNote.textContent =
+            "This browser can't decode a QR. Type the code instead — Chrome on Android scans.";
+          startBtn.disabled = true;
+        } else if (!canCapture) {
+          camNote.textContent =
+            "The camera needs a secure page. Open this over https (or on localhost) — " +
+            "over a plain http address the browser hides the camera entirely. Typing the code works either way.";
+          startBtn.disabled = true;
         }
 
-        document.getElementById("startCam").addEventListener("click", async () => {
+        startBtn.addEventListener("click", async () => {
+          camNote.textContent = "";
           try {
             const stream = await navigator.mediaDevices.getUserMedia({
               video: { facingMode: "environment" },
@@ -176,7 +190,18 @@
             };
             tick();
           } catch (err) {
-            camNote.textContent = "Camera unavailable: " + ((err && err.message) || "permission denied");
+            // NotAllowedError covers both "the visitor said no" and "the page
+            // was never allowed to ask" (a Permissions-Policy deny), and the
+            // volunteer at the door needs to be told which one to go fix.
+            const name = (err && err.name) || "";
+            camNote.textContent =
+              name === "NotAllowedError"
+                ? "Camera blocked. Allow camera for this site in the browser's address-bar site settings, then try again."
+                : name === "NotFoundError" || name === "OverconstrainedError"
+                ? "No camera found on this device. Type the code instead."
+                : name === "NotReadableError"
+                ? "Another app is holding the camera. Close it and try again."
+                : "Camera unavailable: " + ((err && err.message) || name || "unknown error");
           }
         });
       })();

@@ -1307,73 +1307,47 @@ async function requireUser() {
 
 // ---- Attention mascot: ONE little robot that lives on the chat button. It
 // rests in the corner as the chat bubble, morphs into the robot, waves, rolls,
-// jumps, sometimes swells into a huge demon with an evil laugh, then takes off
-// (helicopter rotor) and flies a loop around the screen before landing back
-// home. Clicking it always opens the assistant. Speech bubbles pop up only now
-// and then with short lines. Sound only starts after the first user gesture.
+// jumps, sometimes swells up to a friendly giant, then takes off (helicopter
+// rotor) and flies a loop around the screen before landing back home. Clicking
+// it always opens the assistant. Speech bubbles pop up only now and then with
+// short lines. It makes no sound at all, and it stops entirely while the page
+// is not on screen.
 function mountMascot() {
   if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches)
     return;
 
   const isChatOpen = () => document.body.classList.contains("chat-open");
 
-  // ---------------- Funny synth sounds (Web Audio, no files) ----------------
-  let actx = null;
-  const unlock = () => {
-    if (actx) return;
-    try {
-      actx = new (window.AudioContext || window.webkitAudioContext)();
-    } catch (e) {}
-  };
-  ["pointerdown", "keydown", "touchstart"].forEach((ev) =>
-    window.addEventListener(ev, unlock, { once: true, passive: true })
-  );
-  // // Ask for the mic on the first interaction so a clap can flip the theme.
-  // ["pointerdown", "keydown", "touchstart"].forEach((ev) =>
-  //   window.addEventListener(ev, initClap, { once: true, passive: true })
-  // );
-  const canPlay = () => actx && actx.state === "running" && !document.hidden;
+  // Every timer this show schedules is registered here so that leaving the
+  // page can cancel all of them at once. Without that, the scene chain keeps
+  // running in a hidden tab: browsers throttle background timers but still run
+  // the callbacks, so the classes keep toggling, and coming back mid-flight
+  // shows a mascot frozen halfway across the screen.
+  const timers = new Set();
+  let running = false;
 
-  function tone(freq, start, dur, type, peak) {
-    if (!actx) return;
-    const t0 = actx.currentTime + start;
-    const o = actx.createOscillator();
-    const g = actx.createGain();
-    o.type = type || "square";
-    o.frequency.setValueAtTime(freq, t0);
-    g.gain.setValueAtTime(0.0001, t0);
-    g.gain.exponentialRampToValueAtTime(peak || 0.05, t0 + 0.02);
-    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-    o.connect(g).connect(actx.destination);
-    o.start(t0);
-    o.stop(t0 + dur + 0.03);
+  function later(fn, ms) {
+    const id = setTimeout(() => {
+      timers.delete(id);
+      fn();
+    }, ms);
+    timers.add(id);
+    return id;
   }
-  function glide(f1, f2, start, dur, type, peak) {
-    if (!actx) return;
-    const t0 = actx.currentTime + start;
-    const o = actx.createOscillator();
-    const g = actx.createGain();
-    o.type = type || "sine";
-    o.frequency.setValueAtTime(f1, t0);
-    o.frequency.exponentialRampToValueAtTime(Math.max(1, f2), t0 + dur);
-    g.gain.setValueAtTime(0.0001, t0);
-    g.gain.exponentialRampToValueAtTime(peak || 0.05, t0 + 0.03);
-    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-    o.connect(g).connect(actx.destination);
-    o.start(t0);
-    o.stop(t0 + dur + 0.03);
+  function clearTimers() {
+    for (const id of timers) clearTimeout(id);
+    timers.clear();
   }
-  const longPueee = () => glide(240, 1350, 0, 1.2, "sawtooth", 0.05); // pueeeeeee up
-  const longWoooo = () => glide(1250, 220, 0, 1.3, "sine", 0.055); // wooooooo down
-  const boops = () => {
-    tone(660, 0, 0.09, "square", 0.05);
-    tone(880, 0.11, 0.13, "square", 0.05);
-  };
 
-  // Extra sounds for the take-off, landing and growing moments.
-  const takeoffSound = () => glide(170, 950, 0, 0.8, "sawtooth", 0.06); // whoooosh up
-  const landSound = () => glide(760, 150, 0, 0.5, "sine", 0.05); // settle down
-  const growSound = () => glide(300, 620, 0, 1.1, "sine", 0.05); // gentle swell
+  // The mascot is silent. It used to synthesise boops, whooshes and a rising
+  // "pueeee" through the Web Audio API on every scene — which meant a page
+  // that made noise at someone who had not asked for any, and opened an
+  // AudioContext on their first tap to do it. A speech bubble says the same
+  // thing without taking over the room. Nothing here plays audio now, and the
+  // AudioContext is never created.
+  //
+  // Chat voice mode is untouched: that one is asked for, and it can be
+  // switched off in the chat panel.
 
   // ---------------- ONE mascot, living on the chat button ----------------
   const fab = document.getElementById("chatFab");
@@ -1390,12 +1364,27 @@ function mountMascot() {
   ghost.setAttribute("title", "Open chat");
   ghost.innerHTML = '<span class="fg-icon">💬</span><span class="fg-hand">👋</span>';
   (fab.parentElement || document.body).appendChild(ghost);
+  ghost.tabIndex = -1;
+  ghost.setAttribute("aria-hidden", "true");
+  if ("inert" in ghost) ghost.inert = true;
   ghost.addEventListener("click", () => {
     const panel = document.getElementById("chatPanel");
     if (panel && panel.hidden) fab.click();
   });
+  // opacity:0 hides a button from eyes only. It stays in the tab order and in
+  // the accessibility tree, so without this the page carries a permanent
+  // invisible tab stop — one that still activates on Enter and opens the chat
+  // out of nowhere — and screen readers announce two "Open chat" buttons on
+  // every page. inert removes it from both at once where it is supported;
+  // tabindex plus aria-hidden covers the browsers where it is not.
   function showGhost(on) {
-    ghost.classList.toggle("show", !!on && !isChatOpen());
+    const visible = !!on && !isChatOpen();
+    ghost.classList.toggle("show", visible);
+    if ("inert" in ghost) ghost.inert = !visible;
+    ghost.tabIndex = visible ? 0 : -1;
+    ghost.setAttribute("aria-hidden", visible ? "false" : "true");
+    // Never leave focus parked on something nobody can see.
+    if (!visible && document.activeElement === ghost) fab.focus();
   }
 
   const SAYS = [
@@ -1413,7 +1402,7 @@ function mountMascot() {
     bubble.textContent = txt || SAYS[Math.floor(Math.random() * SAYS.length)];
     bubble.classList.add("show");
     clearTimeout(bubble.__hideTimer);
-    bubble.__hideTimer = setTimeout(() => bubble.classList.remove("show"), ms || 2400);
+    bubble.__hideTimer = later(() => bubble.classList.remove("show"), ms || 2400);
   }
   // Force any lingering speech bubble away immediately (used right before
   // scenes that shouldn't have a message floating over them).
@@ -1436,7 +1425,6 @@ function mountMascot() {
   // Each "scene" performs an action and returns how long it lasts (ms).
   function toMascot() {
     setForm("bot");
-    if (canPlay()) boops();
     if (Math.random() < 0.35) say(null, 1800);
     return 1000;
   }
@@ -1453,29 +1441,25 @@ function mountMascot() {
   function wave() {
     fab.classList.add("waving");
     if (Math.random() < 0.45) say("hello there! \uD83D\uDC4B", 2200);
-    if (canPlay() && Math.random() < 0.5) boops();
-    setTimeout(() => fab.classList.remove("waving"), 2600);
+    later(() => fab.classList.remove("waving"), 2600);
     return 2900;
   }
   function roll() {
     hideBubble(); // no floating message while it's rolling
     fab.classList.add("rolling");
-    if (canPlay()) longWoooo();
-    setTimeout(() => fab.classList.remove("rolling"), 1200);
+    later(() => fab.classList.remove("rolling"), 1200);
     return 1500;
   }
   function jump() {
     fab.classList.add("jumping");
-    if (canPlay()) longPueee();
-    setTimeout(() => fab.classList.remove("jumping"), 700);
+    later(() => fab.classList.remove("jumping"), 700);
     return 950;
   }
   function grow() {
     hideBubble(); // no floating message while it's growing huge
     setForm("bot");
     fab.classList.add("huge"); // slowly swells up in the same friendly colours
-    if (canPlay()) growSound();
-    setTimeout(() => fab.classList.remove("huge"), 5000);
+    later(() => fab.classList.remove("huge"), 5000);
     return 5600;
   }
   function takeOff() {
@@ -1483,15 +1467,10 @@ function mountMascot() {
     setForm("bot");
     showGhost(true); // leave a waving chat button behind so you can still tap
     fab.classList.add("flying");
-    if (canPlay()) takeoffSound();
     if (Math.random() < 0.6) say("wheee! \uD83D\uDEF8", 1800);
-    setTimeout(() => {
-      if (canPlay()) (Math.random() < 0.5 ? longPueee : longWoooo)();
-    }, 5200);
-    setTimeout(() => {
+    later(() => {
       fab.classList.remove("flying");
       showGhost(false);
-      if (canPlay()) landSound();
       if (Math.random() < 0.6) say("I\u2019m back!", 1600);
     }, 13000);
     return 13700;
@@ -1509,18 +1488,21 @@ function mountMascot() {
   function chain(steps, done) {
     let i = 0;
     (function step() {
+      // Checked on every hop, not just at the start: the page can be hidden
+      // in the middle of a scene, and the next hop is where the show stops.
+      if (!running || document.hidden) return;
       if (i >= steps.length) return done();
       // Mid-announcement (toast): hold the show until the mascot finishes.
       if (window.__mascotSayUntil && Date.now() < window.__mascotSayUntil) {
-        return setTimeout(step, 800);
+        return later(step, 800);
       }
       if (isChatOpen()) {
         clearMoves();
         setForm("box");
-        return setTimeout(step, 900);
+        return later(step, 900);
       }
       const dur = steps[i++]() || 600;
-      setTimeout(step, dur);
+      later(step, dur);
     })();
   }
   // Every scene stays in the show — grow and the flight included — but each
@@ -1530,6 +1512,7 @@ function mountMascot() {
   const ACTS = [wave, jump, roll, grow, takeOff];
   let actIdx = 0;
   function cycle() {
+    if (!running || document.hidden) return;
     chain(
       [
         toMascot,
@@ -1776,7 +1759,32 @@ function mountMascot() {
   // Start life as the chat bubble in the corner, then begin the loop after a
   // short settle-in — first act about 5–6s after page load.
   setForm("box");
-  setTimeout(cycle, 5000 + Math.random() * 1000);
+
+  function startShow(delay) {
+    if (running || document.hidden) return;
+    running = true;
+    later(cycle, delay || 0);
+  }
+
+  // Leaving the page ends the performance rather than pausing it mid-gesture:
+  // timers cancelled, every animation class dropped, back to a plain chat
+  // button. Returning starts a fresh act after a short beat, so the mascot is
+  // not already flailing the instant the tab is switched back.
+  function stopShow() {
+    running = false;
+    clearTimers();
+    clearMoves();
+    setForm("box");
+    hideBubble();
+    showGhost(false);
+  }
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) stopShow();
+    else startShow(1200);
+  });
+
+  startShow(5000 + Math.random() * 1000);
 
   // When the chat opens, calm down and stay a plain chat button.
   const obs = new MutationObserver(() => {
@@ -1902,6 +1910,256 @@ async function openRazorpay(record, onSuccess) {
     toast("The payment window couldn't open. Your registration is saved — you can pay at the venue.", "error");
     onSuccess(record);
   }
+}
+
+// ---- The downloadable ticket ----------------------------------------------
+// Once a registration lands, the delegate should be able to walk away with the
+// thing itself — not just a promise that an email is coming. This paints the
+// same ticket the wizard just built (same per-category icon and gradient, same
+// BC- reference, same stub) onto a canvas and hands it over as a PNG: it sits
+// in their photos, prints on any printer, and opens at the gate with no
+// signal. It is drawn here rather than served from the Worker because the
+// Worker has no font renderer; the one thing it CAN draw is the QR, which is
+// pulled in from /api/ticket/:code/qr.png. That URL is same-origin, so the
+// canvas is never tainted and toBlob() stays allowed.
+
+const TICKET_ICONS = ["🛏️", "🚪", "👥", "👨‍👩‍👦", "🎟️", "⭐"];
+const TICKET_STOPS = [
+  ["#f59e0b", "#ef4444"],
+  ["#38bdf8", "#5b5bf0"],
+  ["#a78bfa", "#7c3aed"],
+  ["#34d399", "#0ea5e9"],
+  ["#fb7185", "#f59e0b"],
+];
+const TK_SANS = "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
+const TK_MONO = "ui-monospace, Consolas, 'SF Mono', Menlo, monospace";
+const TK_EMOJI = "'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif";
+
+// Card-local geometry, in CSS px; the canvas renders at 2x so the print and
+// the phone screenshot both stay sharp. Every y below is measured from the top
+// of the white card, then offset by pad when it is drawn.
+const TK_G = { pad: 26, cw: 708, ch: 1102, head: 122, band: 250, perf: 530, r: 22, s: 2 };
+
+// The QR is asked for at s=16 so its natural pixel size (about 592px for the
+// check-in URL) already matches the 296pt box at 2x — no upscaling blur.
+function ticketQrImage(code) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null); // a QR-less ticket still carries the code
+    img.src = "/api/ticket/" + encodeURIComponent(code) + "/qr.png?s=16";
+  });
+}
+
+async function ticketCanvas(reg, catIndex) {
+  const G = TK_G;
+  const W = G.cw + G.pad * 2;
+  const H = G.ch + G.pad * 2;
+  const cv = document.createElement("canvas");
+  cv.width = W * G.s;
+  cv.height = H * G.s;
+  const ctx = cv.getContext("2d");
+  ctx.scale(G.s, G.s);
+  ctx.textBaseline = "alphabetic";
+
+  const cx = W / 2;
+  const left = G.pad;
+  const right = G.pad + G.cw;
+  const y = (v) => G.pad + v; // card-local -> canvas
+  const idx = Number.isInteger(catIndex) && catIndex >= 0 ? catIndex : -1;
+  const icon = idx >= 0 ? TICKET_ICONS[idx % TICKET_ICONS.length] : "🎟️";
+  const stops = idx >= 0 ? TICKET_STOPS[idx % TICKET_STOPS.length] : ["#38bdf8", "#7c3aed"];
+  const paid = !!reg.paid;
+  const ref = "BC-" + String(reg.id || "").slice(0, 8).toUpperCase();
+  const code = String(reg.ticketCode || "").toUpperCase();
+
+  function rrPath(x, top, w, h, r) {
+    const rad = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + rad, top);
+    ctx.arcTo(x + w, top, x + w, top + h, rad);
+    ctx.arcTo(x + w, top + h, x, top + h, rad);
+    ctx.arcTo(x, top + h, x, top, rad);
+    ctx.arcTo(x, top, x + w, top, rad);
+    ctx.closePath();
+  }
+
+  // Shrink-to-fit, then ellipsis: a fourteen-word name must not run off the
+  // ticket, and it must not be silently cropped either.
+  function fit(text, max, size, weight, family) {
+    let px = size;
+    ctx.font = weight + " " + px + "px " + family;
+    while (px > 15 && ctx.measureText(text).width > max) {
+      px -= 1;
+      ctx.font = weight + " " + px + "px " + family;
+    }
+    if (ctx.measureText(text).width <= max) return text;
+    let cut = text.length;
+    while (cut > 3 && ctx.measureText(text.slice(0, cut) + "…").width > max) cut--;
+    return text.slice(0, cut) + "…";
+  }
+
+  const mid = (text, baseline, color) => {
+    ctx.fillStyle = color;
+    ctx.textAlign = "center";
+    ctx.fillText(text, cx, baseline);
+  };
+
+  // Tracked-out capitals, drawn glyph by glyph: ctx.letterSpacing is still
+  // missing in enough browsers that trusting it would give some delegates a
+  // cramped ticket and others the intended one.
+  function spaced(text, baseline, gap, color) {
+    const chars = Array.from(text);
+    let total = -gap;
+    for (const ch of chars) total += ctx.measureText(ch).width + gap;
+    let x = cx - total / 2;
+    ctx.fillStyle = color;
+    ctx.textAlign = "left";
+    for (const ch of chars) {
+      ctx.fillText(ch, x, baseline);
+      x += ctx.measureText(ch).width + gap;
+    }
+    return total;
+  }
+
+  // ---- backdrop + card ----
+  const BACK = "#eef1fb";
+  ctx.fillStyle = BACK;
+  ctx.fillRect(0, 0, W, H);
+  rrPath(left, y(0), G.cw, G.ch, G.r);
+  ctx.fillStyle = "#ffffff";
+  ctx.fill();
+
+  ctx.save();
+  rrPath(left, y(0), G.cw, G.ch, G.r);
+  ctx.clip(); // keeps the two bands and the stub inside the rounded corners
+  const head = ctx.createLinearGradient(left, 0, right, 0);
+  head.addColorStop(0, "#38bdf8");
+  head.addColorStop(0.55, "#5b5bf0");
+  head.addColorStop(1, "#7c3aed");
+  ctx.fillStyle = head;
+  ctx.fillRect(left, y(0), G.cw, G.head);
+  const band = ctx.createLinearGradient(left, y(G.head), right, y(G.band));
+  band.addColorStop(0, stops[0]);
+  band.addColorStop(1, stops[1]);
+  ctx.fillStyle = band;
+  ctx.fillRect(left, y(G.head), G.cw, G.band - G.head);
+  ctx.fillStyle = "#f8f9ff";
+  ctx.fillRect(left, y(G.perf), G.cw, G.ch - G.perf);
+  ctx.restore();
+
+  // ---- header ----
+  ctx.font = "800 18px " + TK_SANS;
+  spaced("BANGALORE CONVENTION 2027", y(58), 1.8, "#ffffff");
+  ctx.font = "600 12px " + TK_SANS;
+  spaced("09–11 JULY 2027 · BANGALORE, INDIA", y(86), 1.4, "rgba(255,255,255,0.88)");
+
+  // ---- category band ----
+  ctx.font = "58px " + TK_EMOJI;
+  mid(icon, y(206), "#ffffff");
+
+  // ---- body ----
+  ctx.font = "700 11.5px " + TK_SANS;
+  spaced("DELEGATE PASS · ADMIT ONE", y(300), 2.4, "#6b7280");
+  const name = fit(String(reg.name || "Delegate"), G.cw - 80, 40, "800", TK_SANS);
+  mid(name, y(364), "#111827");
+  const line = fit(
+    String(reg.categoryName || "Convention registration") + " · " + money(reg.amount),
+    G.cw - 80,
+    19,
+    "600",
+    TK_SANS
+  );
+  mid(line, y(408), "#4b5563");
+
+  const pillText = paid ? "✓ PAID" : "⏳ PAYMENT PENDING";
+  ctx.font = "800 13px " + TK_SANS;
+  const pillW = ctx.measureText(pillText).width + 1.2 * (Array.from(pillText).length - 1) + 36;
+  rrPath(cx - pillW / 2, y(438), pillW, 34, 17);
+  ctx.fillStyle = paid ? "#d9f4e6" : "#fdf0d4";
+  ctx.fill();
+  spaced(pillText, y(460), 1.2, paid ? "#0b7a43" : "#8a6207");
+
+  // ---- perforation: dashes across, notches bitten out of both edges ----
+  ctx.save();
+  ctx.setLineDash([10, 9]);
+  ctx.strokeStyle = "#c7d2fe";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(left + 18, y(G.perf));
+  ctx.lineTo(right - 18, y(G.perf));
+  ctx.stroke();
+  ctx.restore();
+
+  // ---- the stub ----
+  const plate = 328;
+  const plateX = cx - plate / 2;
+  const plateY = y(570);
+  rrPath(plateX, plateY, plate, plate, 16);
+  ctx.fillStyle = "#ffffff";
+  ctx.fill();
+  ctx.strokeStyle = "#e2e6f8";
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  const qr = code ? await ticketQrImage(code) : null;
+  if (qr) {
+    ctx.drawImage(qr, plateX + 16, plateY + 16, plate - 32, plate - 32);
+  } else {
+    // The scanner is the convenience; the ten characters are the ticket.
+    ctx.font = "600 15px " + TK_SANS;
+    mid("QR couldn't be drawn —", plateY + plate / 2 - 8, "#8a91a8");
+    mid("read out the code below", plateY + plate / 2 + 16, "#8a91a8");
+  }
+
+  if (code) {
+    ctx.font = "800 27px " + TK_MONO;
+    spaced(code, y(948), 5, "#111827");
+  }
+  ctx.font = "600 14px " + TK_MONO;
+  spaced(ref, y(980), 1.4, "#6b7280");
+  ctx.font = "500 13px " + TK_SANS;
+  mid("Show this at the door — we'll scan you straight in.", y(1018), "#8a91a8");
+  mid("If the QR won't scan, the code above works on its own.", y(1042), "#8a91a8");
+  ctx.font = "700 11px " + TK_SANS;
+  spaced("BANGALORE CONVENTION · NOT FOR RESALE", y(1076), 1.6, "#aab1c8");
+
+  // Notches last, so they punch through the stub fill rather than sit on it.
+  ctx.fillStyle = BACK;
+  [left, right].forEach((edge) => {
+    ctx.beginPath();
+    ctx.arc(edge, y(G.perf), 17, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  return cv;
+}
+
+// Build the PNG and hand it to the browser. Resolves once the file has been
+// offered; the caller decides what to say about it.
+async function downloadTicket(reg, catIndex) {
+  if (!reg || !reg.ticketCode) throw new Error("This registration has no ticket code yet.");
+  const cv = await ticketCanvas(reg, catIndex);
+  const blob = await new Promise((resolve) => cv.toBlob(resolve, "image/png"));
+  if (!blob) throw new Error("The ticket image could not be encoded.");
+
+  const href = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const filename = "BIAAC-2027-Ticket-" + String(reg.ticketCode).toUpperCase() + ".png";
+  if ("download" in a) {
+    a.href = href;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } else {
+    // Very old iOS: no download attribute, so the image opens in a tab and the
+    // delegate long-presses to save it. Better than a dead button.
+    window.open(href, "_blank");
+  }
+  // Long enough for the download to start, short enough not to pin the blob.
+  setTimeout(() => URL.revokeObjectURL(href), 60000);
+  return filename;
 }
 
 // ---- AI chat assistant (Cloudflare Workers AI on the live site) ----
@@ -2561,6 +2819,40 @@ function mountChat() {
   // the viewer's behalf \u2014 a stored XSS shipped on purpose. The knowledge base
   // on the Feed AI page replaces it as the way to teach the assistant.
 
+  // The ticket, offered in the log as its own card. The category index is
+  // looked up here so the PNG carries the same icon and gradient the register
+  // page would have stamped on it.
+  function offerTicketDownload(reg) {
+    if (!reg || !reg.ticketCode) return;
+    const catIndex = PRICING.findIndex((c) => c.id === reg.categoryId);
+    const row = document.createElement("div");
+    row.className = "chat-msg assistant";
+    row.textContent = "Here's your ticket, QR and all \u2014 save it now and the gate works even with no signal.";
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn primary small";
+    btn.style.marginTop = "10px";
+    btn.textContent = "\u2b07 Download ticket";
+    btn.addEventListener("click", async () => {
+      const label = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = "Drawing\u2026";
+      try {
+        await downloadTicket(reg, catIndex);
+        toast("Ticket saved \u2014 QR and all. Show it at the door.", "party");
+      } catch (err) {
+        toast("Couldn't build the ticket image \u2014 your email copy carries the same QR.", "error");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = label;
+      }
+    });
+    row.appendChild(document.createElement("br"));
+    row.appendChild(btn);
+    log.appendChild(row);
+    scrollToMsg(row, "assistant");
+  }
+
   function showBookingConfirm(a) {
     const cat = normalizeCategory(a.category);
     const catObj = PRICING.find((c) => c.id === cat);
@@ -2625,6 +2917,9 @@ function mountChat() {
           } else {
             addMsg("assistant", "✅ You're registered! Your reference is **" + ref + "**. Complete your payment at your convenience — the team will confirm your spot once received.");
           }
+          // A booking finished in the chat is still a booking: it gets the same
+          // downloadable ticket the register page hands over.
+          offerTicketDownload(r);
         });
       } catch (err) {
         btn.disabled = false;

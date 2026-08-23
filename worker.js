@@ -247,6 +247,11 @@ async function getRegistration(env, id) {
 
 async function insertRegistration(env, r) {
   await ensureDataTables(env);
+  // Mint the ticket code ONTO the record rather than only into the bind list.
+  // POST /api/registrations returns this very object, and the confirmation
+  // screen keys its QR and its downloadable ticket off r.ticketCode — without
+  // this the row had a code but the delegate never saw one.
+  if (!r.ticketCode) r.ticketCode = newTicketCode();
   await env.CONVENTION_DB.prepare(
     `INSERT INTO registrations
        (id, name, email, phone, city, gender, notes, category_id, category_name,
@@ -259,7 +264,7 @@ async function insertRegistration(env, r) {
     r.paymentId || null, r.paidAt || null, r.orderId || null,
     r.orderAmount == null ? null : Number(r.orderAmount),
     r.emailedPendingAt || null, r.createdAt || new Date().toISOString(),
-    r.ticketCode || newTicketCode()
+    r.ticketCode
   ).run();
   return r;
 }
@@ -2254,11 +2259,15 @@ function withSecurityHeaders(res, env, url) {
   h.set("referrer-policy", "strict-origin-when-cross-origin");
   h.set("x-frame-options", "DENY");
   h.set("cross-origin-opener-policy", "same-origin");
-  // microphone=(self), NOT () — the chat widget uses getUserMedia for voice
-  // mode, and a blanket deny would silently break it.
+  // microphone=(self) and camera=(self), NOT () — the chat widget uses
+  // getUserMedia for voice mode and the check-in desk uses it for the ticket
+  // scanner. A blanket deny does not merely refuse the camera, it stops the
+  // browser ever ASKING: getUserMedia rejects instantly and the volunteer sees
+  // "blocked" with no prompt to accept. (self) still shuts out cross-origin
+  // frames, which is the part worth keeping.
   h.set(
     "permissions-policy",
-    "geolocation=(), camera=(), payment=(), browsing-topics=(), microphone=(self)"
+    "geolocation=(), camera=(self), payment=(), browsing-topics=(), microphone=(self)"
   );
 
   // HSTS only over real HTTPS; sending it from http://localhost would pin the
@@ -3680,12 +3689,17 @@ async function handleApi(request, env, ctx) {
     // shared cache, but it never changes, so the delegate's own browser may
     // keep it.
     const headers = { "cache-control": "private, max-age=86400" };
+    // ?s= module scale. The downloadable ticket paints the QR onto a canvas at
+    // device resolution, so it asks for a bigger one than the 8 an email or a
+    // web page needs; clamped because the PNG here is stored uncompressed and
+    // its bytes grow with the square of the scale.
+    const scale = Math.min(20, Math.max(2, Math.round(Number(url.searchParams.get("s")) || 8)));
     if (want === "qr.svg") {
-      return new Response(qrSvg(payload, 8, 4), {
+      return new Response(qrSvg(payload, scale, 4), {
         headers: { ...headers, "content-type": "image/svg+xml; charset=utf-8" },
       });
     }
-    return new Response(qrPng(payload, 8, 4), {
+    return new Response(qrPng(payload, scale, 4), {
       headers: { ...headers, "content-type": "image/png" },
     });
   }

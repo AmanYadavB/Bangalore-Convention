@@ -51,6 +51,10 @@ let PRICING = [];
 let pricingPromptLine = () => "";
 let factsPromptBlock = () => "";
 let groundingRuleBlock = () => "";
+// shared/qr.mjs, loaded in bootstrap() — the same renderer the Worker uses, so
+// the ticket QR and the downloadable ticket can be exercised locally too.
+let qrPng = null;
+let qrSvg = null;
 
 // In-memory data so the flows can be clicked through locally.
 const registrations = [];
@@ -224,6 +228,23 @@ async function handleApi(req, res, url) {
     }
   }
 
+  // GET /api/ticket/:code/qr.png|qr.svg — same contract as the Worker's, so
+  // the confirmation QR and the downloadable ticket both work offline.
+  if (resource === "ticket" && id && req.method === "GET") {
+    const reg = registrations.find((r) => r.ticketCode === id);
+    if (!reg) return json(res, { error: "Unknown ticket." }, 404);
+    const payload = `http://localhost:${PORT}/checkin.html#` + reg.ticketCode;
+    const scale = Math.min(20, Math.max(2, Math.round(Number(url.searchParams.get("s")) || 8)));
+    const svg = String(parts[3] || "qr.png").toLowerCase() === "qr.svg";
+    const out = svg ? Buffer.from(qrSvg(payload, scale, 4)) : Buffer.from(qrPng(payload, scale, 4));
+    res.writeHead(200, {
+      "content-type": svg ? "image/svg+xml; charset=utf-8" : "image/png",
+      "content-length": out.length,
+      "cache-control": "private, max-age=86400",
+    });
+    return res.end(out);
+  }
+
   if (resource === "registrations") {
     if (req.method === "GET") return json(res, registrations);
     if (req.method === "POST") {
@@ -236,6 +257,7 @@ async function handleApi(req, res, url) {
         city: body.city || "", gender: body.gender || "", notes: body.notes || "",
         categoryId: cat.id, categoryName: cat.name, amount: cat.price,
         paid: false, createdAt: new Date().toISOString(),
+        ticketCode: devTicketCode(),
       };
       registrations.push(record);
       return json(res, record, 201);
@@ -445,6 +467,15 @@ function serveStatic(req, res, url) {
 // shared/pricing.mjs is an ES module, so it is pulled in with a dynamic import
 // before the server starts listening — that way PRICING is always populated by
 // the time the first request arrives.
+// Same 32-character alphabet and length as the Worker's newTicketCode.
+const DEV_TICKET_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+function devTicketCode() {
+  let out = "";
+  for (let i = 0; i < 10; i++)
+    out += DEV_TICKET_ALPHABET[Math.floor(Math.random() * DEV_TICKET_ALPHABET.length)];
+  return out;
+}
+
 async function bootstrap() {
   const pricing = await import("./shared/pricing.mjs");
   PRICING = pricing.PRICING;
@@ -452,6 +483,9 @@ async function bootstrap() {
   const facts = await import("./shared/facts.mjs");
   factsPromptBlock = facts.factsPromptBlock;
   groundingRuleBlock = facts.groundingRuleBlock;
+  const qr = await import("./shared/qr.mjs");
+  qrPng = qr.qrPng;
+  qrSvg = qr.qrSvg;
 
   http
     .createServer(async (req, res) => {

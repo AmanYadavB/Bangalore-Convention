@@ -318,7 +318,7 @@
                    <img src="/api/ticket/${encodeURIComponent(r.ticketCode)}/qr.svg"
                         alt="Your ticket QR code" width="180" height="180" />
                    <div class="tk-qr-code">${escapeHtml(r.ticketCode)}</div>
-                   <div class="tk-qr-note muted">Show this at the door. The same code is in your email — and if the picture won't load, the ten characters work on their own.</div>
+                   <div class="tk-qr-note muted">Show this at the door, or keep a copy with the button below. The same code is in your email — and if the picture won't load, the ten characters work on their own.</div>
                  </div>`
               : ""}
             <p class="muted" style="font-size:13px;margin:16px 0 20px">
@@ -327,10 +327,33 @@
                 : "Pay online now or hand it to the team at the venue — dealer's choice. Just keep your booking reference close; that little code is your golden ticket."}
             </p>
             <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
-              <button class="btn primary" type="button" onclick="location.reload()">Register another</button>
+              ${r.ticketCode ? '<button class="btn primary" type="button" id="dlTicket">\u2b07 Download ticket</button>' : ""}
+              <button class="btn ghost" type="button" onclick="location.reload()">Register another</button>
               <a class="btn ghost" href="index.html">Back to home</a>
             </div>
           </div>`;
+
+        // The ticket itself, as a PNG with the QR baked in — for the phone
+        // that will be offline at the gate, and for the delegate who prints it.
+        const dl = document.getElementById("dlTicket");
+        if (dl)
+          dl.addEventListener("click", async () => {
+            const label = dl.innerHTML;
+            dl.disabled = true;
+            dl.textContent = "Drawing your ticket\u2026";
+            try {
+              await downloadTicket(r, state.sel);
+              toast("Ticket saved \u2014 QR and all. Show it at the door.", "party");
+            } catch (err) {
+              toast(
+                "Couldn't build the ticket image \u2014 the copy in your email carries the same QR.",
+                "error"
+              );
+            } finally {
+              dl.disabled = false;
+              dl.innerHTML = label;
+            }
+          });
         // Confetti rain through the celebration card.
         const box = document.getElementById("celebrateCard");
         const colors = ["#5b5bf0", "#7c3aed", "#0ea5e9", "#10b981", "#f59e0b", "#ef4444"];

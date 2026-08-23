@@ -172,6 +172,10 @@
         const target = new Date("2027-07-09T09:00:00+05:30").getTime();
         const el = document.getElementById("countdown");
         function tick() {
+          // Nothing to redraw for a screen nobody is looking at. The value is
+          // computed from the target date rather than counted down, so skipping
+          // ticks loses nothing — coming back re-renders the true time at once.
+          if (document.hidden) return;
           const diff = target - Date.now();
           if (diff <= 0) {
             el.style.display = "none";
@@ -192,6 +196,9 @@
         }
         tick();
         setInterval(tick, 1000);
+        document.addEventListener("visibilitychange", () => {
+          if (!document.hidden) tick();
+        });
       })();
 
       const CAT_ICONS = ["🛏️", "🚪", "👥", "👨‍👩‍👦", "🎟️", "⭐"];

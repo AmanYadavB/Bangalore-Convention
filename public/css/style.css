@@ -2264,6 +2264,11 @@ body.chat-open .chat-widget {
 .chat-fab.flying {
   animation: fabFly 13s ease-in-out;
   z-index: 65;
+  /* For thirteen seconds this circle sweeps most of the viewport above the
+     page. Left clickable it swallows taps meant for links, the nav or the
+     register button — a mis-tap trap that appears at random. The stand-in
+     button in the corner is what stays hittable during a flight. */
+  pointer-events: none;
 }
 @keyframes fabFly {
   0%   { transform: translate(0, 0) rotate(0deg); }
@@ -2294,6 +2299,11 @@ body.chat-open .chat-widget {
   animation: fabHuge 5s cubic-bezier(0.25, 0.6, 0.3, 1);
   transform-origin: 100% 100%;
   z-index: 70;
+  /* Deliberately still clickable, unlike .flying. The enlarged button stays in
+     its own corner and it IS the chat button — a tap on it opens the chat,
+     which is what anyone aiming at it wants. .flying can afford to be inert
+     because takeOff() leaves the stand-in button behind; grow() does not, so
+     switching this off would strand the chat for five seconds. */
 }
 @keyframes fabHuge {
   0%   { transform: scale(1); }
@@ -4064,7 +4074,18 @@ select.dd-native {
 .reg-drow:last-of-type { border-bottom: 0; }
 .reg-drow > span:last-child { text-align: right; overflow-wrap: anywhere; }
 
-.reg-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+/* Delete is the only action left on this panel now that paid/unpaid is not a
+   toggle anyone gets to flip. Set apart behind a rule and pushed to the end, so
+   the loudest control on a delegate's record is not the one that destroys it. */
+.reg-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-soft);
+}
 
 /* The copy control is an icon in the corner rather than a button in the action
    row: it is a convenience, not a decision, and it should not sit at the same
@@ -5733,7 +5754,29 @@ body:not(.draft) .tbd-card { display: none !important; }
 .ci-row .input {
   flex: 1; font-family: ui-monospace, Consolas, monospace;
   font-size: 18px; letter-spacing: 2px; text-transform: uppercase;
+  /* Without this the input holds its ~20-character intrinsic width, the row
+     cannot shrink, and the card carries that floor all the way up to the grid
+     — which is what pushed the page sideways on a 360px phone. */
+  min-width: 0;
 }
+/* The button keeps its own width and its own line; the input gives way first.
+   This row is deliberately side-by-side, so it has to opt out of the
+   small-screen "buttons in a card form go full width" rule above — that one
+   suits stacked forms, and here it was what made "Check in" wrap onto two
+   lines. Three classes, to outrank `.card > form .btn`. */
+.ci-manual .ci-row .btn {
+  flex: none;
+  width: auto;
+  white-space: nowrap;
+}
+
+/* A grid item's implicit min-width is min-content, so a wide child stops the
+   whole column from narrowing. Both cards opt out of that. */
+.ci-grid > * { min-width: 0; }
+
+/* Names and codes are other people's data: never let one long token push the
+   layout wider than the screen. */
+.ci-name, .ci-cat, .ci-detail, .ci-code, .ci-recent { overflow-wrap: anywhere; }
 
 .ci-result {
   border-radius: var(--radius); padding: 26px 20px; text-align: center;
