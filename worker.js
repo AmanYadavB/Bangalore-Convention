@@ -3724,19 +3724,25 @@ async function handleApi(request, env, ctx) {
       return json({ status: "unpaid", message: "This registration was never paid.", ...who });
     }
 
+    // The 9-11 July window is OFF while the committee tests check-in, because
+    // every real ticket would otherwise answer "not yet" for the next year.
+    // Set CHECKIN_ENFORCE_WINDOW = "1" before the convention to switch it back
+    // on; the dates themselves are already configurable above.
     const { opens, closes } = checkinWindow(env);
-    const today = istDate(0);
-    if (today < opens) {
-      return json({
-        status: "early",
-        message: "Valid ticket — but check-in has not started yet.",
-        opens,
-        closes,
-        ...who,
-      });
-    }
-    if (today > closes) {
-      return json({ status: "late", message: "Check-in closed after " + closes + ".", opens, closes, ...who });
+    if (String(env.CHECKIN_ENFORCE_WINDOW || "0") === "1") {
+      const today = istDate(0);
+      if (today < opens) {
+        return json({
+          status: "early",
+          message: "Valid ticket — but check-in has not started yet.",
+          opens,
+          closes,
+          ...who,
+        });
+      }
+      if (today > closes) {
+        return json({ status: "late", message: "Check-in closed after " + closes + ".", opens, closes, ...who });
+      }
     }
 
     if (reg.checkedInAt) {

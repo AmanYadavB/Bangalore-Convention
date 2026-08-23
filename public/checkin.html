@@ -44,7 +44,14 @@
             <div class="ci-headline">Ready</div>
             <div class="ci-detail muted">Nothing scanned yet.</div>
           </div>
-          <div id="recent"></div>
+
+          <div class="ci-arrived-h">
+            <b>Checked in</b>
+            <span class="muted" id="arrivedCount">—</span>
+          </div>
+          <div id="arrived" class="ci-arrived">
+            <p class="muted" style="font-size:13px;margin:0">Loading…</p>
+          </div>
         </div>
       </div>
     </div>
@@ -65,18 +72,47 @@
         if (!user) return;
 
         const resultBox = document.getElementById("result");
-        const recent = document.getElementById("recent");
+        const arrived = document.getElementById("arrived");
+        const arrivedCount = document.getElementById("arrivedCount");
         const codeInput = document.getElementById("codeInput");
-        const seen = [];
 
+        // Each outcome carries how the panel looks AND how the mascot announces
+        // it. `toastType` maps onto the four card moods common.js already has.
         const LOOK = {
-          ok:      { cls: "good",  icon: "✅", head: "Checked in" },
-          already: { cls: "warn",  icon: "🔁", head: "Already checked in" },
-          early:   { cls: "warn",  icon: "🕘", head: "Not yet — valid ticket" },
-          late:    { cls: "bad",   icon: "🚪", head: "Check-in closed" },
-          unpaid:  { cls: "bad",   icon: "💳", head: "Not paid" },
-          invalid: { cls: "bad",   icon: "✖", head: "Not a valid ticket" },
+          ok:      { cls: "good", icon: "✅", head: "Checked in",           toastType: "success" },
+          already: { cls: "warn", icon: "🔁", head: "Already checked in",   toastType: "info" },
+          early:   { cls: "warn", icon: "🕘", head: "Not yet — valid ticket", toastType: "info" },
+          late:    { cls: "bad",  icon: "🚪", head: "Check-in closed",      toastType: "error" },
+          unpaid:  { cls: "bad",  icon: "💳", head: "Not paid",             toastType: "error" },
+          invalid: { cls: "bad",  icon: "✖",  head: "Not a valid ticket",   toastType: "error" },
+          offline: { cls: "warn", icon: "📡", head: "Couldn't check",       toastType: "error" },
         };
+
+        const firstName = (n) => String(n || "").trim().split(/\s+/)[0] || "they";
+        const atTime = (iso) =>
+          iso ? new Date(iso).toLocaleTimeString("en-IN", { timeStyle: "short" }) : "";
+
+        // What the mascot actually says. Short, spoken, and specific enough that
+        // a volunteer never has to look back at the panel to know what happened.
+        function announcement(res) {
+          switch (res.status) {
+            case "ok":
+              return firstName(res.name) + " is in — checked in just now";
+            case "already":
+              return firstName(res.name) + " already came through" +
+                (res.at ? " at " + atTime(res.at) : "") + " — this one's a repeat";
+            case "early":
+              return "valid ticket, but check-in hasn't started yet";
+            case "late":
+              return "check-in has closed — send them to the desk";
+            case "unpaid":
+              return "this one isn't paid — send them to the desk";
+            case "offline":
+              return "couldn't reach the server — nothing was recorded, try again";
+            default:
+              return "that code isn't one of ours — check the ticket";
+          }
+        }
 
         function show(res) {
           const look = LOOK[res.status] || LOOK.invalid;
@@ -94,43 +130,86 @@
             (when ? ` <b>${escapeHtml(when)}</b>` : "") +
             `</div>` +
             (res.ticketCode ? `<div class="ci-code">${escapeHtml(res.ticketCode)}</div>` : "");
+        }
 
-          if (res.name) {
-            seen.unshift({ name: res.name, status: res.status, t: Date.now() });
-            recent.innerHTML =
-              '<div class="ci-recent-h muted">This session</div>' +
-              seen.slice(0, 8).map((s) =>
-                `<div class="ci-recent"><span class="ci-dot ${(LOOK[s.status] || LOOK.invalid).cls}"></span>` +
-                `${escapeHtml(s.name)}<small>${new Date(s.t).toLocaleTimeString("en-IN", { timeStyle: "short" })}</small></div>`
-              ).join("");
+        // ---- Who has come through -------------------------------------------
+        // Read from the registrations the server already holds rather than a
+        // list kept in this tab, so it survives a reload and shows arrivals from
+        // every other door too.
+        async function refreshArrived() {
+          try {
+            const all = await api("/api/registrations");
+            const inList = all
+              .filter((r) => r.checkedInAt)
+              .sort((a, b) => new Date(b.checkedInAt) - new Date(a.checkedInAt));
+            arrivedCount.textContent = inList.length + " of " + all.length;
+            arrived.innerHTML = inList.length
+              ? inList
+                  .map(
+                    (r) =>
+                      `<div class="ci-arr"><span class="ci-dot good"></span>` +
+                      `<span class="ci-arr-n">${escapeHtml(r.name)}</span>` +
+                      `<small>${escapeHtml(atTime(r.checkedInAt))}</small></div>`
+                  )
+                  .join("")
+              : '<p class="muted" style="font-size:13px;margin:0">Nobody yet.</p>';
+          } catch (err) {
+            arrivedCount.textContent = "—";
+            arrived.innerHTML =
+              '<p class="muted" style="font-size:13px;margin:0">Couldn\'t load the list.</p>';
           }
         }
 
-        let busy = false;
+        // One scan at a time. The door is armed, a scan disarms it, and it only
+        // re-arms once the mascot has finished announcing the verdict — so a
+        // camera firing thirty frames a second cannot scan over the answer to
+        // the last person, and the volunteer always sees what happened.
+        let armed = true;
+        let cooldownUntil = 0;
         let lastCode = "";
-        let lastAt = 0;
+
         async function submitCode(code) {
           code = String(code || "").trim().toUpperCase();
-          if (!code || busy) return;
-          // A camera fires many frames a second; without this the same badge
-          // would be posted a dozen times before the first reply lands.
-          if (code === lastCode && Date.now() - lastAt < 4000) return;
-          lastCode = code; lastAt = Date.now();
-          busy = true;
+          if (!code || !armed) return;
+          // After re-arming, the same badge is usually still in front of the
+          // lens. A brief cooldown stops it re-announcing itself in a loop,
+          // while a deliberate re-scan a moment later still goes through and
+          // correctly reports "already checked in".
+          if (code === lastCode && Date.now() < cooldownUntil) return;
+
+          armed = false;
+          lastCode = code;
+          let res;
           try {
-            show(await api("/api/checkin", { method: "POST", body: JSON.stringify({ code }) }));
+            res = await api("/api/checkin", { method: "POST", body: JSON.stringify({ code }) });
           } catch (err) {
-            show({ status: "invalid", message: (err && err.message) || "Could not reach the server." });
-          } finally {
-            busy = false;
-            codeInput.value = "";
+            // A failed request is not a forged ticket. Say what actually
+            // happened, or the screen accuses a delegate of something the
+            // network did.
+            res = {
+              status: "offline",
+              message: (err && err.message) || "Could not reach the server. Nothing was recorded.",
+            };
           }
+
+          show(res);
+          codeInput.value = "";
+          if (res.status === "ok" || res.status === "already") refreshArrived();
+
+          const look = LOOK[res.status] || LOOK.invalid;
+          toast(announcement(res), look.toastType, () => {
+            cooldownUntil = Date.now() + 1500;
+            armed = true;
+            codeInput.focus({ preventScroll: true });
+          });
         }
 
         document.getElementById("manualForm").addEventListener("submit", (e) => {
           e.preventDefault();
           submitCode(codeInput.value);
         });
+
+        refreshArrived();
 
         // A ticket link opened on this device carries the code in the hash.
         if (location.hash.length > 1) submitCode(location.hash.slice(1));

@@ -112,13 +112,16 @@ function mascotStage(mood) {
 let __toast = null; // { my, finishFast(next) }
 let __toastSeq = 0;
 
-function toast(message, type = "success") {
-  const begin = () => __toastShow(String(message || ""), type);
+// onDone fires once the card has left the screen, however it left — timed out,
+// clicked away, or fast-forwarded by the next toast. The check-in door uses it
+// to re-arm the scanner, so the volunteer cannot scan over their own verdict.
+function toast(message, type = "success", onDone) {
+  const begin = () => __toastShow(String(message || ""), type, onDone);
   if (__toast) return __toast.finishFast(begin);
   begin();
 }
 
-function __toastShow(text, type) {
+function __toastShow(text, type, onDone) {
   const my = ++__toastSeq;
   const T =
     type === "error"
@@ -224,6 +227,11 @@ function __toastShow(text, type) {
     if (rider && fab) fab.classList.remove("away");
     if (my === __toastSeq) window.__mascotSayUntil = 0;
     if (__toast && __toast.my === my) __toast = null;
+    if (onDone) {
+      const cb = onDone;
+      onDone = null; // never twice, whichever way the card left
+      try { cb(); } catch (e) { console.log("toast onDone failed:", e && e.message); }
+    }
   };
 
   const exit = (fast, next) => {
@@ -1935,26 +1943,76 @@ const TK_SANS = "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
 const TK_MONO = "ui-monospace, Consolas, 'SF Mono', Menlo, monospace";
 const TK_EMOJI = "'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif";
 
-// Card-local geometry, in CSS px; the canvas renders at 2x so the print and
-// the phone screenshot both stay sharp. Every y below is measured from the top
-// of the white card, then offset by pad when it is drawn.
-const TK_G = { pad: 26, cw: 708, ch: 1102, head: 122, band: 250, perf: 530, r: 22, s: 2 };
+// Card-local geometry, in CSS px. Everything above the perforation is fixed;
+// the stub sizes itself around the QR, because the QR is drawn at whole
+// device pixels per module (see below) and so its exact size is not known
+// until the code has been read. The proportions target roughly 1:1.41, so the
+// ticket prints onto A-series paper without a band of waste down one side.
+const TK_G = { pad: 30, cw: 760, head: 104, band: 190, perf: 410, r: 24, s: 3 };
+const TK_QR_TARGET = 520; // design px the QR aims for — about 2/3 of the card
+// Only a hairline: a QR is generated with a four-module quiet zone already
+// inside it, which at this size is a wider white margin than any padding here
+// would add. Reserving another 18px on each side just shrank the code.
+const TK_QR_PAD = 10;
+const TK_QR_SCALE = 8; // px per module in the fetched QR; pinned, see below
 
-// The QR is asked for at s=16 so its natural pixel size (about 592px for the
-// check-in URL) already matches the 296pt box at 2x — no upscaling blur.
-function ticketQrImage(code) {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => resolve(null); // a QR-less ticket still carries the code
-    img.src = "/api/ticket/" + encodeURIComponent(code) + "/qr.png?s=16";
+// Read the QR back as a grid of modules rather than keeping it as an image.
+// Drawing a downloaded PNG into a box of a different size resamples it, and a
+// QR resampled by a non-integer factor gets modules a pixel wider than their
+// neighbours — the mush that reads as "low quality" and gives scanners the
+// most trouble. With the grid in hand the ticket can paint each module as a
+// whole number of device pixels at whatever size the layout wants.
+async function ticketQrModules(code) {
+  const img = await new Promise((resolve) => {
+    const im = new Image();
+    im.onload = () => resolve(im);
+    im.onerror = () => resolve(null); // a QR-less ticket still carries the code
+    // s is pinned rather than left to the endpoint's default: the sampling
+    // below looks at the centre of every TK_QR_SCALE-px module, so the client
+    // has to name the scale it is expecting.
+    im.src = "/api/ticket/" + encodeURIComponent(code) + "/qr.png?s=" + TK_QR_SCALE;
   });
+  if (!img || !img.naturalWidth) return null;
+  const S = TK_QR_SCALE;
+  const n = Math.round(img.naturalWidth / S); // modules across, quiet zone included
+  const off = document.createElement("canvas");
+  off.width = img.naturalWidth;
+  off.height = img.naturalHeight;
+  const c = off.getContext("2d", { willReadFrequently: true });
+  c.imageSmoothingEnabled = false;
+  c.drawImage(img, 0, 0);
+  const d = c.getImageData(0, 0, off.width, off.height).data;
+  const grid = [];
+  for (let my = 0; my < n; my++) {
+    const row = [];
+    for (let mx = 0; mx < n; mx++) {
+      const i = ((my * S + S / 2) * off.width + (mx * S + S / 2)) * 4;
+      row.push(d[i] < 128); // true = a dark module
+    }
+    grid.push(row);
+  }
+  return { n, grid };
 }
 
 async function ticketCanvas(reg, catIndex) {
   const G = TK_G;
+  const code = String(reg.ticketCode || "").toUpperCase();
+  const qr = code ? await ticketQrModules(code) : null;
+
+  // Whole device pixels per module, so no module is ever a pixel wider than
+  // the one beside it. The plate then wraps whatever that came to.
+  const mod = qr ? Math.max(1, Math.floor((TK_QR_TARGET * G.s) / qr.n)) : 0;
+  const qrSide = qr ? (mod * qr.n) / G.s : TK_QR_TARGET;
+  const plate = qrSide + TK_QR_PAD * 2;
+
+  const plateTop = G.perf + 26;
+  const codeY = plateTop + plate + 48;
+  const refY = codeY + 30;
+  const noteY = refY + 34;
+  const ch = noteY + 26;
+
   const W = G.cw + G.pad * 2;
-  const H = G.ch + G.pad * 2;
+  const H = ch + G.pad * 2;
   const cv = document.createElement("canvas");
   cv.width = W * G.s;
   cv.height = H * G.s;
@@ -1971,7 +2029,6 @@ async function ticketCanvas(reg, catIndex) {
   const stops = idx >= 0 ? TICKET_STOPS[idx % TICKET_STOPS.length] : ["#38bdf8", "#7c3aed"];
   const paid = !!reg.paid;
   const ref = "BC-" + String(reg.id || "").slice(0, 8).toUpperCase();
-  const code = String(reg.ticketCode || "").toUpperCase();
 
   function rrPath(x, top, w, h, r) {
     const rad = Math.min(r, w / 2, h / 2);
@@ -2011,13 +2068,13 @@ async function ticketCanvas(reg, catIndex) {
   function spaced(text, baseline, gap, color) {
     const chars = Array.from(text);
     let total = -gap;
-    for (const ch of chars) total += ctx.measureText(ch).width + gap;
+    for (const ch2 of chars) total += ctx.measureText(ch2).width + gap;
     let x = cx - total / 2;
     ctx.fillStyle = color;
     ctx.textAlign = "left";
-    for (const ch of chars) {
-      ctx.fillText(ch, x, baseline);
-      x += ctx.measureText(ch).width + gap;
+    for (const ch2 of chars) {
+      ctx.fillText(ch2, x, baseline);
+      x += ctx.measureText(ch2).width + gap;
     }
     return total;
   }
@@ -2026,12 +2083,12 @@ async function ticketCanvas(reg, catIndex) {
   const BACK = "#eef1fb";
   ctx.fillStyle = BACK;
   ctx.fillRect(0, 0, W, H);
-  rrPath(left, y(0), G.cw, G.ch, G.r);
+  rrPath(left, y(0), G.cw, ch, G.r);
   ctx.fillStyle = "#ffffff";
   ctx.fill();
 
   ctx.save();
-  rrPath(left, y(0), G.cw, G.ch, G.r);
+  rrPath(left, y(0), G.cw, ch, G.r);
   ctx.clip(); // keeps the two bands and the stub inside the rounded corners
   const head = ctx.createLinearGradient(left, 0, right, 0);
   head.addColorStop(0, "#38bdf8");
@@ -2045,24 +2102,32 @@ async function ticketCanvas(reg, catIndex) {
   ctx.fillStyle = band;
   ctx.fillRect(left, y(G.head), G.cw, G.band - G.head);
   ctx.fillStyle = "#f8f9ff";
-  ctx.fillRect(left, y(G.perf), G.cw, G.ch - G.perf);
+  ctx.fillRect(left, y(G.perf), G.cw, ch - G.perf);
   ctx.restore();
 
   // ---- header ----
-  ctx.font = "800 18px " + TK_SANS;
-  spaced("BANGALORE CONVENTION 2027", y(58), 1.8, "#ffffff");
-  ctx.font = "600 12px " + TK_SANS;
-  spaced("09–11 JULY 2027 · BANGALORE, INDIA", y(86), 1.4, "rgba(255,255,255,0.88)");
+  ctx.font = "800 19px " + TK_SANS;
+  spaced("BANGALORE CONVENTION 2027", y(50), 1.8, "#ffffff");
+  ctx.font = "600 12.5px " + TK_SANS;
+  spaced("09–11 JULY 2027 · BANGALORE, INDIA", y(78), 1.4, "rgba(255,255,255,0.9)");
 
   // ---- category band ----
-  ctx.font = "58px " + TK_EMOJI;
-  mid(icon, y(206), "#ffffff");
+  // The icon rides a white disc. Several of the category gradients share a hue
+  // with their own emoji, and an icon drawn straight onto the band sinks into
+  // it — it read as a smudge rather than a picture.
+  const chipY = y((G.head + G.band) / 2);
+  ctx.beginPath();
+  ctx.arc(cx, chipY, 33, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(255,255,255,0.95)";
+  ctx.fill();
+  ctx.font = "38px " + TK_EMOJI;
+  mid(icon, chipY + 14, "#111827");
 
   // ---- body ----
   ctx.font = "700 11.5px " + TK_SANS;
-  spaced("DELEGATE PASS · ADMIT ONE", y(300), 2.4, "#6b7280");
+  spaced("DELEGATE PASS · ADMIT ONE", y(232), 2.4, "#6b7280");
   const name = fit(String(reg.name || "Delegate"), G.cw - 80, 40, "800", TK_SANS);
-  mid(name, y(364), "#111827");
+  mid(name, y(292), "#111827");
   const line = fit(
     String(reg.categoryName || "Convention registration") + " · " + money(reg.amount),
     G.cw - 80,
@@ -2070,15 +2135,15 @@ async function ticketCanvas(reg, catIndex) {
     "600",
     TK_SANS
   );
-  mid(line, y(408), "#4b5563");
+  mid(line, y(330), "#4b5563");
 
   const pillText = paid ? "✓ PAID" : "⏳ PAYMENT PENDING";
   ctx.font = "800 13px " + TK_SANS;
   const pillW = ctx.measureText(pillText).width + 1.2 * (Array.from(pillText).length - 1) + 36;
-  rrPath(cx - pillW / 2, y(438), pillW, 34, 17);
+  rrPath(cx - pillW / 2, y(354), pillW, 34, 17);
   ctx.fillStyle = paid ? "#d9f4e6" : "#fdf0d4";
   ctx.fill();
-  spaced(pillText, y(460), 1.2, paid ? "#0b7a43" : "#8a6207");
+  spaced(pillText, y(376), 1.2, paid ? "#0b7a43" : "#8a6207");
 
   // ---- perforation: dashes across, notches bitten out of both edges ----
   ctx.save();
@@ -2086,49 +2151,55 @@ async function ticketCanvas(reg, catIndex) {
   ctx.strokeStyle = "#c7d2fe";
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(left + 18, y(G.perf));
-  ctx.lineTo(right - 18, y(G.perf));
+  ctx.moveTo(left + 20, y(G.perf));
+  ctx.lineTo(right - 20, y(G.perf));
   ctx.stroke();
   ctx.restore();
 
   // ---- the stub ----
-  const plate = 328;
   const plateX = cx - plate / 2;
-  const plateY = y(570);
-  rrPath(plateX, plateY, plate, plate, 16);
+  rrPath(plateX, y(plateTop), plate, plate, 18);
   ctx.fillStyle = "#ffffff";
   ctx.fill();
   ctx.strokeStyle = "#e2e6f8";
   ctx.lineWidth = 1.5;
   ctx.stroke();
 
-  const qr = code ? await ticketQrImage(code) : null;
   if (qr) {
-    ctx.drawImage(qr, plateX + 16, plateY + 16, plate - 32, plate - 32);
+    // Painted in device pixels with the page transform off, so every module
+    // lands on a whole pixel and no two of them differ in width.
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = "#000000";
+    const ox = Math.round((plateX + TK_QR_PAD) * G.s);
+    const oy = Math.round(y(plateTop + TK_QR_PAD) * G.s);
+    for (let my = 0; my < qr.n; my++) {
+      for (let mx = 0; mx < qr.n; mx++) {
+        if (qr.grid[my][mx]) ctx.fillRect(ox + mx * mod, oy + my * mod, mod, mod);
+      }
+    }
+    ctx.restore();
   } else {
     // The scanner is the convenience; the ten characters are the ticket.
-    ctx.font = "600 15px " + TK_SANS;
-    mid("QR couldn't be drawn —", plateY + plate / 2 - 8, "#8a91a8");
-    mid("read out the code below", plateY + plate / 2 + 16, "#8a91a8");
+    ctx.font = "600 16px " + TK_SANS;
+    mid("QR couldn't be drawn —", y(plateTop + plate / 2 - 8), "#8a91a8");
+    mid("read out the code below", y(plateTop + plate / 2 + 18), "#8a91a8");
   }
 
   if (code) {
-    ctx.font = "800 27px " + TK_MONO;
-    spaced(code, y(948), 5, "#111827");
+    ctx.font = "800 29px " + TK_MONO;
+    spaced(code, y(codeY), 5.5, "#111827");
   }
   ctx.font = "600 14px " + TK_MONO;
-  spaced(ref, y(980), 1.4, "#6b7280");
-  ctx.font = "500 13px " + TK_SANS;
-  mid("Show this at the door — we'll scan you straight in.", y(1018), "#8a91a8");
-  mid("If the QR won't scan, the code above works on its own.", y(1042), "#8a91a8");
-  ctx.font = "700 11px " + TK_SANS;
-  spaced("BANGALORE CONVENTION · NOT FOR RESALE", y(1076), 1.6, "#aab1c8");
+  spaced(ref, y(refY), 1.4, "#6b7280");
+  ctx.font = "500 13.5px " + TK_SANS;
+  mid("Show this at the door — if the QR won't scan, the code works on its own.", y(noteY), "#8a91a8");
 
   // Notches last, so they punch through the stub fill rather than sit on it.
   ctx.fillStyle = BACK;
   [left, right].forEach((edge) => {
     ctx.beginPath();
-    ctx.arc(edge, y(G.perf), 17, 0, Math.PI * 2);
+    ctx.arc(edge, y(G.perf), 18, 0, Math.PI * 2);
     ctx.fill();
   });
 

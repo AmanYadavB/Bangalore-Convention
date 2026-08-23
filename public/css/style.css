@@ -5802,6 +5802,29 @@ body:not(.draft) .tbd-card { display: none !important; }
 .ci-result.warn .ci-headline { color: var(--amber); }
 .ci-result.bad .ci-headline  { color: var(--red); }
 
+/* ---- Who has come through ---- */
+.ci-arrived-h {
+  display: flex; align-items: baseline; gap: 8px;
+  margin: 18px 0 8px; padding-top: 14px; border-top: 1px solid var(--border-soft);
+  font-size: 13.5px;
+}
+.ci-arrived-h .muted { margin-left: auto; font-size: 12px; }
+.ci-arrived { max-height: 260px; overflow-y: auto; }
+.ci-arr {
+  display: flex; align-items: center; gap: 9px; padding: 7px 0;
+  border-top: 1px solid var(--border-soft); font-size: 14px;
+}
+.ci-arr:first-child { border-top: 0; }
+.ci-arr-n { min-width: 0; overflow-wrap: anywhere; }
+.ci-arr small { margin-left: auto; color: var(--muted); white-space: nowrap; }
+
+/* The checked-in pill, on both the door list and the registrations page. */
+.pill.in {
+  background: color-mix(in srgb, var(--green) 16%, transparent);
+  color: var(--green);
+  border: 1px solid color-mix(in srgb, var(--green) 40%, transparent);
+}
+
 .ci-recent-h { font-size: 11px; font-weight: 700; letter-spacing: 1.3px; text-transform: uppercase; margin: 18px 0 6px; }
 .ci-recent { display: flex; align-items: center; gap: 9px; padding: 7px 0; border-top: 1px solid var(--border-soft); font-size: 14px; }
 .ci-recent small { margin-left: auto; color: var(--muted); }

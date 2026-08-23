@@ -59,6 +59,8 @@
         <select id="filter">
           <option value="">All registrations</option>
           <option value="paid">Paid only</option>
+          <option value="checkedin">Checked in</option>
+          <option value="notcheckedin">Not checked in</option>
           <option value="pending">Pending only</option>
         </select>
         <button class="btn small" id="export">Export CSV</button>
@@ -101,6 +103,10 @@
               ? r.paid
               : f === "pending"
               ? !r.paid
+              : f === "checkedin"
+              ? !!r.checkedInAt
+              : f === "notcheckedin"
+              ? !r.checkedInAt
               : r.categoryId === f.slice(4)); // "cat:<id>"
           return matchesQ && matchesF;
         });
@@ -140,6 +146,13 @@
           `<div class="reg-drow"><span class="muted">Status</span><span><span class="pill ${
             r.paid ? "paid" : "pending"
           }">${r.paid ? "Paid" : "Pending"}</span></span></div>` +
+          `<div class="reg-drow"><span class="muted">Check-in</span><span>${
+            r.checkedInAt
+              ? `<span class="pill in">\u2713 Checked in</span> <span class="muted" style="font-size:12px">${escapeHtml(
+                  new Date(r.checkedInAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })
+                )}</span>`
+              : '<span class="muted">Not yet</span>'
+          }</span></div>` +
           (r.notes
             ? `<div class="reg-drow"><span class="muted">Notes</span><span>${escapeHtml(r.notes)}</span></div>`
             : "") +
@@ -181,6 +194,7 @@
               <span class="m-nm">${escapeHtml(r.name)}</span><br>
               <span class="m-sub">${escapeHtml(r.categoryName)} · ${money(r.amount)}</span>
             </span>
+            ${r.checkedInAt ? '<span class="m-chip pill in">\u2713 in</span>' : ""}
             <span class="m-chip pill ${r.paid ? "paid" : "pending"}">${r.paid ? "✓" : "…"}</span>
           </button>`
           )
@@ -195,6 +209,8 @@
         document.getElementById("filter").innerHTML =
           '<option value="">All registrations</option>' +
           '<option value="paid">Paid only</option>' +
+          '<option value="checkedin">Checked in</option>' +
+          '<option value="notcheckedin">Not checked in</option>' +
           '<option value="pending">Pending only</option>' +
           '<option value="" disabled>── categories ──</option>' +
           pricing.map((c) => `<option value="cat:${c.id}">${escapeHtml(c.name)}</option>`).join("");

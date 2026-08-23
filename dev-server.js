@@ -183,6 +183,21 @@ async function handleApi(req, res, url) {
   const id = parts[2];
   const body = req.method === "POST" || req.method === "PATCH" ? await readBody(req) : {};
 
+  // ---- Auth, faked ----
+  // The real Worker gates every staff page behind a D1 session. Locally there
+  // is no D1, so /api/auth/me used to 404 — which made requireUser() return
+  // null and the staff pages (check-in included) attach no handlers at all and
+  // sit there looking functional. A standing developer session keeps local dev
+  // honest to what a signed-in committee member actually sees.
+  if (resource === "auth" && parts[2] === "me") {
+    return json(res, {
+      authenticated: true,
+      sessionMethod: "dev",
+      user: { id: "dev", email: "dev@localhost", name: "Local Developer", role: "developer" },
+    });
+  }
+  if (resource === "auth" && parts[2] === "logout") return json(res, { ok: true });
+
   if (resource === "pricing") return json(res, PRICING);
 
   if (resource === "chat" && req.method === "POST") {
@@ -243,6 +258,30 @@ async function handleApi(req, res, url) {
       "cache-control": "private, max-age=86400",
     });
     return res.end(out);
+  }
+
+  // ---- Check-in ----
+  // Mirrors the Worker's decision logic so the door screen can actually be
+  // exercised with `npm run dev`. The date window is off here for the same
+  // reason it is off in the Worker right now: nothing is testable if every
+  // ticket answers "not yet" for the next year.
+  if (resource === "checkin" && req.method === "POST") {
+    const code = String(body.code || "").trim().toUpperCase();
+    if (!code) return json(res, { error: "No ticket code." }, 400);
+    const reg = registrations.find(
+      (r) => String(r.ticketCode || "").toUpperCase() === code
+    );
+    if (!reg) return json(res, { status: "invalid", message: "Not a ticket we issued." });
+
+    const who = { name: reg.name, category: reg.categoryName, ticketCode: reg.ticketCode };
+    if (!reg.paid)
+      return json(res, { status: "unpaid", message: "This registration was never paid.", ...who });
+    if (reg.checkedInAt)
+      return json(res, { status: "already", message: "Already checked in.", at: reg.checkedInAt, ...who });
+
+    reg.checkedInAt = new Date().toISOString();
+    reg.checkedInBy = "dev@localhost";
+    return json(res, { status: "ok", message: "Welcome in.", at: reg.checkedInAt, ...who });
   }
 
   if (resource === "registrations") {
