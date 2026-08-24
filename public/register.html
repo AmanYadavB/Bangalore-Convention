@@ -232,6 +232,10 @@
 
       async function confirmAndPay(btn) {
         const c = cat();
+        // Nothing is posted while bookings are shut — the visitor gets the
+        // same sentence here as on the home page, and the wizard stays exactly
+        // as they left it so nothing they typed is lost.
+        if (!(await ensureRegistrationsOpen())) return;
         btn.disabled = true;
         btn.textContent = "Confirming…";
         try {

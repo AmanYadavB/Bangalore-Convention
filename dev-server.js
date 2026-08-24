@@ -243,6 +243,23 @@ async function handleApi(req, res, url) {
     }
   }
 
+  // Mirrors the Worker's REGISTRATIONS_OPEN switch and check-in window so the
+  // "not live yet" popups and the door dates can be exercised locally.
+  const registrationsOpen = () => String(key("REGISTRATIONS_OPEN") || "0") === "1";
+  const REGISTRATIONS_CLOSED_MESSAGE =
+    "Registrations aren't live yet. We're still putting the final pieces in " +
+    "place — bookings for 9–11 July 2027 open shortly, and the site will say so " +
+    "the moment they do.";
+
+  if (resource === "site" && req.method === "GET") {
+    return json(res, {
+      registrationsOpen: registrationsOpen(),
+      registrationsMessage: REGISTRATIONS_CLOSED_MESSAGE,
+      checkinOpens: key("CHECKIN_OPENS_IST") || "2027-07-09",
+      checkinCloses: key("CHECKIN_CLOSES_IST") || "2027-07-11",
+    });
+  }
+
   // GET /api/ticket/:code/qr.png|qr.svg — same contract as the Worker's, so
   // the confirmation QR and the downloadable ticket both work offline.
   if (resource === "ticket" && id && req.method === "GET") {
@@ -276,6 +293,28 @@ async function handleApi(req, res, url) {
     const who = { name: reg.name, category: reg.categoryName, ticketCode: reg.ticketCode };
     if (!reg.paid)
       return json(res, { status: "unpaid", message: "This registration was never paid.", ...who });
+
+    // The same 9-11 July gate the Worker applies. IST, because every date on
+    // this site is IST and a ticket must not open the door a day early just
+    // because the laptop is set to another zone.
+    const opens = key("CHECKIN_OPENS_IST") || "2027-07-09";
+    const closes = key("CHECKIN_CLOSES_IST") || "2027-07-11";
+    if (String(key("CHECKIN_ENFORCE_WINDOW") || "1") !== "0") {
+      const today = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+      if (today < opens)
+        return json(res, {
+          status: "early",
+          message: "Valid ticket — but check-in has not started yet.",
+          opens, closes, ...who,
+        });
+      if (today > closes)
+        return json(res, {
+          status: "late",
+          message: "Check-in closed after " + closes + ".",
+          opens, closes, ...who,
+        });
+    }
+
     if (reg.checkedInAt)
       return json(res, { status: "already", message: "Already checked in.", at: reg.checkedInAt, ...who });
 
@@ -287,6 +326,8 @@ async function handleApi(req, res, url) {
   if (resource === "registrations") {
     if (req.method === "GET") return json(res, registrations);
     if (req.method === "POST") {
+      if (!registrationsOpen())
+        return json(res, { error: REGISTRATIONS_CLOSED_MESSAGE, registrationsOpen: false }, 403);
       const cat = PRICING.find((c) => c.id === body.categoryId);
       if (!body.name || !body.email || !body.phone || !cat)
         return json(res, { error: "Name, email, phone and a valid category are required." }, 400);

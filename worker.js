@@ -311,6 +311,21 @@ async function getRegistrationByTicket(env, code) {
 // configurable because a venue change moves it, and it is compared in IST —
 // the gate is in Bangalore, and a UTC comparison would open the doors at
 // half past five in the morning on the wrong day.
+// Registrations are shut until the committee says otherwise. Deliberately
+// default-closed: a half-configured deploy should turn people away politely,
+// not take their money for an event that is not selling tickets yet. Flip
+// REGISTRATIONS_OPEN to "1" in wrangler.toml [vars] on the day.
+function registrationsOpen(env) {
+  return String(env.REGISTRATIONS_OPEN || "0") === "1";
+}
+
+// One sentence, defined once, so the popup on the home page, the popup on the
+// register screen and the API's own refusal cannot drift apart.
+const REGISTRATIONS_CLOSED_MESSAGE =
+  "Registrations aren't live yet. We're still putting the final pieces in " +
+  "place — bookings for 9–11 July 2027 open shortly, and the site will say so " +
+  "the moment they do.";
+
 function checkinWindow(env) {
   return {
     opens: env.CHECKIN_OPENS_IST || "2027-07-09",
@@ -2038,6 +2053,9 @@ const API_POLICY = [
 function isPublicApi(method, resource, parts) {
   // Public site data.
   if (resource === "pricing" && method === "GET") return true;
+  // Whether registrations are open has to be readable by a signed-out visitor
+  // — they are exactly who the answer is for.
+  if (resource === "site" && method === "GET") return true;
 
   // Anyone can register — that is the point of the site.
   if (resource === "registrations" && method === "POST" && !parts[2]) return true;
@@ -3704,6 +3722,20 @@ async function handleApi(request, env, ctx) {
     });
   }
 
+  // ---- Site state ----
+  // GET /api/site. What every page needs to know before it offers an action:
+  // whether registrations are open, and when the doors are. Public, tiny, and
+  // the single place the browser learns either fact.
+  if (resource === "site" && method === "GET") {
+    const { opens, closes } = checkinWindow(env);
+    return json({
+      registrationsOpen: registrationsOpen(env),
+      registrationsMessage: REGISTRATIONS_CLOSED_MESSAGE,
+      checkinOpens: opens,
+      checkinCloses: closes,
+    });
+  }
+
   // ---- Check-in ----
   // POST /api/checkin {code}. Staff only, and the outcome is a status rather
   // than a bare pass/fail: a volunteer at the door needs to know WHY a ticket
@@ -3724,12 +3756,12 @@ async function handleApi(request, env, ctx) {
       return json({ status: "unpaid", message: "This registration was never paid.", ...who });
     }
 
-    // The 9-11 July window is OFF while the committee tests check-in, because
-    // every real ticket would otherwise answer "not yet" for the next year.
-    // Set CHECKIN_ENFORCE_WINDOW = "1" before the convention to switch it back
-    // on; the dates themselves are already configurable above.
+    // The 9-11 July window is enforced: a ticket is good for the convention,
+    // not for the year around it. The dates are configurable above, and
+    // CHECKIN_ENFORCE_WINDOW = "0" lifts the window entirely for a rehearsal —
+    // but it has to be asked for now, rather than being the resting state.
     const { opens, closes } = checkinWindow(env);
-    if (String(env.CHECKIN_ENFORCE_WINDOW || "0") === "1") {
+    if (String(env.CHECKIN_ENFORCE_WINDOW || "1") !== "0") {
       const today = istDate(0);
       if (today < opens) {
         return json({
@@ -3761,6 +3793,12 @@ async function handleApi(request, env, ctx) {
     if (method === "GET" && !id) return json(await listRegistrations(env));
 
     if (method === "POST" && !id) {
+      // Checked before anything is validated or written. The two popups in the
+      // browser are a courtesy; this is the gate, and it is the reason a
+      // hand-rolled POST cannot book a place either.
+      if (!registrationsOpen(env)) {
+        return json({ error: REGISTRATIONS_CLOSED_MESSAGE, registrationsOpen: false }, 403);
+      }
       const name = (body.name || "").trim();
       const email = (body.email || "").trim();
       const phone = (body.phone || "").trim();

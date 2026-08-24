@@ -86,6 +86,20 @@ crons = ["*/10 * * * *"]
 # headers. NEVER derived from the Host header (host-header injection).
 AUTH_ORIGIN = "https://biaac.com"
 
+# ARE REGISTRATIONS LIVE?
+# "0" (the default) turns bookings away: the Register Now button and the
+# register screen's Confirm & Pay both explain that registrations are not
+# open yet, and POST /api/registrations refuses with the same sentence.
+# Set to "1" on the day bookings open. Nothing else needs changing.
+REGISTRATIONS_OPEN = "0"
+
+# THE CHECK-IN WINDOW. A ticket only opens the door on the days of the
+# convention; outside these dates the scanner answers "not yet" or "closed"
+# instead of admitting someone. Set CHECKIN_ENFORCE_WINDOW = "0" to lift the
+# window for a rehearsal — leaving it unset means the window is enforced.
+CHECKIN_OPENS_IST = "2027-07-09"
+CHECKIN_CLOSES_IST = "2027-07-11"
+
 # WHO CAN SIGN IN, AND AS WHAT.
 #
 # These two lists are the entire access-control system. There is no invite

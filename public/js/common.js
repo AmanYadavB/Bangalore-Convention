@@ -302,6 +302,10 @@ function mascotConfirm(opts) {
     const yesBtn = wrap.querySelector('[data-act="yes"]');
     noBtn.textContent = opts.cancelText || "Cancel";
     yesBtn.textContent = opts.confirmText || "Yes, go ahead";
+    // notice: there is nothing to decide, only something to be told. Same
+    // dialog, same mascot, one button — rather than a second component that
+    // would drift from this one.
+    if (opts.notice) noBtn.remove();
     document.body.appendChild(wrap);
     requestAnimationFrame(() => wrap.classList.add("show"));
     let settled = false;
@@ -1279,6 +1283,7 @@ function mountNav(active, opts) {
   mountHumanBar();
   mountLegalStrip();
   mountContentPage();
+  mountRegisterCtas();
 
   // Compare against what was just painted. (This used to compare against the
   // hint AFTER refreshUser had overwritten it — fresh against fresh, always
@@ -1803,6 +1808,71 @@ function mountMascot() {
     }
   });
   obs.observe(document.body, { attributes: true, attributeFilter: ["class"] });
+}
+
+// ---- Is the site taking bookings? -----------------------------------------
+// GET /api/site is the single place the browser learns this; the Worker
+// decides it from REGISTRATIONS_OPEN and refuses the POST on its own account,
+// so what follows is courtesy rather than security. Fetched once per page and
+// remembered, because several buttons may ask.
+let __siteState = null;
+function siteState() {
+  if (!__siteState) {
+    __siteState = api("/api/site").catch(() => ({
+      // Fail OPEN, not closed: if this one request hiccups, the click should
+      // reach the server, which knows the real answer and says so. Failing
+      // closed would invent a shutdown out of a dropped packet.
+      registrationsOpen: true,
+      registrationsMessage: "",
+    }));
+  }
+  return __siteState;
+}
+
+const REGISTRATIONS_CLOSED_FALLBACK =
+  "Registrations aren't live yet. Bookings for 9–11 July 2027 open shortly, " +
+  "and the site will say so the moment they do.";
+
+// The popup every "register" route shows while bookings are shut. Returns
+// true when the caller may carry on.
+async function ensureRegistrationsOpen() {
+  const st = await siteState();
+  if (st && st.registrationsOpen) return true;
+  await mascotConfirm({
+    notice: true,
+    mood: "worried",
+    title: "Registrations aren't live yet",
+    message: (st && st.registrationsMessage) || REGISTRATIONS_CLOSED_FALLBACK,
+    confirmText: "Got it",
+  });
+  return false;
+}
+
+// Any <a data-register-cta> becomes the popup instead of a trip to a page that
+// would only turn the visitor away at the last step. The href stays put as the
+// no-JS fallback, and as what the link says it does once bookings open.
+function mountRegisterCtas() {
+  // Anything wearing data-reg-state says out loud where things stand, so the
+  // hero cannot go on claiming registrations are open while every button
+  // says otherwise.
+  const labels = document.querySelectorAll("[data-reg-state]");
+  if (labels.length) {
+    siteState().then((st) => {
+      const open = !!(st && st.registrationsOpen);
+      labels.forEach((el) => {
+        el.textContent = open ? "Registrations open" : "Registrations opening soon";
+      });
+    });
+  }
+
+  document.querySelectorAll("[data-register-cta]").forEach((el) => {
+    el.addEventListener("click", async (e) => {
+      // preventDefault has to happen NOW, not after the await — by the time a
+      // promise settles the browser has already followed the link.
+      e.preventDefault();
+      if (await ensureRegistrationsOpen()) location.href = el.href;
+    });
+  });
 }
 
 // ---- Razorpay payment helper (used by register.html form AND in-chat booking) ----
@@ -2960,6 +3030,10 @@ function mountChat() {
 
     card.querySelector('[data-act="ok"]').addEventListener("click", async (ev) => {
       const btn = ev.currentTarget;
+      // The chat can book a place, so it is a register route like any other
+      // and closes with them. Without this it would be the one way in while
+      // the front door is shut.
+      if (!(await ensureRegistrationsOpen())) return;
       btn.disabled = true;
       btn.textContent = "Registering\u2026";
       if (!cat) {
