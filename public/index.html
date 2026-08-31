@@ -129,18 +129,18 @@
       </div>
 
       <div class="section-head">
-        <h2>Attractions in Bangalore</h2>
+        <h2>The Venue &amp; Attractions in Bangalore</h2>
       </div>
       <p class="muted" style="margin: -6px 0 16px; max-width: 62ch">
-        Quiet corners of the city — gardens, water and early mornings. Chosen
-        with the fellowship in mind, so there is nothing here you would have to
-        walk out of.
+        Start with where you'll actually be — RG Royal Hotel — then a few quiet
+        corners of the city worth a spare morning. Chosen with the fellowship in
+        mind, so there is nothing here you would have to walk out of.
       </p>
       <!-- The living wall: tiles breathe, and every few seconds one flips to
-           show why the place is worth the trip. Gradient placeholders until
-           real photographs land in img/gallery/ — set `img` on an entry in the
-           ATTRACTIONS manifest below and the tile and lightbox both use it. -->
-      <div class="mem-wall" id="memWall" aria-label="Peaceful places to visit in Bangalore"></div>
+           show why the place is worth the trip. Gradient placeholders where
+           `img` is null — set it on an entry in the ATTRACTIONS manifest below
+           (file lives in img/gallery/) and the tile and lightbox both use it. -->
+      <div class="mem-wall" id="memWall" aria-label="The venue and peaceful places to visit in Bangalore"></div>
     </div>
 
     <!-- "View Pricing" burst overlay (P2d) -->
@@ -201,15 +201,15 @@
         });
       })();
 
-      const CAT_ICONS = ["🎟️", "🌅", "🌞", "🌇", "👨‍👩‍👦", "👥", "🚪"];
+      const CAT_ICONS = ["🚪", "👥", "👨‍👩‍👦", "🎟️", "🌅", "🌞", "🌇"];
       const CAT_GRADS = [
+        "linear-gradient(140deg,#22d3ee,#3b82f6)",
+        "linear-gradient(140deg,#818cf8,#c084fc)",
+        "linear-gradient(140deg,#fb7185,#f59e0b)",
         "linear-gradient(140deg,#f59e0b,#ef4444)",
         "linear-gradient(140deg,#38bdf8,#5b5bf0)",
         "linear-gradient(140deg,#a78bfa,#7c3aed)",
         "linear-gradient(140deg,#34d399,#0ea5e9)",
-        "linear-gradient(140deg,#fb7185,#f59e0b)",
-        "linear-gradient(140deg,#818cf8,#c084fc)",
-        "linear-gradient(140deg,#22d3ee,#3b82f6)",
       ];
 
       // The "View Pricing" burst overlay, fed by the pricing fetch. (The
@@ -227,17 +227,21 @@
         const grid = document.getElementById("pburstGrid");
         const vpBtn = document.getElementById("viewPricingBtn");
         grid.innerHTML = pricing
-          .map(
-            (c, n) => `
+          .map((c, n) => {
+            // A category with a real photo (RG Royal Hotel room/venue shots)
+            // shows that instead of the icon+gradient placeholder.
+            const ph = c.image
+              ? `style="background-image:url(${c.image});background-size:cover;background-position:center"`
+              : `style="--ph:${CAT_GRADS[n % CAT_GRADS.length]}"`;
+            const face = c.image ? "" : CAT_ICONS[n % CAT_ICONS.length];
+            return `
           <a class="pb-card" style="--i:${n}" href="register.html?category=${encodeURIComponent(c.id)}">
-            <span class="pb-ph" style="--ph:${CAT_GRADS[n % CAT_GRADS.length]}" aria-hidden="true">${
-              CAT_ICONS[n % CAT_ICONS.length]
-            }</span>
+            <span class="pb-ph" ${ph} aria-hidden="true">${face}</span>
             <span class="pb-body"><b>${escapeHtml(c.name)}</b><small>${escapeHtml(
               c.description || ""
             )}</small><span class="pb-price">${money(c.price)}</span></span>
-          </a>`
-          )
+          </a>`;
+          })
           .join("");
 
         vpBtn.addEventListener("click", (e) => {
@@ -315,14 +319,17 @@
       // img/gallery/ and set `img` to use it in the tile and the lightbox.
       (() => {
         const ATTRACTIONS = [
-          { img: null, e: "🌳", t: "Cubbon Park", y: "City centre · free", q: "Three hundred acres in the middle of everything. A few trees in and the traffic simply stops existing.", g: "linear-gradient(150deg,#34d399,#0ea5e9)", h: 190 },
-          { img: null, e: "🌺", t: "Lalbagh Botanical Garden", y: "Glass House & lake", q: "Two-hundred-year-old trees and a lake loop. Walk it at opening time and you get the quietest hour in the city.", g: "linear-gradient(150deg,#f59e0b,#ef4444)", h: 160 },
-          { img: null, e: "💧", t: "Sankey Tank", y: "Malleswaram", q: "One slow lap of the water is a whole morning's thinking. Locals have walked it daily for decades.", g: "linear-gradient(150deg,#0ea5e9,#5b5bf0)", h: 210 },
-          { img: null, e: "🕯️", t: "Ramakrishna Math", y: "Basavanagudi", q: "A shrine, a reading room, and nobody in any hurry. Sit at the back as long as you like.", g: "linear-gradient(150deg,#a78bfa,#7c3aed)", h: 170 },
-          { img: null, e: "🪨", t: "Bugle Rock Park", y: "Beside the Bull Temple", q: "Granite outcrops and old shade trees. A place to sit rather than a place to see.", g: "linear-gradient(150deg,#fb7185,#f59e0b)", h: 150 },
-          { img: null, e: "🧘", t: "Art of Living Centre", y: "Kanakapura Road", q: "Guided meditation on a hilltop campus, open to visitors. Go for a morning session and leave the afternoon free.", g: "linear-gradient(150deg,#5b5bf0,#a78bfa)", h: 220 },
-          { img: null, e: "🌄", t: "Nandi Hills", y: "60 km north · sunrise", q: "Above the clouds by six in the morning. Worth one early alarm while you are here.", g: "linear-gradient(150deg,#38bdf8,#34d399)", h: 200 },
-          { img: null, e: "🚣", t: "Ulsoor Lake", y: "Central · boating", q: "Herons, rowing boats and a path that asks nothing of you.", g: "linear-gradient(150deg,#0ea5e9,#a78bfa)", h: 165 },
+          { img: "img/gallery/rg-royal-exterior.jpg", e: "🏨", t: "RG Royal Hotel", y: "The venue · Yeshwantpur", q: "Where the whole convention happens — sessions, stay and meals, all under one roof.", g: "linear-gradient(150deg,#f59e0b,#ef4444)", h: 190 },
+          { img: "img/gallery/rg-royal-lobby.jpg", e: "🛎️", t: "RG Royal Hotel — Lobby", y: "Check-in starts here", q: "First stop when you arrive — the front desk, and the start of the ticket queue.", g: "linear-gradient(150deg,#a78bfa,#7c3aed)", h: 170 },
+          { img: "img/gallery/rg-royal-dining.jpg", e: "🍽️", t: "RG Royal Hotel — Dining Hall", y: "All meals served here", q: "Breakfast, lunch, dinner and tea breaks for every registered guest, all three days.", g: "linear-gradient(150deg,#fb7185,#f59e0b)", h: 200 },
+          { img: "img/gallery/cubbon-park.jpg", e: "🌳", t: "Cubbon Park", y: "City centre · free", q: "Three hundred acres in the middle of everything. A few trees in and the traffic simply stops existing.", g: "linear-gradient(150deg,#34d399,#0ea5e9)", h: 190 },
+          { img: "img/gallery/lalbagh.jpg", e: "🌺", t: "Lalbagh Botanical Garden", y: "Glass House & lake", q: "Two-hundred-year-old trees and a lake loop. Walk it at opening time and you get the quietest hour in the city.", g: "linear-gradient(150deg,#f59e0b,#ef4444)", h: 160 },
+          { img: "img/gallery/sankey-tank.jpg", e: "💧", t: "Sankey Tank", y: "Malleswaram", q: "One slow lap of the water is a whole morning's thinking. Locals have walked it daily for decades.", g: "linear-gradient(150deg,#0ea5e9,#5b5bf0)", h: 210 },
+          { img: "img/gallery/ramakrishna-math.jpg", e: "🕯️", t: "Ramakrishna Math", y: "Basavanagudi", q: "A shrine, a reading room, and nobody in any hurry. Sit at the back as long as you like.", g: "linear-gradient(150deg,#a78bfa,#7c3aed)", h: 170 },
+          { img: "img/gallery/bugle-rock.jpg", e: "🪨", t: "Bugle Rock Park", y: "Beside the Bull Temple", q: "Granite outcrops and old shade trees. A place to sit rather than a place to see.", g: "linear-gradient(150deg,#fb7185,#f59e0b)", h: 150 },
+          { img: "img/gallery/art-of-living.jpg", e: "🧘", t: "Art of Living Centre", y: "Kanakapura Road", q: "Guided meditation on a hilltop campus, open to visitors. Go for a morning session and leave the afternoon free.", g: "linear-gradient(150deg,#5b5bf0,#a78bfa)", h: 220 },
+          { img: "img/gallery/nandi-hills.jpg", e: "🌄", t: "Nandi Hills", y: "60 km north · sunrise", q: "Above the clouds by six in the morning. Worth one early alarm while you are here.", g: "linear-gradient(150deg,#38bdf8,#34d399)", h: 200 },
+          { img: "img/gallery/ulsoor-lake.jpg", e: "🚣", t: "Ulsoor Lake", y: "Central · boating", q: "Herons, rowing boats and a path that asks nothing of you.", g: "linear-gradient(150deg,#0ea5e9,#a78bfa)", h: 165 },
         ];
         const GALLERY = ATTRACTIONS;
 

@@ -28,20 +28,24 @@ export const FACTS = {
   registerVia:
     "To register: Register page on this site, or I can book it right here in this chat.",
   aa: { founded: 1935, bigBookYear: 1939 },
+  venue: {
+    name: "RG Royal Hotel",
+    address: "19/1, Old 77, Near ISKCON Temple, Mahalakshmi Layout, Bangalore 560086",
+    mapsUrl: "https://share.google/JdGXdtflGIEztpihz",
+  },
 };
 
 // Things people ask about that are NOT confirmed yet. The bot must say so and
 // pivot instead of inventing. (A later phase turns these into staff-managed
 // rows with a confirmed/TBD status; until then the list is static.)
 export const UNKNOWNS = [
-  "exact venue address",
   "session schedule / programme",
   "speaker names",
   "refund or cancellation policy",
   "organiser phone numbers or emails",
-  "hotels near the venue",
+  "hotels near the venue (for guests not staying at RG Royal Hotel)",
   "wifi, parking or other venue facilities",
-  "travel directions to the venue itself",
+  "detailed transit directions to the venue (e.g. from the airport)",
 ];
 
 // Rendered into the system prompt. `managedFacts` is reserved for the phase
@@ -64,6 +68,7 @@ export function factsPromptBlock(managedFacts = []) {
   const lines = [
     "== WHAT YOU KNOW (reference material — deliver it in YOUR voice, never formally) ==",
     `- Dates: ${FACTS.event.dateDisplay}. Location: ${FACTS.event.city}.`,
+    `- Venue: ${FACTS.venue.name}, ${FACTS.venue.address}.`,
     `- ${FACTS.audience}`,
     "- Registration categories and prices:",
     priceLines,

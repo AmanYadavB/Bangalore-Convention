@@ -67,15 +67,15 @@
       mountNav("register");
 
       // ---- The Ticket Wizard: 3 steps, each stamping the live ticket ----
-      const CAT_ICONS = ["🎟️", "🌅", "🌞", "🌇", "👨‍👩‍👦", "👥", "🚪"];
+      const CAT_ICONS = ["🚪", "👥", "👨‍👩‍👦", "🎟️", "🌅", "🌞", "🌇"];
       const CAT_GRADS = [
+        "linear-gradient(140deg,#22d3ee,#3b82f6)",
+        "linear-gradient(140deg,#818cf8,#c084fc)",
+        "linear-gradient(140deg,#fb7185,#f59e0b)",
         "linear-gradient(140deg,#f59e0b,#ef4444)",
         "linear-gradient(140deg,#38bdf8,#5b5bf0)",
         "linear-gradient(140deg,#a78bfa,#7c3aed)",
         "linear-gradient(140deg,#34d399,#0ea5e9)",
-        "linear-gradient(140deg,#fb7185,#f59e0b)",
-        "linear-gradient(140deg,#818cf8,#c084fc)",
-        "linear-gradient(140deg,#22d3ee,#3b82f6)",
       ];
       const STEP_NAMES = ["Category", "Your details", "Ticket & pay"];
 
@@ -95,6 +95,13 @@
       const cat = () => (state.sel === null ? null : PRICING[state.sel]);
       const ico = (i) => CAT_ICONS[i % CAT_ICONS.length];
       const grad = (i) => CAT_GRADS[i % CAT_GRADS.length];
+      // A category with a real photo (RG Royal Hotel room/venue shots) shows
+      // that instead of the icon+gradient placeholder.
+      const bandStyle = (c, i) =>
+        c && c.image
+          ? `background-image:url(${c.image});background-size:cover;background-position:center`
+          : `background:${grad(i)}`;
+      const bandFace = (c, i) => (c && c.image ? "" : ico(i));
 
       function paintSteps() {
         stepsEl.innerHTML = STEP_NAMES.map(
@@ -107,10 +114,10 @@
 
       function paintTicket(retum) {
         const c = cat();
-        const band = c ? grad(state.sel) : "linear-gradient(140deg,#94a3b8,#64748b)";
-        const face = c ? ico(state.sel) : "🎟️";
+        const band = c ? bandStyle(c, state.sel) : "background:linear-gradient(140deg,#94a3b8,#64748b)";
+        const face = c ? bandFace(c, state.sel) : "🎟️";
         ticketEl.innerHTML =
-          `<div class="tk-band" style="background:${band}">${face}</div>` +
+          `<div class="tk-band" style="${band}">${face}</div>` +
           `<div class="tk-body"><span class="tk-kicker">Bangalore Convention · 09–11 July 2027</span>` +
           `<div class="tk-name">${
             state.name ? escapeHtml(state.name) : '<span class="tk-phname">Your name here</span>'
@@ -124,7 +131,7 @@
             (_, i) => `<i style="height:${5 + ((i * 7) % 12)}px"></i>`
           ).join("")}</span></div>`;
         miniEl.innerHTML =
-          `<span class="mt-ico" style="background:${band}">${face}</span>` +
+          `<span class="mt-ico" style="${band}">${face}</span>` +
           `<span class="mt-txt"><span class="mt-name">${
             state.name ? escapeHtml(state.name) : "Your ticket"
           }</span><br><span class="mt-cat">${c ? escapeHtml(c.name) : "pick a category"}</span></span>` +
@@ -155,7 +162,7 @@
             PRICING.map(
               (c, i) =>
                 `<button class="catcard${state.sel === i ? " sel" : ""}" data-i="${i}" type="button">` +
-                `<span class="cat-ph" style="background:${grad(i)}">${ico(i)}</span>` +
+                `<span class="cat-ph" style="${bandStyle(c, i)}">${bandFace(c, i)}</span>` +
                 `<span class="cat-nm">${escapeHtml(c.name)}</span><span class="cat-pr">${money(c.price)}</span></button>`
             ).join("") +
             `</div>`;

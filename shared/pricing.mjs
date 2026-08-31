@@ -5,49 +5,65 @@
 // dev-server.js, and hardcoded as prose inside both chat system prompts —
 // so a price change silently left the chatbot quoting the old numbers.
 // The prompt lines below are GENERATED from this array for that reason.
+//
+// `image` is a real photo (relative to /public) shown on the register-page
+// category cards, the home-page pricing burst, and the emailed ticket, in
+// place of the icon+gradient placeholder — set by worker.js/register.html/
+// index.html's own icon arrays when `image` is absent. Room categories use
+// an actual RG Royal Hotel room photo; the no-stay day passes each get a
+// different venue angle (convention hall / exterior / lobby / dining) since
+// there's no "room" to show and repeating one photo across all four looks
+// like a placeholder.
 
 export const PRICING = [
+  {
+    id: "single-sharing",
+    name: "Single Sharing",
+    description: "Private room for one. All meals & sessions included.",
+    price: 16000,
+    image: "img/rooms/single-sharing.jpg",
+  },
+  {
+    id: "twin-sharing",
+    name: "Twin Sharing",
+    description: "Room shared by two. All meals & sessions included.",
+    price: 13000,
+    image: "img/rooms/twin-sharing.jpg",
+  },
+  {
+    id: "triple-sharing",
+    name: "Triple Sharing",
+    description: "Room shared by three. All meals & sessions included.",
+    price: 10000,
+    image: "img/rooms/triple-sharing.jpg",
+  },
   {
     id: "full-event",
     name: "No Stay - Full Event",
     description: "All three days of the convention. Accommodation not included.",
     price: 6000,
+    image: "img/rooms/full-event.jpg",
   },
   {
     id: "friday-only",
     name: "No Stay - Friday Only",
     description: "Friday only. Accommodation not included.",
     price: 2000,
+    image: "img/rooms/friday-only.jpg",
   },
   {
     id: "saturday-only",
     name: "No Stay - Saturday Only",
     description: "Saturday only. Accommodation not included.",
     price: 3000,
+    image: "img/rooms/saturday-only.jpg",
   },
   {
     id: "sunday-only",
     name: "No Stay - Sunday Only",
     description: "Sunday only. Accommodation not included.",
     price: 2000,
-  },
-  {
-    id: "triple-sharing",
-    name: "With Stay - Triple Sharing",
-    description: "Room shared by three. All meals & sessions included.",
-    price: 10000,
-  },
-  {
-    id: "twin-sharing",
-    name: "With Stay - Twin Sharing",
-    description: "Room shared by two. All meals & sessions included.",
-    price: 13000,
-  },
-  {
-    id: "single-sharing",
-    name: "With Stay - Single Sharing",
-    description: "Private room for one. All meals & sessions included.",
-    price: 16000,
+    image: "img/rooms/sunday-only.jpg",
   },
 ];
 

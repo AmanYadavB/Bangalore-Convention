@@ -3508,6 +3508,14 @@ select.dd-native {
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+  /* Scrolls the same either way — just without the browser's scrollbar
+     chrome cutting into this centered overlay. */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.pburst-grid::-webkit-scrollbar {
+  display: none;
 }
 
 .pb-card {
@@ -3653,7 +3661,7 @@ select.dd-native {
 }
 .catcard:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--accent) 50%, var(--border)); }
 .catcard.sel { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent); }
-.catcard .cat-ph { height: 62px; display: grid; place-items: center; font-size: 24px; color: #fff; text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); }
+.catcard .cat-ph { height: 96px; display: grid; place-items: center; font-size: 24px; color: #fff; text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); }
 .catcard .cat-nm { display: block; padding: 8px 11px 2px; font-size: 12.5px; font-weight: 700; }
 .catcard .cat-pr { display: block; padding: 0 11px 9px; font-size: 14.5px; font-weight: 800; }
 

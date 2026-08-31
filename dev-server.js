@@ -104,7 +104,7 @@ function cannedReply(lastMsg) {
   if (/register|book|sign/.test(q))
     return "two ways — hit the Register page, or just tell me your details and I'll book it for you rn. which works?";
   if (/venue|where|place/.test(q))
-    return "ngl venue isn't confirmed yet, will be shared with registered guests — but Bangalore is the city fr. want me to help you get a spot first?";
+    return "RG Royal Hotel in Bangalore! that's where it's all happening. want me to help you get a spot?";
   if (/hi|hello|hey|yo\b/.test(q))
     return "heyyy! I've been folded inside this button waiting for someone to talk to. ask me anything about the convention fr";
   return "local dev mode here — I'm a canned reply since no GROQ_API_KEY is set, but the streaming and voice UI you're testing is 100% real. ask about dates, prices, or registering!";

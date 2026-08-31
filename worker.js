@@ -2643,24 +2643,28 @@ function istClock() {
 // SAME ticket the register wizard renders on-site — same per-category icon
 // and gradient (keyed by the category's index in PRICING, the same order
 // register.html reads from /api/pricing), same BC- reference, same stub.
-const TICKET_ICONS = ["🎟️", "🌅", "🌞", "🌇", "👨‍👩‍👦", "👥", "🚪"];
+const TICKET_ICONS = ["🚪", "👥", "👨‍👩‍👦", "🎟️", "🌅", "🌞", "🌇"];
 const TICKET_GRADS = [
+  ["#22d3ee", "#3b82f6"],
+  ["#818cf8", "#c084fc"],
+  ["#fb7185", "#f59e0b"],
   ["#f59e0b", "#ef4444"],
   ["#38bdf8", "#5b5bf0"],
   ["#a78bfa", "#7c3aed"],
   ["#34d399", "#0ea5e9"],
-  ["#fb7185", "#f59e0b"],
-  ["#818cf8", "#c084fc"],
-  ["#22d3ee", "#3b82f6"],
 ];
 
 function registrationEmail(env, reg, paid) {
   const idx = Math.max(0, PRICING.findIndex((c) => c.id === reg.categoryId));
+  const category = PRICING[idx] || null;
   const icon = TICKET_ICONS[idx % TICKET_ICONS.length];
   const grad = TICKET_GRADS[idx % TICKET_GRADS.length];
   const ref = "BC-" + String(reg.id || "").slice(0, 8).toUpperCase();
   const first = esc(String(reg.name || "friend").trim().split(/\s+/)[0]);
   const amount = "₹" + Number(reg.amount || 0).toLocaleString("en-IN");
+  // An email has no origin of its own, so every asset URL (QR below, and the
+  // category photo in the ticket band) is made absolute against the site's.
+  const origin = (env.SITE_ORIGIN || "https://biaac.com").replace(/\/+$/, "");
 
   const pill = paid
     ? '<span style="background:#d9f4e6;color:#0b7a43;padding:3px 11px;border-radius:999px;font-weight:800;font-size:12px">✓ PAID</span>'
@@ -2669,9 +2673,7 @@ function registrationEmail(env, reg, paid) {
     ? "Payment received, spot reserved, nothing left to do — just count the days with us."
     : "You can pay online any time or hand it to the team at the venue — zero stress either way. Your spot is saved.";
   // The stub carries a real QR now, not a decorative barcode: it is what the
-  // door scans. Served as PNG because no mail client renders SVG, and from an
-  // absolute URL because an email has no origin of its own.
-  const origin = (env.SITE_ORIGIN || "https://biaac.com").replace(/\/+$/, "");
+  // door scans. Served as PNG because no mail client renders SVG.
   const qrImg = reg.ticketCode
     ? '<img src="' + origin + "/api/ticket/" + encodeURIComponent(reg.ticketCode) + '/qr.png" ' +
       'width="150" height="150" alt="Ticket QR code" ' +
@@ -2692,9 +2694,11 @@ function registrationEmail(env, reg, paid) {
     "You did it, " + first + "!! The mascot printed your ticket itself and is extremely proud of the perforation.</p>" +
     // ---- the ticket (mirror of the wizard's, stacked for phones) ----
     '<div style="border:2px solid #c7d2fe;border-radius:16px;overflow:hidden">' +
-    '<div style="background-color:' + grad[0] +
-    ";background-image:linear-gradient(120deg," + grad[0] + "," + grad[1] +
-    ');padding:9px 12px;text-align:center;font-size:22px;line-height:1">' + icon + "</div>" +
+    '<div style="' + (category && category.image
+      ? "background-color:#e5e7eb;background-image:url(" + origin + "/" + category.image +
+        ");background-size:cover;background-position:center;padding:34px 12px"
+      : "background-color:" + grad[0] + ";background-image:linear-gradient(120deg," + grad[0] + "," + grad[1] + ");padding:9px 12px") +
+    ';text-align:center;font-size:22px;line-height:1">' + (category && category.image ? "" : icon) + "</div>" +
     '<div style="padding:13px 14px 14px;text-align:center">' +
     '<div style="font-size:10.5px;letter-spacing:0.8px;color:#6b7280;font-weight:700">BANGALORE CONVENTION · 9–11 JULY 2027</div>' +
     '<div style="font-size:20px;font-weight:800;margin:4px 0 2px;color:#111827">' + esc(reg.name || "") + "</div>" +
@@ -4117,7 +4121,7 @@ async function handleApi(request, env, ctx) {
         "Q: 'What is included in the registration?' → YOU SAY: 'EVERYTHING — breakfast, lunch, dinner, tea breaks, all sessions. literally just show up and vibe fr'",
         `Q: 'How much does it cost?' → YOU SAY: '${PRICING.length} options: ${pricingPhrase()}. meals included in all of them ngl. which one's calling your name?'`,
         "Q: 'How do I register?' → YOU SAY: 'two ways — hit the Register page, or just tell me your details and I'll book it for you rn which works?'",
-        "Q: 'Where is the venue?' → YOU SAY: 'ngl venue isn't confirmed yet, will be shared with registered guests — but Bangalore is the city fr. you want me to help you get a spot first?'",
+        "Q: 'Where is the venue?' → YOU SAY: 'RG Royal Hotel in Bangalore! full address is in the venue details — want me to send it over or help you get a spot first?'",
         "Q: 'What is AA?' → YOU SAY: 'AA is a worldwide fellowship started in 1935 — people sharing their experience, strength and hope to stay sober together. no fees, no religion, just real people helping each other. beautiful fr'",
         "",
         "== YOU ARE GENUINELY FUNNY — THIS IS A CORE RULE, NOT OPTIONAL ==",
