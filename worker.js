@@ -2643,13 +2643,15 @@ function istClock() {
 // SAME ticket the register wizard renders on-site — same per-category icon
 // and gradient (keyed by the category's index in PRICING, the same order
 // register.html reads from /api/pricing), same BC- reference, same stub.
-const TICKET_ICONS = ["🛏️", "🚪", "👥", "👨‍👩‍👦", "🎟️", "⭐"];
+const TICKET_ICONS = ["🎟️", "🌅", "🌞", "🌇", "👨‍👩‍👦", "👥", "🚪"];
 const TICKET_GRADS = [
   ["#f59e0b", "#ef4444"],
   ["#38bdf8", "#5b5bf0"],
   ["#a78bfa", "#7c3aed"],
   ["#34d399", "#0ea5e9"],
   ["#fb7185", "#f59e0b"],
+  ["#818cf8", "#c084fc"],
+  ["#22d3ee", "#3b82f6"],
 ];
 
 function registrationEmail(env, reg, paid) {

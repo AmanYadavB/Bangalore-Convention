@@ -8,28 +8,46 @@
 
 export const PRICING = [
   {
-    id: "without-stay",
-    name: "Without Stay",
-    description: "Full convention access. Accommodation not included.",
-    price: 1500,
-  },
-  {
-    id: "single-sharing",
-    name: "With Stay - Single Sharing",
-    description: "Private room for one. All meals & sessions included.",
+    id: "full-event",
+    name: "No Stay - Full Event",
+    description: "All three days of the convention. Accommodation not included.",
     price: 6000,
   },
   {
-    id: "double-sharing",
-    name: "With Stay - Double Sharing",
-    description: "Room shared by two. All meals & sessions included.",
-    price: 4200,
+    id: "friday-only",
+    name: "No Stay - Friday Only",
+    description: "Friday only. Accommodation not included.",
+    price: 2000,
+  },
+  {
+    id: "saturday-only",
+    name: "No Stay - Saturday Only",
+    description: "Saturday only. Accommodation not included.",
+    price: 3000,
+  },
+  {
+    id: "sunday-only",
+    name: "No Stay - Sunday Only",
+    description: "Sunday only. Accommodation not included.",
+    price: 2000,
   },
   {
     id: "triple-sharing",
     name: "With Stay - Triple Sharing",
     description: "Room shared by three. All meals & sessions included.",
-    price: 3200,
+    price: 10000,
+  },
+  {
+    id: "twin-sharing",
+    name: "With Stay - Twin Sharing",
+    description: "Room shared by two. All meals & sessions included.",
+    price: 13000,
+  },
+  {
+    id: "single-sharing",
+    name: "With Stay - Single Sharing",
+    description: "Private room for one. All meals & sessions included.",
+    price: 16000,
   },
 ];
 
@@ -37,15 +55,18 @@ export const findCategory = (id) => PRICING.find((c) => c.id === id);
 
 // Short labels the chatbot uses when quoting prices, cheapest first.
 const SHORT_LABEL = {
-  "without-stay": "no stay",
+  "friday-only": "Friday only",
+  "sunday-only": "Sunday only",
+  "saturday-only": "Saturday only",
+  "full-event": "full event, no stay",
   "triple-sharing": "triple sharing",
-  "double-sharing": "double",
-  "single-sharing": "solo room",
+  "twin-sharing": "twin sharing",
+  "single-sharing": "single room",
 };
 
 const byPrice = () => [...PRICING].sort((a, b) => a.price - b.price);
 
-// "₹1500 (no stay), ₹3200 triple sharing, ₹4200 double, ₹6000 solo room"
+// "₹2000 Friday only, ₹2000 Sunday only, ₹3000 Saturday only, ₹6000 full event, no stay, ₹10000 triple sharing, ₹13000 twin sharing, ₹16000 single room"
 export function pricingPhrase() {
   return byPrice()
     .map((c) => `₹${c.price} ${SHORT_LABEL[c.id] || c.name}`)
@@ -54,5 +75,5 @@ export function pricingPhrase() {
 
 // The full line injected into the chat system prompt.
 export function pricingPromptLine() {
-  return `Prices: ${pricingPhrase()}. Meals included in all of them.`;
+  return `Prices: ${pricingPhrase()}. Meals included for the days you attend.`;
 }

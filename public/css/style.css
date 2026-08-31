@@ -3496,8 +3496,18 @@ select.dd-native {
   display: grid;
   grid-template-columns: repeat(2, minmax(150px, 215px));
   gap: 16px;
-  padding: 0 14px;
+  padding: 64px 14px;
   transition: transform 0.15s ease-out;
+  /* More categories than fit one screen (7 now, was 4) need their own
+     scroll region — the overlay itself uses place-items:center, and a
+     centered flex/grid item clips unreachable overflow at both ends
+     instead of scrolling to it. Capping and scrolling this inner box
+     keeps the close button (absolute on .pburst, outside this box)
+     fixed in place while the cards underneath scroll. */
+  max-height: min(82vh, 680px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .pb-card {
