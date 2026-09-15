@@ -5,9 +5,18 @@ function currentTheme() {
   return localStorage.getItem("theme") || "daylight";
 }
 
+// Mirrors the --bg values in style.css for each theme. Kept in sync manually
+// since the browser chrome color can't read CSS custom properties itself.
+const THEME_COLORS = { daylight: "#f5f7fc", midnight: "#0b0f1a" };
+
 function applyTheme(name) {
   document.documentElement.setAttribute("data-theme", name);
   localStorage.setItem("theme", name);
+  // Tint the browser's own UI (address bar, and the status bar when
+  // installed/opened as an app) to match the page instead of staying a
+  // fixed color the theme toggle then clashes with.
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute("content", THEME_COLORS[name] || THEME_COLORS.daylight);
   // The theme control is the brand logo itself; the small corner badge on it
   // shows the theme a tap would switch TO.
   const hint = document.querySelector("#themeToggle .theme-hint");
