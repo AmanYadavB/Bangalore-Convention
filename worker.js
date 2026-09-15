@@ -2233,13 +2233,23 @@ async function applySpendLimits(env, ctx, request, { method, resource, parts, se
 const CSP = [
   "default-src 'self'",
   // checkout.razorpay.com is injected by common.js at payment time.
-  "script-src 'self' 'unsafe-inline' https://checkout.razorpay.com",
+  // static.cloudflareinsights.com is the Web Analytics beacon (see
+  // injectWebAnalytics) — only actually loaded when CF_WEB_ANALYTICS_TOKEN
+  // is set, but the CSP allowance is harmless to leave in either way.
+  // NOTE: the dashboard's "Automatic Setup" for this site is turned on but
+  // verified NOT firing — curl of the live homepage on 2026-09-15 showed
+  // proper Cloudflare proxy headers (server: cloudflare, cf-ray) but zero
+  // trace of the beacon in the actual HTML, which is almost certainly why
+  // 2 months of real traffic show as 0 visits. Automatic Setup's edge HTML
+  // rewrite apparently never reaches responses this Worker returns
+  // directly — hence injecting it here in code instead of relying on it.
+  "script-src 'self' 'unsafe-inline' https://checkout.razorpay.com https://static.cloudflareinsights.com",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com data:",
   "img-src 'self' data: https:",
   // data: is required — greeting audio is played from a base64 data URL.
   "media-src 'self' data: blob:",
-  "connect-src 'self' https://lumberjack.razorpay.com",
+  "connect-src 'self' https://lumberjack.razorpay.com https://cloudflareinsights.com",
   "frame-src https://api.razorpay.com https://checkout.razorpay.com",
   "object-src 'none'",
   "base-uri 'none'",
@@ -2299,7 +2309,29 @@ function withSecurityHeaders(res, env, url) {
   const type = h.get("content-type") || "";
   if (type.includes("text/html")) h.set("content-security-policy", CSP);
 
+  // Cloudflare Web Analytics: privacy-friendly (no cookies), free, gives a
+  // real "how many different people visited today" number in the CF
+  // dashboard — and, via getWebAnalyticsVisits, in the ops digest email.
+  // Injected here in code because the dashboard's own "Automatic Setup" for
+  // this site does not reach Worker-returned responses (verified by curl —
+  // see the CSP comment above); manual injection is the only path that
+  // actually lands the script in what visitors receive.
+  if (type.includes("text/html") && env.CF_WEB_ANALYTICS_TOKEN) {
+    return injectWebAnalytics(out, env.CF_WEB_ANALYTICS_TOKEN);
+  }
+
   return out;
+}
+
+// Exact markup Cloudflare's own "Manage site" page issues for biaac.com
+// (type="module", not defer — matched verbatim rather than assumed).
+function injectWebAnalytics(res, token) {
+  const tag =
+    '<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js" ' +
+    'data-cf-beacon=\'{"token": "' + token + '"}\'></script>';
+  return new HTMLRewriter()
+    .on("body", { element(el) { el.append(tag, { html: true }); } })
+    .transform(res);
 }
 
 // Small local helper — b64url -> bytes, for decoding the Google ID token body.
@@ -2468,6 +2500,65 @@ async function getWorkersAiNeurons(env) {
     }
   }
   return { ok: false, note: "AI analytics not available on this account/token" };
+}
+
+// Cloudflare Web Analytics (RUM): real "how many different people" today,
+// as opposed to the raw worker-invocation count above (which counts every
+// asset fetch, bot and health check too). biaac.com already has a Web
+// Analytics site (dash.cloudflare.com → Analytics & Logs → Web Analytics →
+// biaac.com → Manage site) — its "Automatic Setup" is ON but verified NOT
+// actually injecting the beacon into what this Worker serves (see the note
+// by injectWebAnalytics), which is why 2 months of real traffic show as 0.
+// CF_WEB_ANALYTICS_TOKEN is that same site's token/tag — used both to
+// manually inject the beacon (injectWebAnalytics) and, here, as the
+// GraphQL siteTag filter so this function reads that site's numbers. Find
+// it on the site's "Manage site" page, under its JS snippet. Like
+// getWorkersAiNeurons above, this talks to a GraphQL dataset this codebase
+// hasn't been able to exercise against a live token yet, so it degrades to
+// { ok: false } instead of breaking the digest if the field/dataset name
+// turns out wrong — check the `note` on the first real run and adjust the
+// field name here if so.
+async function getWebAnalyticsVisits(env) {
+  if (!env.CF_API_TOKEN || !env.CF_ACCOUNT_ID || !env.CF_WEB_ANALYTICS_TOKEN)
+    return { ok: false, note: "needs CF_API_TOKEN + CF_ACCOUNT_ID + CF_WEB_ANALYTICS_TOKEN" };
+  const end = new Date();
+  const start = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate()));
+  try {
+    const query =
+      "query($tag: String!, $site: String!, $start: Time!, $end: Time!) { viewer { accounts(filter: {accountTag: $tag}) { " +
+      "rumPageviewsAdaptiveGroups(filter: {siteTag: $site, datetime_geq: $start, datetime_leq: $end}, limit: 100) { count sum { visits } } } } }";
+    const res = await fetch("https://api.cloudflare.com/client/v4/graphql", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + env.CF_API_TOKEN, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query,
+        variables: {
+          tag: env.CF_ACCOUNT_ID,
+          site: env.CF_WEB_ANALYTICS_TOKEN,
+          start: start.toISOString(),
+          end: end.toISOString(),
+        },
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (data.errors && data.errors.length)
+      return { ok: false, note: data.errors[0].message || "graphql error" };
+    const rows =
+      (data.data &&
+        data.data.viewer &&
+        data.data.viewer.accounts &&
+        data.data.viewer.accounts[0] &&
+        data.data.viewer.accounts[0].rumPageviewsAdaptiveGroups) ||
+      [];
+    let pageviews = 0, visits = 0;
+    for (const r of rows) {
+      pageviews += r.count || 0;
+      visits += (r.sum && r.sum.visits) || 0;
+    }
+    return { ok: true, visits, pageviews };
+  } catch (e) {
+    return { ok: false, note: e && e.message ? e.message : String(e) };
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -2782,12 +2873,13 @@ async function sendOpsEmail(env, subject, html) {
 async function collectDashboardData(env) {
   const today = istDate(0);
   const yesterday = istDate(1);
-  const [usageToday, usageYesterday, dg, cf, ai, registrations, expenses, groqLimits] = await Promise.all([
+  const [usageToday, usageYesterday, dg, cf, ai, visitors, registrations, expenses, groqLimits] = await Promise.all([
     getUsage(env, today),
     getUsage(env, yesterday),
     getDeepgramBalance(env),
     getCloudflareRequests(env),
     getWorkersAiNeurons(env),
+    getWebAnalyticsVisits(env),
     listRegistrations(env),
     listExpenses(env),
     env.CONVENTION_KV.get("groq:limits", { type: "json" }),
@@ -2796,7 +2888,7 @@ async function collectDashboardData(env) {
   const collected = paid.reduce((s, r) => s + (r.amount || 0), 0);
   const spent = expenses.reduce((s, e) => s + (e.amount || 0), 0);
   const d = {
-    today, yesterday, usageToday, usageYesterday, dg, cf, ai, groqLimits,
+    today, yesterday, usageToday, usageYesterday, dg, cf, ai, visitors, groqLimits,
     regs: {
       count: registrations.length,
       paidCount: paid.length,
@@ -3010,7 +3102,8 @@ function buildDigestHtml(d, alerts) {
     alertHtml +
     dashSection("💰 Balances & platform",
       dashRow("Deepgram credit remaining", d.dg.ok ? "$" + d.dg.dollars.toFixed(2) : "unavailable", d.dg.ok ? "TTS voice budget" : d.dg.note) +
-      dashRow("Cloudflare requests (today, UTC)", d.cf.ok ? d.cf.requests.toLocaleString() : "n/a", d.cf.ok ? d.cf.errors + " errors · " + d.cf.subrequests.toLocaleString() + " subrequests" : d.cf.note)
+      dashRow("Cloudflare requests (today, UTC)", d.cf.ok ? d.cf.requests.toLocaleString() : "n/a", d.cf.ok ? d.cf.errors + " errors · " + d.cf.subrequests.toLocaleString() + " subrequests" : d.cf.note) +
+      dashRow("Unique visitors (today, UTC)", d.visitors.ok ? d.visitors.visits.toLocaleString() : "n/a", d.visitors.ok ? d.visitors.pageviews.toLocaleString() + " page views · real people, via Web Analytics" : d.visitors.note)
     ) +
     dashSection("🤖 AI usage today",
       dashRow("Chat requests", cmp(u.chatRequests, y.chatRequests), (u.voiceChats || 0) + " via voice") +

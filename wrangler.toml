@@ -163,6 +163,20 @@ DEEPGRAM_CREDIT_TOTAL = "200"
 #   CF_API_TOKEN   = create an API token with "Account Analytics: Read", then run
 #                    npx wrangler secret put CF_API_TOKEN
 CF_ACCOUNT_ID = "8d7633c4e9136784b6f1f567c35728ad"
+# Optional — enables the "Unique visitors" row (a real person-count, unlike
+# the raw Cloudflare requests row above which counts bots/assets too).
+# biaac.com already has a Web Analytics site (dash.cloudflare.com →
+# Analytics & Logs → Web Analytics → biaac.com). Its "Automatic Setup" is
+# ON but verified NOT actually injecting the beacon into what the Worker
+# serves — curled the live homepage on 2026-09-15, proper Cloudflare proxy
+# headers but no beacon anywhere in the HTML, which is why 2 months of real
+# traffic show as 0 visits. worker.js now injects it manually instead
+# (injectWebAnalytics), which needs this same site's token:
+#   1. Web Analytics → biaac.com → Manage site → find the token in its JS
+#      snippet (shown even though Automatic Setup was relying on it silently)
+#   2. CF_WEB_ANALYTICS_TOKEN = that value, set below (not a secret — it's
+#      visible in every page's HTML source once injected, same as before)
+CF_WEB_ANALYTICS_TOKEN = "7b482c4bddbe4967afa3dfdafb6b91e6"
 
 # ---- WhatsApp Cloud API ----
 # The "Phone number ID" from the API Setup page. Not a secret - it is useless
