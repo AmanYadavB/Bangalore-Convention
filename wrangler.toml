@@ -1,6 +1,7 @@
 name = "bangalore-convention"
 main = "worker.js"
 compatibility_date = "2024-11-01"
+workers_dev = true
 
 # Keep the production domain under Wrangler management. Without this entry,
 # deploys remove the custom-domain route configured in the dashboard.
