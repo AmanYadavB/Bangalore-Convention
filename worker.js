@@ -2819,6 +2819,98 @@ function sendRegistrationEmail(env, ctx, reg) {
   }
 }
 
+// Notify every configured admin individually so their addresses are not
+// exposed to one another. This is deliberately fire-and-forget: alert delivery
+// must never undo a registration, payment update, or deletion.
+function sendRegistrationAdminAlert(env, ctx, event, reg) {
+  if (!reg) return;
+  const recipients = Array.from(new Set(parseEmailList(env.STAFF_EMAILS)));
+  if (!recipients.length) {
+    console.log("registration admin alert skipped: STAFF_EMAILS has no recipients");
+    return;
+  }
+
+  const eventInfo = {
+    pending: {
+      subject: "New registration — payment pending",
+      title: "A new registration came in",
+      status: "UNPAID · PAYMENT PENDING",
+      mood: "wave",
+    },
+    paid: {
+      subject: "Registration marked paid",
+      title: "Payment marked paid",
+      status: "PAID",
+      mood: "happy",
+    },
+    unpaid: {
+      subject: "Registration marked unpaid",
+      title: "Registration marked unpaid",
+      status: "UNPAID · PAYMENT PENDING",
+      mood: "worried",
+    },
+    deleted: {
+      subject: "Registration deleted",
+      title: "A registration was deleted",
+      status: "DELETED · WAS " + (reg.paid ? "PAID" : "UNPAID"),
+      mood: "sad",
+    },
+  }[event];
+  if (!eventInfo) return;
+
+  const amount = "₹" + Number(reg.amount || 0).toLocaleString("en-IN");
+  const details = [
+    ["Status", eventInfo.status],
+    ["Name", reg.name],
+    ["Email", reg.email],
+    ["Mobile", reg.phone],
+    ["Package", reg.categoryName],
+    ["Amount", amount],
+    ["Registration ID", reg.id],
+    ["Ticket code", reg.ticketCode],
+    ["Payment ID", reg.paymentId],
+  ];
+  const bodyHtml =
+    '<div style="border:1px solid #e2e6f8;border-radius:12px;overflow:hidden;margin:18px 0">' +
+    '<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;font-size:14px">' +
+    details
+      .filter(([, value]) => value !== null && value !== undefined && value !== "")
+      .map(([label, value], index) =>
+        '<tr style="background:' + (index % 2 ? "#ffffff" : "#f7f8fe") + '">' +
+        '<td style="padding:10px 12px;color:#68728d;font-weight:600;white-space:nowrap">' + esc(label) + "</td>" +
+        '<td style="padding:10px 12px;color:#172033;font-weight:700;word-break:break-word">' + esc(value) + "</td>" +
+        "</tr>"
+      )
+      .join("") +
+    "</table></div>";
+  const siteOrigin = String(env.SITE_ORIGIN || env.AUTH_ORIGIN || "https://biaac.com").replace(/\/+$/, "");
+  const html = mascotEmail({
+    mood: eventInfo.mood,
+    logo: emailLogoUrl(env),
+    title: eventInfo.title,
+    intro: "Registration update · " + istClock() + " IST",
+    bodyHtml,
+    button: {
+      href: siteOrigin + "/registrations.html",
+      label: "Open registrations",
+    },
+  });
+
+  const work = Promise.allSettled(
+    recipients.map(async (to) => {
+      const result = await sendMail(env, to, "[Bangalore Convention] " + eventInfo.subject, html, {
+        toName: "Admin",
+        fromName: "Convention Registration Alerts",
+      });
+      if (!result.ok) {
+        console.log("registration admin alert failed (" + event + "): " + result.note);
+      }
+    })
+  );
+  if (ctx && ctx.waitUntil) ctx.waitUntil(work);
+  else void work;
+}
+
 // General mail sender. Magic links need to reach an arbitrary staff address,
 // so the recipient is a parameter — but see handleAuth: that address always
 // comes from a database row, never from a request body, which is what stops
@@ -3879,13 +3971,20 @@ async function handleApi(request, env, ctx) {
       // Staff review the transfer proof before invoking this route. Persist the
       // paid status first; retries and concurrent confirmations remain safe.
       let paidReg = item;
+      let statusChanged = false;
       if (!item.paid) {
-        paidReg = await markRegistrationPaid(env, id, "manual-bank-transfer");
-        if (!paidReg) paidReg = await getRegistration(env, id);
+        const marked = await markRegistrationPaid(env, id, "manual-bank-transfer");
+        if (marked) {
+          paidReg = marked;
+          statusChanged = true;
+        } else {
+          paidReg = await getRegistration(env, id);
+        }
       }
       if (!paidReg || !paidReg.paid) {
         return json({ error: "Could not confirm this payment. Refresh and try again." }, 409);
       }
+      if (statusChanged) sendRegistrationAdminAlert(env, ctx, "paid", paidReg);
 
       const claimedAt = await claimConfirmationEmail(env, id);
       if (!claimedAt) {
@@ -3942,12 +4041,16 @@ async function handleApi(request, env, ctx) {
         createdAt: new Date().toISOString(),
       };
       await insertRegistration(env, record);
-      // Email is intentionally held until staff verify the payment.
+      // The attendee email is held until payment verification; admins receive
+      // an alert now because a new registration is unpaid/pending.
+      sendRegistrationAdminAlert(env, ctx, "pending", record);
       return json(record, 201);
     }
 
     if (method === "DELETE" && id) {
+      const removedReg = await getRegistration(env, id);
       const removed = await deleteRegistration(env, id);
+      if (removed && removedReg) sendRegistrationAdminAlert(env, ctx, "deleted", removedReg);
       return removed ? json({ ok: true }) : json({ error: "Not found." }, 404);
     }
   }
@@ -4893,6 +4996,7 @@ async function handleApi(request, env, ctx) {
       const current = await getRegistration(env, registrationId);
       return json({ ok: true, registration: current, already: true });
     }
+    sendRegistrationAdminAlert(env, ctx, "paid", paidReg);
 
     // Fire-and-forget: a WhatsApp outage (or an unapproved template) must never
     // turn a successful payment into a failed request. No-ops until the
