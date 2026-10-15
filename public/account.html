@@ -289,11 +289,11 @@
         }
       });
 
-      // Developer-only: the live account list. Deleting ends the person's
+      // Admin-only: the live account list. Deleting ends the person's
       // sessions and wipes their password, but ACCESS itself still comes from
       // wrangler.toml — the server's response says so when that's the case.
       async function loadStaff() {
-        if (!hasRole("developer")) return;
+        if (!hasRole("staff")) return;
         document.getElementById("staffWrap").hidden = false;
         document.getElementById("accessNote").textContent =
           "Adding someone still happens in wrangler.toml (STAFF_EMAILS / DEVELOPER_EMAILS). " +

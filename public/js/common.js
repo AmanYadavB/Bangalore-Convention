@@ -2649,7 +2649,7 @@ function mountChat() {
       greeted = true;
       let greeting;
       if (hasRole("developer")) {
-        greeting = "owner mode! ask me anything — registrations, money, expenses. feed me more knowledge on the Feed AI page and I'll use it instantly.";
+        greeting = "developer mode! want to work on Reflections, Ops, or Feed AI?";
       } else if (isSignedIn()) {
         greeting = "hey! got live numbers ready — registrations, payments, pending, expenses. what do you need?";
       } else {

@@ -1914,14 +1914,14 @@ async function handleAuth(request, env, ctx, parts, url) {
     return json({ ok: true });
   }
 
-  // ---- Staff directory (developers) ---------------------------------------
+  // ---- Staff directory (admins) --------------------------------------------
   // Read-and-delete only. ADDING someone still happens in wrangler.toml —
   // the allowlist there is the authority on who may sign in, so deleting a
   // row here ends their sessions and wipes their password, but an email that
   // is still in STAFF_EMAILS/DEVELOPER_EMAILS can simply sign in again. The
   // response says so rather than pretending the delete was a full revocation.
   if (action === "staff" && method === "GET" && !sub) {
-    if (s.staff.role !== "developer") return json({ error: "Developer access required." }, 403);
+    if (s.staff.role !== "staff") return json({ error: "Admin access required." }, 403);
     const { results } = await env.CONVENTION_DB.prepare(
       `SELECT id, email, name, status, password_hash IS NOT NULL AS has_password,
               last_login_at, created_at FROM staff ORDER BY created_at ASC`
@@ -1944,7 +1944,7 @@ async function handleAuth(request, env, ctx, parts, url) {
   }
 
   if (action === "staff" && method === "DELETE" && sub) {
-    if (s.staff.role !== "developer") return json({ error: "Developer access required." }, 403);
+    if (s.staff.role !== "staff") return json({ error: "Admin access required." }, 403);
     if (sub === s.staff.id) return json({ error: "You can't delete your own account." }, 400);
     const target = await staffById(env, sub);
     if (!target) return json({ error: "Not found." }, 404);
@@ -1990,9 +1990,9 @@ async function handleAuth(request, env, ctx, parts, url) {
     });
   }
 
-  // ---- Audit log (developers) ---------------------------------------------
+  // ---- Audit log (admins) --------------------------------------------------
   if (action === "events" && method === "GET") {
-    if (s.staff.role !== "developer") return json({ error: "Developer access required." }, 403);
+    if (s.staff.role !== "staff") return json({ error: "Admin access required." }, 403);
     const limit = Math.min(Number(url.searchParams.get("limit")) || 100, 500);
     const type = url.searchParams.get("type");
     const q = type
@@ -4183,8 +4183,7 @@ async function handleApi(request, env, ctx) {
     // This previously trusted `body.role === "admin"`, so anyone could send
     // that one field and read live registration and financial figures through
     // the chatbot without any credential at all.
-    const dev = Boolean(session && session.staff.role === "developer");
-    const staff = Boolean(session);
+    const admin = Boolean(session && session.staff.role === "staff");
     // Voice mode: the user is listening, so we keep answers short and snappy so
     // the neural TTS returns quickly and there is far less to wait for.
     const voice = body.voice === true;
@@ -4299,12 +4298,12 @@ async function handleApi(request, env, ctx) {
     // branches below stay readable rather than being torn out mid-function.
     const wantsPage = false;
 
-    // Staff (admin/developer) get live figures so they can ask about numbers.
-    if (staff) {
+    // Only the admin role receives live registration and expense figures.
+    if (admin) {
       content.push(
         "",
         await buildDataSummary(env),
-        "When staff ask about numbers, answer directly and precisely from the LIVE EVENT DATA above, and answer ONLY the specific thing they asked about: a question about expenses, expenditure or spending gets expense figures only; a question about registrations or sign-ups gets registration figures only; a question about money collected or pending gets those figures only. Never mix registration details into an expense answer or expense details into a registration answer. Present money with the \u20b9 symbol."
+        "When admins ask about numbers, answer directly and precisely from the LIVE EVENT DATA above, and answer ONLY the specific thing they asked about: a question about expenses, expenditure or spending gets expense figures only; a question about registrations or sign-ups gets registration figures only; a question about money collected or pending gets those figures only. Never mix registration details into an expense answer or expense details into a registration answer. Present money with the \u20b9 symbol."
       );
     }
 
@@ -4372,7 +4371,7 @@ async function handleApi(request, env, ctx) {
     // budget. Everything else (data questions, normal chat) uses the fast
     // model so replies come back quickly.
     const models = ["@cf/meta/llama-3.1-8b-instruct-fast", "@cf/zai-org/glm-4.7-flash"];
-    const maxTokens = voice ? 170 : staff ? 340 : 280;
+    const maxTokens = voice ? 170 : admin ? 340 : 280;
     // 0.4 on every provider: low enough to curb sampling-driven fabrication
     // and rambling, high enough that the mascot voice doesn't go flat.
     const CHAT_TEMPERATURE = 0.4;
