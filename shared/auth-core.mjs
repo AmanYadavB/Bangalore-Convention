@@ -259,21 +259,18 @@ export function isValidEmail(raw) {
   return e.length >= 6 && e.length <= 254 && /^[^\s@]+@[^\s@.]+\.[^\s@]+$/.test(e);
 }
 
-// Two groups, and only two.
+// Two groups, and only two. `staff` is the admin/organising committee; its
+// permissions are separate from developer permissions (they do not inherit).
 //
-//   staff     — the organising committee. Registrations, dashboard, expenses,
-//               reflections. Everything they need to run the event.
-//   developer — the same, plus Ops (email digests, Deepgram/Cloudflare
-//               figures) and Feed AI (the knowledge base injected into every
-//               chat system prompt). Both are technical surfaces.
+//   staff     — registrations, check-in, dashboard, expenses
+//   developer — reflections, Ops, Feed AI
 //
 // Who is in which group is decided by config, not by a database row or an
 // invite flow — see resolveRoleFromConfig() in worker.js.
-export const ROLE_RANK = { staff: 1, developer: 2 };
-export const ROLES = Object.keys(ROLE_RANK);
+export const ROLES = ["staff", "developer"];
 
-export function roleAtLeast(role, needed) {
-  return (ROLE_RANK[role] || 0) >= (ROLE_RANK[needed] || 0);
+export function hasExactRole(role, needed) {
+  return ROLES.includes(role) && role === needed;
 }
 
 // Parses a comma-separated allowlist from config into normalised emails.
@@ -294,9 +291,9 @@ export function parseEmailList(raw) {
 
 export const PROTECTED_PAGES = {
   "/registrations.html": "staff",
+  "/checkin.html": "staff",
   "/dashboard.html": "staff",
   "/expenses.html": "staff",
-  "/account.html": "staff",
   // Developer surfaces. Ops runs the email digests and exposes billing
   // figures; Feed AI writes straight into the assistant's system prompt; and
   // Reflections can fire a PAID WhatsApp broadcast, one message per recipient.
@@ -305,8 +302,13 @@ export const PROTECTED_PAGES = {
   "/pages.html": "developer",
 };
 
+// The account settings screen is unavailable to both roles except for the
+// first-login password-setup flow, which the Worker allows narrowly.
+export const DISABLED_PAGES = new Set(["/account.html"]);
+
 export const PUBLIC_PAGES = [
   "/index.html",
+  "/about.html",
   "/register.html",
   "/privacy.html",
   "/login.html",

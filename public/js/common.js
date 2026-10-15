@@ -398,10 +398,6 @@ function formatDate(iso) {
 // password, plus the raw DEV_KEY in localStorage) is gone. Do not reintroduce
 // any auth state in localStorage: it is readable by any script on the origin.
 
-// Mirrors ROLE_RANK in shared/auth-core.mjs. Two groups: the committee, and
-// developers who additionally get Ops and Feed AI.
-const ROLE_ORDER = { staff: 1, developer: 2 };
-
 // Display-only cache so the nav can render on first paint instead of flashing
 // the signed-out menu. sessionStorage, not localStorage, and reconciled
 // against the server immediately on every page load.
@@ -441,14 +437,12 @@ function isSignedIn() {
 }
 
 function hasRole(needed) {
-  if (!CURRENT_USER) return false;
-  return (ROLE_ORDER[CURRENT_USER.role] || 0) >= (ROLE_ORDER[needed] || 0);
+  return Boolean(CURRENT_USER && CURRENT_USER.role === needed);
 }
 
-// Staff = anyone signed in. Kept as a name because several pages read well
-// with it, but it is no longer a client-side decision of any consequence.
+// Admin pages require the staff role; being signed in alone grants no role.
 function isStaff() {
-  return isSignedIn();
+  return hasRole("staff");
 }
 
 // Ask the server who we are. The only source of truth on the client.
@@ -498,6 +492,8 @@ const NAV_LINKS = [
   // the FAQ, as three sections. Someone deciding whether to register needs it
   // one click away; the policy pages below do not belong in a visitor's nav.
   { href: "about.html", label: "About", key: "about", icon: "🕊️" },
+  // Registration is public, but the developer workbench should not present it
+  // as one of that role's pages. Signed-out visitors and admins still see it.
   { href: "register.html", label: "Register", key: "register", icon: "📝" },
   { href: "reflections.html", label: "Reflections", key: "reflections", need: "developer", icon: "📖" },
   { href: "registrations.html", label: "Registrations", key: "registrations", need: "staff", icon: "🧾" },
@@ -506,8 +502,6 @@ const NAV_LINKS = [
   { href: "expenses.html", label: "Expenses", key: "expenses", need: "staff", icon: "💸" },
   { href: "ops.html", label: "Ops", key: "ops", need: "developer", icon: "🛠️" },
   { href: "pages.html", label: "Feed AI", key: "pages", need: "developer", icon: "🤖" },
-  // account.html is reached through the profile menu in the corner, not a
-  // nav link — that's where people look for it.
 ];
 
 function renderNav(active, opts) {
@@ -515,7 +509,11 @@ function renderNav(active, opts) {
   // Used by the forced password-setup screen: offering links the setup guard
   // would instantly bounce back is worse than offering none.
   const bare = opts && opts.links === false;
-  const links = bare ? [] : NAV_LINKS.filter((l) => !l.need || hasRole(l.need));
+  const links = bare
+    ? []
+    : NAV_LINKS.filter(
+        (l) => (!l.need || hasRole(l.need)) && !(l.key === "register" && hasRole("developer"))
+      );
   const user = currentUser();
 
   // There is no Sign in entry point in the nav, on purpose. The public pages
@@ -535,8 +533,7 @@ function renderNav(active, opts) {
           (user.email || "?").charAt(0).toUpperCase()
         )}</span>
         <b class="profile-email">${escapeHtml(user.email)}</b>
-        <span class="profile-role">${user.role === "developer" ? "Developer" : "Committee"}</span>
-        <a class="profile-item" role="menuitem" href="account.html"><span aria-hidden="true">👤</span>Your account</a>
+        <span class="profile-role">${user.role === "developer" ? "Developer" : "Admin"}</span>
         <button class="profile-item danger" role="menuitem" id="logoutBtn" type="button"><span aria-hidden="true">🚪</span>Sign out</button>
       </div>
     </div>`
@@ -2712,6 +2709,7 @@ function mountChat() {
   const PAGES = {
     home: "index.html",
     index: "index.html",
+    about: "about.html",
     register: "register.html",
     registration: "register.html",
     pricing: "index.html#pricing",
@@ -2719,7 +2717,7 @@ function mountChat() {
     dashboard: "dashboard.html",
     registrations: "registrations.html",
     expenses: "expenses.html",
-    account: "account.html",
+    checkin: "checkin.html",
     reflections: "reflections.html",
     ops: "ops.html",
     feed: "pages.html",
@@ -2728,6 +2726,7 @@ function mountChat() {
   const NAV_LABELS = {
     home: "Home",
     index: "Home",
+    about: "About",
     register: "Register",
     registration: "Register",
     pricing: "Pricing",
@@ -2735,7 +2734,7 @@ function mountChat() {
     dashboard: "Dashboard",
     registrations: "Registrations",
     expenses: "Expenses",
-    account: "Account",
+    checkin: "Check-in",
     reflections: "Reflections",
     ops: "Ops",
     feed: "Feed AI",
@@ -2746,7 +2745,7 @@ function mountChat() {
     dashboard: "staff",
     registrations: "staff",
     expenses: "staff",
-    account: "staff",
+    checkin: "staff",
     reflections: "developer",
     ops: "developer",
     feed: "developer",
@@ -2979,7 +2978,12 @@ function mountChat() {
       // just bounce them to the sign-in page.
       const need = PAGE_NEEDS[key];
       if (need && !hasRole(need)) {
-        addMsg("assistant", "The " + label + " page is for the organising team — you'd need to sign in first.");
+        const roleName = need === "staff" ? "Admin" : "Developer";
+        addMsg(
+          "assistant",
+          "The " + label + " page is available only to the " + roleName + " role" +
+            (isSignedIn() ? "." : " — please sign in first.")
+        );
         return;
       }
       if (isCurrentPage(target)) {

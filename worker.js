@@ -22,11 +22,9 @@ import {
   normalizeEmail,
   isValidEmail,
   parseEmailList,
-  ROLE_RANK,
-  ROLES,
-  roleAtLeast,
+  hasExactRole,
   PROTECTED_PAGES,
-  PAGE_ALLOWLIST,
+  DISABLED_PAGES,
   canonicalPage,
   safeNext,
   cookieName,
@@ -2138,7 +2136,7 @@ async function authorizeApi(request, env, ctx, { method, resource, parts, body, 
     return { response: json({ error: "Request blocked: missing or invalid CSRF token." }, 403) };
   }
 
-  if (!roleAtLeast(s.staff.role, needed)) {
+  if (!hasExactRole(s.staff.role, needed)) {
     audit(env, ctx, auditFrom(request, {
       type: "authz_deny",
       staffId: s.staff.id,
@@ -5104,6 +5102,27 @@ export default {
       return new Response("Bad request.", { status: 400 });
     }
 
+    if (DISABLED_PAGES.has(page)) {
+      const s = await readSession(request, env);
+      const firstLoginPasswordSetup = Boolean(
+        s &&
+          !s.staff.password_hash &&
+          ["magic", "code"].includes(s.session.method) &&
+          url.searchParams.get("setup") === "1"
+      );
+      if (!firstLoginPasswordSetup) {
+        return new Response("Not found.", { status: 404 });
+      }
+
+      // Keep the forced first-login password step working without exposing
+      // the normal account/settings screen to either role.
+      const assetRes = await env.ASSETS.fetch(request);
+      const out = new Response(assetRes.body, assetRes);
+      out.headers.set("cache-control", "private, no-store, max-age=0, must-revalidate");
+      out.headers.set("vary", "Cookie");
+      return withSecurityHeaders(out, env, url);
+    }
+
     const needed = PROTECTED_PAGES[page];
     if (needed) {
       const s = await readSession(request, env);
@@ -5114,7 +5133,7 @@ export default {
           authOrigin(env, request) + "/login.html?next=" + encodeURIComponent(next)
         );
       }
-      if (!roleAtLeast(s.staff.role, needed)) {
+      if (!hasExactRole(s.staff.role, needed)) {
         audit(env, ctx, auditFrom(request, {
           type: "authz_deny",
           staffId: s.staff.id,

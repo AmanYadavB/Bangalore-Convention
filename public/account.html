@@ -213,7 +213,7 @@
         document.getElementById("acctEmail").textContent = me.email;
         const role = document.getElementById("acctRole");
         role.hidden = false;
-        role.textContent = me.role === "developer" ? "Developer" : "Committee";
+        role.textContent = me.role === "developer" ? "Developer" : "Admin";
         paintMeta();
         document.getElementById("currentField").hidden = !me.hasPassword;
       }
