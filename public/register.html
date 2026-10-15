@@ -279,7 +279,7 @@
               `<div class="payment-prep-note"><span aria-hidden="true">✦</span><div><b>Your payment route is ready</b><small>Bookings open 15th October 2026. Registrations remain open while slots are available. Next, your booking reference and Trust bank details appear here.</small></div></div>` +
               `<div class="wiz-nav"><button class="btn ghost" id="wBack2" type="button">← Details</button><button class="btn primary" id="wPay" type="button">Make payment <span aria-hidden="true">→</span></button></div>`;
             d.querySelector("#wBack2").addEventListener("click", () => go(1));
-            d.querySelector("#wPay").addEventListener("click", (e) => makePayment(e.target));
+            d.querySelector("#wPay").addEventListener("click", (e) => makePayment(e.currentTarget));
           }
         }
         stageEl.appendChild(d);
@@ -297,13 +297,18 @@
 
       async function makePayment(btn) {
         const c = cat();
+        if (!btn || btn.disabled || state.registration) return;
+        const idleHTML = btn.innerHTML;
+        // Lock synchronously before any await so rapid taps cannot create
+        // duplicate registration requests (especially on touch screens).
+        btn.disabled = true;
+        btn.setAttribute("aria-busy", "true");
+        btn.textContent = "Preparing your transfer…";
         // Nothing is posted while bookings are shut — the visitor gets the
         // same sentence here as on the home page, and the wizard stays exactly
         // as they left it so nothing they typed is lost.
-        if (!(await ensureRegistrationsOpen())) return;
-        btn.disabled = true;
-        btn.textContent = "Preparing your transfer…";
         try {
+          if (!(await ensureRegistrationsOpen())) return;
           const record = await api("/api/registrations", {
             method: "POST",
             body: JSON.stringify({
@@ -322,8 +327,12 @@
           stageEl.scrollIntoView({ behavior: "smooth", block: "center" });
         } catch (err) {
           toast(err.message, "error");
-          btn.disabled = false;
-          btn.innerHTML = 'Make payment <span aria-hidden="true">→</span>';
+        } finally {
+          if (!state.registration) {
+            btn.disabled = false;
+            btn.removeAttribute("aria-busy");
+            btn.innerHTML = idleHTML;
+          }
         }
       }
 
