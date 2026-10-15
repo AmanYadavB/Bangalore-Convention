@@ -1916,7 +1916,7 @@ function showWhatsAppPaymentProof(record) {
       '<h3 id="paymentProofTitle">Send your payment proof</h3>' +
       '<p>WhatsApp to <strong>+91 97310 34500</strong> will open with your name, package, amount and booking reference ready. Attach your transfer screenshot or add the transaction ID before you send.</p>' +
       '<div class="proof-reference"><span>BOOKING REFERENCE</span><b>' + escapeHtml(ref) + '</b><small>' + escapeHtml(money(record.amount)) + ' · ' + escapeHtml(record.categoryName || "Convention registration") + '</small></div>' +
-      '<a class="btn primary proof-send" target="_blank" rel="noopener" href="' + whatsappUrl + '"><span aria-hidden="true">◉</span> Open WhatsApp · +91 97310 34500</a>' +
+      '<a class="btn primary proof-send" target="_blank" rel="noopener" href="' + whatsappUrl + '"><span aria-hidden="true">◉</span><span class="proof-send-label">Open WhatsApp</span><span class="proof-send-number">· +91 97310 34500</span></a>' +
       '<button type="button" class="btn ghost proof-later">I still need to make the transfer</button>' +
       '</section>';
     let settled = false;

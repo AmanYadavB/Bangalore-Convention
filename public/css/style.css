@@ -3676,9 +3676,9 @@ select.dd-native {
 .payment-prep-note b, .payment-proof-hint strong { display: block; color: var(--text); font-size: 12px; }
 .payment-prep-note small { display: block; margin-top: 2px; color: var(--muted); font-size: 11px; line-height: 1.45; }
 .payment-flow { display: grid; gap: 13px; }
-.payment-summary { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 3px 2px; }
-.payment-summary h2 { margin: 0; color: var(--text); font-size: clamp(24px, 3vw, 31px); font-weight: 850; letter-spacing: -.045em; line-height: 1.05; }
-.payment-summary strong { padding: 8px 13px; border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border)); border-radius: 12px; color: var(--accent-ink); background: color-mix(in srgb, var(--accent) 7%, var(--card)); font-size: clamp(20px, 2.5vw, 25px); font-weight: 850; letter-spacing: -.035em; white-space: nowrap; }
+.payment-summary { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 13px 16px; border: 1px solid color-mix(in srgb, var(--accent) 16%, var(--border)); border-radius: 16px; background: linear-gradient(105deg, color-mix(in srgb, var(--accent) 6%, var(--card)), var(--card) 72%); }
+.payment-summary h2 { margin: 0; color: var(--text); font-size: clamp(24px, 2.8vw, 29px); font-weight: 850; letter-spacing: -.045em; line-height: 1.05; }
+.payment-summary strong { flex: 0 0 auto; padding: 8px 13px; border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border)); border-radius: 12px; color: var(--accent-ink); background: color-mix(in srgb, var(--accent) 8%, var(--card)); font-size: clamp(19px, 2.2vw, 23px); font-weight: 850; letter-spacing: -.035em; white-space: nowrap; }
 .payment-route { display: flex; align-items: center; gap: 7px; padding: 2px 5px; }
 .route-stop { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 10px; font-weight: 700; white-space: nowrap; }
 .route-stop i { display: grid; width: 21px; height: 21px; place-items: center; border: 1px solid var(--border); border-radius: 50%; color: var(--muted); background: var(--card); font-size: 9px; font-style: normal; }
@@ -4837,18 +4837,29 @@ select.dd-native {
 .proof-reference span { color: var(--muted); font-size: 8px; font-weight: 850; letter-spacing: .1em; }
 .proof-reference b { grid-column: 2; grid-row: 1 / span 2; align-self: center; color: var(--text); font-size: 13px; letter-spacing: .07em; }
 .proof-reference small { color: var(--muted); font-size: 9px; }
-.proof-send { display: flex; width: 100%; align-items: center; justify-content: center; gap: 9px; padding: 12px 14px; border-radius: 12px; }
-.proof-send > span { font-size: 15px; }
+.proof-send { display: flex; width: 100%; align-items: center; justify-content: center; gap: 7px; padding: 12px 12px; border-radius: 12px; white-space: nowrap; }
+.proof-send > span { flex: 0 0 auto; font-size: 15px; }
+.proof-send-label, .proof-send-number { flex: 0 0 auto; }
+.proof-send-number { font-size: .94em; }
 .proof-later { margin-top: 8px; border-color: transparent; color: var(--muted); background: transparent; font-size: 11px; }
 .proof-later:hover { color: var(--text); background: var(--card-2); }
 
 @media (max-width: 520px) {
-  .payment-summary h2 { font-size: 23px; }
-  .payment-summary strong { padding: 7px 10px; font-size: 19px; }
+  .payment-summary { gap: 8px; padding: 11px 12px; }
+  .payment-summary h2 { font-size: 21px; }
+  .payment-summary strong { padding: 7px 9px; font-size: 18px; }
   .payment-route { gap: 4px; }
   .route-stop { gap: 4px; font-size: 9px; }
   .transfer-details-grid { grid-template-columns: 1fr; }
   .payment-proof-dialog { padding: 22px 18px 18px; }
+  .proof-send { gap: 6px; padding: 11px 9px; font-size: 12px; }
+}
+
+@media (max-width: 360px) {
+  .payment-summary h2 { font-size: 19px; }
+  .payment-summary strong { padding: 6px 8px; font-size: 16px; }
+  .payment-proof-dialog { padding-right: 12px; padding-left: 12px; }
+  .proof-send { gap: 5px; padding-right: 7px; padding-left: 7px; font-size: 11px; }
 }
 
 /* An equal-width, equal-height pair — always centered as a unit. */
