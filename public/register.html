@@ -155,20 +155,10 @@
       }
 
       function paymentFlowHTML(record) {
-        const ref = "BC-" + String(record.id || "").slice(0, 8).toUpperCase();
         const copyRow = (label, value, extraClass) =>
           `<div class="transfer-row ${extraClass || ""}"><span>${label}</span><strong>${escapeHtml(value)}</strong><button class="transfer-copy" type="button" data-copy-value="${escapeHtml(value)}" aria-label="Copy ${label}">Copy</button></div>`;
         return `
-          <section class="payment-flow" aria-labelledby="paymentFlowTitle">
-            <header class="payment-flow-hero">
-              <div class="payment-flow-top"><span class="payment-flow-kicker"><i></i> SECURE TRANSFER ROUTE</span><span class="payment-flow-count">01 <b>/</b> 03</span></div>
-              <div class="payment-flow-main">
-                <div><p class="payment-flow-overline">YOUR PLACE IS TAKING SHAPE</p><h2 id="paymentFlowTitle">Make your transfer</h2><p class="payment-flow-caption">Use the details below. We’ll confirm your place once the team verifies your payment.</p></div>
-                <div class="payment-total"><span>AMOUNT</span><strong>${money(record.amount)}</strong></div>
-              </div>
-              <div class="payment-reference"><span>BOOKING REFERENCE</span><b>${escapeHtml(ref)}</b><small>${escapeHtml(record.categoryName || "Convention registration")}</small></div>
-              <div class="payment-orbit" aria-hidden="true"><i></i><b>₹</b></div>
-            </header>
+          <section class="payment-flow" aria-label="Bank transfer details and confirmation">
             <div class="payment-route" aria-label="Payment steps">
               <div class="route-stop current"><i>1</i><span>Transfer</span></div><b class="route-line"></b><div class="route-stop"><i>2</i><span>Send proof</span></div><b class="route-line"></b><div class="route-stop"><i>3</i><span>Confirmed</span></div>
             </div>

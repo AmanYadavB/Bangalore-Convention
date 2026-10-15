@@ -3676,26 +3676,6 @@ select.dd-native {
 .payment-prep-note b, .payment-proof-hint strong { display: block; color: var(--text); font-size: 12px; }
 .payment-prep-note small { display: block; margin-top: 2px; color: var(--muted); font-size: 11px; line-height: 1.45; }
 .payment-flow { display: grid; gap: 13px; }
-.payment-flow-hero { position: relative; overflow: hidden; padding: 18px; border: 1px solid rgba(255,255,255,.13); border-radius: 19px; color: #f6f7ff; background: radial-gradient(circle at 88% 12%, rgba(98,85,245,.72), transparent 38%), radial-gradient(circle at 8% 100%, rgba(21,173,190,.33), transparent 40%), linear-gradient(135deg,#11172b,#202548 62%,#2b1c55); box-shadow: 0 16px 35px rgba(25,30,75,.2); }
-.payment-flow-hero::after { content: ""; position: absolute; right: -33px; bottom: -84px; width: 210px; height: 210px; border: 1px solid rgba(255,255,255,.14); border-radius: 50%; box-shadow: 0 0 0 19px rgba(255,255,255,.025), 0 0 0 39px rgba(255,255,255,.025); pointer-events: none; }
-.payment-flow-top, .payment-flow-main { position: relative; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.payment-flow-kicker, .payment-flow-count, .payment-flow-overline, .payment-total > span, .payment-reference > span { font-size: 9px; font-weight: 850; letter-spacing: .13em; }
-.payment-flow-kicker { display: flex; align-items: center; gap: 7px; color: #c7caff; }
-.payment-flow-kicker i { width: 7px; height: 7px; border-radius: 50%; background: #53e5c0; box-shadow: 0 0 12px #53e5c0; }
-.payment-flow-count { color: rgba(255,255,255,.7); }
-.payment-flow-count b { padding: 0 3px; color: #8f91b5; }
-.payment-flow-main { align-items: end; margin-top: 19px; }
-.payment-flow-overline { margin: 0 0 5px; color: #aeb4e8; }
-.payment-flow-hero h2 { margin: 0; color: #fff; font-size: clamp(21px, 3vw, 27px); letter-spacing: -.045em; }
-.payment-flow-caption { max-width: 310px; margin: 6px 0 0; color: #c3c8dd; font-size: 11px; line-height: 1.45; }
-.payment-total { position: relative; z-index: 2; flex: 0 0 auto; padding: 10px 12px; border: 1px solid rgba(255,255,255,.2); border-radius: 13px; background: rgba(255,255,255,.1); backdrop-filter: blur(8px); }
-.payment-total > span { display: block; color: #c6c9de; }
-.payment-total strong { display: block; margin-top: 2px; color: #fff; font-size: 20px; letter-spacing: -.04em; white-space: nowrap; }
-.payment-reference { position: relative; z-index: 1; display: flex; align-items: center; gap: 8px; margin-top: 17px; padding-top: 11px; border-top: 1px solid rgba(255,255,255,.15); }
-.payment-reference > span { color: #aeb4d2; }
-.payment-reference b { padding: 4px 7px; border: 1px solid rgba(255,255,255,.16); border-radius: 6px; color: #fff; background: rgba(255,255,255,.08); font-size: 10px; letter-spacing: .08em; }
-.payment-reference small { margin-left: auto; color: #c5c9dc; font-size: 9px; text-align: right; }
-.payment-orbit { position: absolute; top: 63px; right: 21px; display: grid; width: 18px; height: 18px; place-items: center; border: 1px solid rgba(255,255,255,.22); border-radius: 50%; color: #c5c9ff; font-size: 10px; }
 .payment-route { display: flex; align-items: center; gap: 7px; padding: 2px 5px; }
 .route-stop { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 10px; font-weight: 700; white-space: nowrap; }
 .route-stop i { display: grid; width: 21px; height: 21px; place-items: center; border: 1px solid var(--border); border-radius: 50%; color: var(--muted); background: var(--card); font-size: 9px; font-style: normal; }
@@ -4861,12 +4841,6 @@ select.dd-native {
 .proof-later:hover { color: var(--text); background: var(--card-2); }
 
 @media (max-width: 520px) {
-  .payment-flow-hero { padding: 15px; }
-  .payment-flow-main { align-items: start; }
-  .payment-total { padding: 8px 9px; }
-  .payment-total strong { font-size: 17px; }
-  .payment-reference { flex-wrap: wrap; }
-  .payment-reference small { flex: 1 0 100%; margin-left: 0; text-align: left; }
   .payment-route { gap: 4px; }
   .route-stop { gap: 4px; font-size: 9px; }
   .transfer-details-grid { grid-template-columns: 1fr; }
