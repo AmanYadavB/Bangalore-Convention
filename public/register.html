@@ -159,7 +159,7 @@
           `<div class="transfer-row ${extraClass || ""}"><span>${label}</span><strong>${escapeHtml(value)}</strong><button class="transfer-copy" type="button" data-copy-value="${escapeHtml(value)}" aria-label="Copy ${label}">Copy</button></div>`;
         return `
           <section class="payment-flow" aria-label="Bank transfer details and confirmation">
-            <div class="payment-summary"><h2>Make Payment</h2><strong>${money(record.amount)}</strong></div>
+            <div class="payment-summary"><h2>Make Payment</h2></div>
             <div class="payment-route" aria-label="Payment steps">
               <div class="route-stop current"><i>1</i><span>Transfer</span></div><b class="route-line"></b><div class="route-stop"><i>2</i><span>Send proof</span></div><b class="route-line"></b><div class="route-stop"><i>3</i><span>Confirmed</span></div>
             </div>
@@ -173,6 +173,7 @@
               </div>
             </section>
             <div class="payment-proof-hint"><span class="proof-hint-icon" aria-hidden="true">↗</span><div><strong>After you transfer</strong><p>Send your name, mobile, email and a screenshot or transaction ID to the organisers on WhatsApp.</p></div></div>
+            <div class="payment-amount-banner" aria-label="Amount to transfer"><div><span>AMOUNT TO TRANSFER</span><small>Use this amount for your bank transfer</small></div><strong>${money(record.amount)}</strong></div>
             <div class="payment-flow-actions"><button class="btn primary payment-confirm-btn" id="confirmPayment" type="button"><span>Confirm payment</span><i aria-hidden="true">→</i></button><small>Your status stays pending until the transfer is verified.</small></div>
           </section>`;
       }
