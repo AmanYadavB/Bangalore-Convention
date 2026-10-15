@@ -3676,6 +3676,9 @@ select.dd-native {
 .payment-prep-note b, .payment-proof-hint strong { display: block; color: var(--text); font-size: 12px; }
 .payment-prep-note small { display: block; margin-top: 2px; color: var(--muted); font-size: 11px; line-height: 1.45; }
 .payment-flow { display: grid; gap: 13px; }
+.payment-summary { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 3px 2px; }
+.payment-summary h2 { margin: 0; color: var(--text); font-size: clamp(24px, 3vw, 31px); font-weight: 850; letter-spacing: -.045em; line-height: 1.05; }
+.payment-summary strong { padding: 8px 13px; border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border)); border-radius: 12px; color: var(--accent-ink); background: color-mix(in srgb, var(--accent) 7%, var(--card)); font-size: clamp(20px, 2.5vw, 25px); font-weight: 850; letter-spacing: -.035em; white-space: nowrap; }
 .payment-route { display: flex; align-items: center; gap: 7px; padding: 2px 5px; }
 .route-stop { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 10px; font-weight: 700; white-space: nowrap; }
 .route-stop i { display: grid; width: 21px; height: 21px; place-items: center; border: 1px solid var(--border); border-radius: 50%; color: var(--muted); background: var(--card); font-size: 9px; font-style: normal; }
@@ -4840,6 +4843,8 @@ select.dd-native {
 .proof-later:hover { color: var(--text); background: var(--card-2); }
 
 @media (max-width: 520px) {
+  .payment-summary h2 { font-size: 23px; }
+  .payment-summary strong { padding: 7px 10px; font-size: 19px; }
   .payment-route { gap: 4px; }
   .route-stop { gap: 4px; font-size: 9px; }
   .transfer-details-grid { grid-template-columns: 1fr; }

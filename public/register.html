@@ -159,6 +159,7 @@
           `<div class="transfer-row ${extraClass || ""}"><span>${label}</span><strong>${escapeHtml(value)}</strong><button class="transfer-copy" type="button" data-copy-value="${escapeHtml(value)}" aria-label="Copy ${label}">Copy</button></div>`;
         return `
           <section class="payment-flow" aria-label="Bank transfer details and confirmation">
+            <div class="payment-summary"><h2>Make Payment</h2><strong>${money(record.amount)}</strong></div>
             <div class="payment-route" aria-label="Payment steps">
               <div class="route-stop current"><i>1</i><span>Transfer</span></div><b class="route-line"></b><div class="route-stop"><i>2</i><span>Send proof</span></div><b class="route-line"></b><div class="route-stop"><i>3</i><span>Confirmed</span></div>
             </div>
