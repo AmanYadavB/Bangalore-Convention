@@ -2974,11 +2974,13 @@ function mountChat() {
       const target = PAGES[key];
       if (!target) return;
       const label = NAV_LABELS[key] || key;
-      // Don't offer a door the visitor can't walk through — the server would
-      // just bounce them to the sign-in page.
+      // Don't offer a page the current visitor's role cannot open — the
+      // server enforces the same boundary on direct requests.
       const need = PAGE_NEEDS[key];
-      if (need && !hasRole(need)) {
-        const roleName = need === "staff" ? "Admin" : "Developer";
+      const roleBlocked = (need && !hasRole(need)) ||
+        (hasRole("developer") && ["register", "registration"].includes(key));
+      if (roleBlocked) {
+        const roleName = need === "developer" ? "Developer" : "Admin";
         addMsg(
           "assistant",
           "The " + label + " page is available only to the " + roleName + " role" +

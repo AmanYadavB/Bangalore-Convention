@@ -5122,6 +5122,22 @@ export default {
       return withSecurityHeaders(out, env, url);
     }
 
+    // Registration remains public to attendees, but signed-in developers do
+    // not get the admin-side Register page in their role-specific workspace.
+    if (page === "/register.html") {
+      const s = await readSession(request, env);
+      if (s && s.staff.role === "developer") {
+        audit(env, ctx, auditFrom(request, {
+          type: "authz_deny",
+          staffId: s.staff.id,
+          email: s.staff.email,
+          outcome: "deny",
+          detail: page + " is not assigned to developer",
+        }));
+        return redirectTo(authOrigin(env, request) + "/403.html?need=staff");
+      }
+    }
+
     const needed = PROTECTED_PAGES[page];
     if (needed) {
       const s = await readSession(request, env);
