@@ -315,9 +315,6 @@
             }),
           });
           state.registration = record;
-          api("/api/registrations/" + encodeURIComponent(record.id) + "/notify", {
-            method: "POST",
-          }).catch(() => {});
           paintStage();
           paintTicket(false);
           stageEl.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -389,7 +386,7 @@
                    <img src="/api/ticket/${encodeURIComponent(r.ticketCode)}/qr.svg"
                         alt="Your ticket QR code" width="180" height="180" />
                    <div class="tk-qr-code">${escapeHtml(r.ticketCode)}</div>
-                   <div class="tk-qr-note muted">Show this at the door, or keep a copy with the button below. The same code is in your email — and if the picture won't load, the ten characters work on their own.</div>
+                   <div class="tk-qr-note muted">Keep this QR for your records. Your ticket confirmation email will arrive after an admin verifies your payment.</div>
                  </div>`
               : ""}
             <p class="muted" style="font-size:13px;margin:16px 0 20px">
@@ -417,7 +414,7 @@
               toast("Ticket saved \u2014 QR and all. Show it at the door.", "party");
             } catch (err) {
               toast(
-                "Couldn't build the ticket image \u2014 the copy in your email carries the same QR.",
+                "Couldn't build the ticket image — after payment is verified, your confirmation email will include it.",
                 "error"
               );
             } finally {

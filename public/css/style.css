@@ -4129,9 +4129,8 @@ select.dd-native {
 .reg-drow:last-of-type { border-bottom: 0; }
 .reg-drow > span:last-child { text-align: right; overflow-wrap: anywhere; }
 
-/* Delete is the only action left on this panel now that paid/unpaid is not a
-   toggle anyone gets to flip. Set apart behind a rule and pushed to the end, so
-   the loudest control on a delegate's record is not the one that destroys it. */
+/* Payment confirmation and deletion are explicit admin actions. Keep them
+   grouped in a clear footer, with the destructive action visually distinct. */
 .reg-actions {
   display: flex;
   flex-wrap: wrap;

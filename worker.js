@@ -69,9 +69,9 @@ async function saveList(env, key, list) {
 //
 // In D1 a registration is a row. Adding one is an INSERT that cannot disturb
 // its neighbours, and the state changes that must happen exactly once (marking
-// paid, sending the pending email) are conditional UPDATEs whose guard lives in
-// the WHERE clause. Two simultaneous callers cannot both win: the second
-// matches no row and is told so.
+// paid, sending the confirmation email) are conditional UPDATEs whose guard
+// lives in the WHERE clause. Two simultaneous callers cannot both win: the
+// second matches no row and is told so.
 let dataTablesReady = false;
 
 const DATA_DDL = [
@@ -89,9 +89,9 @@ const DATA_DDL = [
      paid INTEGER NOT NULL DEFAULT 0,
      payment_id TEXT,
      paid_at TEXT,
+     confirmation_email_queued_at TEXT,
      order_id TEXT,
      order_amount INTEGER,
-     emailed_pending_at TEXT,
      created_at TEXT NOT NULL
    )`,
   `CREATE INDEX IF NOT EXISTS idx_registrations_created ON registrations (created_at)`,
@@ -129,9 +129,9 @@ function rowToRegistration(row) {
   };
   if (row.payment_id) r.paymentId = row.payment_id;
   if (row.paid_at) r.paidAt = row.paid_at;
+  if (row.confirmation_email_queued_at) r.confirmationEmailQueuedAt = row.confirmation_email_queued_at;
   if (row.order_id) r.orderId = row.order_id;
   if (row.order_amount != null) r.orderAmount = row.order_amount;
-  if (row.emailed_pending_at) r.emailedPendingAt = row.emailed_pending_at;
   if (row.ticket_code) r.ticketCode = row.ticket_code;
   if (row.checked_in_at) r.checkedInAt = row.checked_in_at;
   if (row.checked_in_by) r.checkedInBy = row.checked_in_by;
@@ -183,6 +183,7 @@ const DATA_MIGRATIONS = [
   "ALTER TABLE registrations ADD COLUMN ticket_code TEXT",
   "ALTER TABLE registrations ADD COLUMN checked_in_at TEXT",
   "ALTER TABLE registrations ADD COLUMN checked_in_by TEXT",
+  "ALTER TABLE registrations ADD COLUMN confirmation_email_queued_at TEXT",
   "CREATE UNIQUE INDEX IF NOT EXISTS idx_registrations_ticket ON registrations (ticket_code)",
 ];
 
@@ -255,16 +256,15 @@ async function insertRegistration(env, r) {
   await env.CONVENTION_DB.prepare(
     `INSERT INTO registrations
        (id, name, email, phone, city, gender, notes, category_id, category_name,
-        amount, paid, payment_id, paid_at, order_id, order_amount, emailed_pending_at,
-        created_at, ticket_code)
+        amount, paid, payment_id, paid_at, confirmation_email_queued_at, order_id,
+        order_amount, created_at, ticket_code)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(
     r.id, r.name, r.email, r.phone, r.city || "", r.gender || "", r.notes || "",
     r.categoryId, r.categoryName, Number(r.amount) || 0, r.paid ? 1 : 0,
-    r.paymentId || null, r.paidAt || null, r.orderId || null,
-    r.orderAmount == null ? null : Number(r.orderAmount),
-    r.emailedPendingAt || null, r.createdAt || new Date().toISOString(),
-    r.ticketCode
+    r.paymentId || null, r.paidAt || null, r.confirmationEmailQueuedAt || null,
+    r.orderId || null, r.orderAmount == null ? null : Number(r.orderAmount),
+    r.createdAt || new Date().toISOString(), r.ticketCode
   ).run();
   return r;
 }
@@ -276,9 +276,8 @@ async function setRegistrationOrder(env, id, orderId, orderAmount) {
   ).bind(orderId || null, orderAmount == null ? null : Number(orderAmount), id).run();
 }
 
-// `AND paid = 0` is the whole point: a double-submitted payment, or two edges
-// verifying the same callback, produces one winner and one no-op instead of two
-// "successful" writes racing over the same row.
+// `AND paid = 0` ensures a Razorpay callback and an admin bank-transfer
+// confirmation cannot race into duplicate paid-state writes.
 async function markRegistrationPaid(env, id, paymentId) {
   await ensureDataTables(env);
   const res = await env.CONVENTION_DB.prepare(
@@ -288,13 +287,14 @@ async function markRegistrationPaid(env, id, paymentId) {
   return getRegistration(env, id);
 }
 
-// Same shape of guard, so the pending-ticket email can only ever be claimed
-// once however many times the browser pings the endpoint.
-async function claimPendingEmail(env, id) {
+// Only an authenticated staff confirmation may claim the paid ticket email.
+// The conditional UPDATE also prevents duplicate emails from double-clicks
+// or two admins confirming the same transfer at once.
+async function claimConfirmationEmail(env, id) {
   await ensureDataTables(env);
   const at = new Date().toISOString();
   const res = await env.CONVENTION_DB.prepare(
-    "UPDATE registrations SET emailed_pending_at = ? WHERE id = ? AND paid = 0 AND emailed_pending_at IS NULL"
+    "UPDATE registrations SET confirmation_email_queued_at = ? WHERE id = ? AND paid = 1 AND confirmation_email_queued_at IS NULL"
   ).bind(at, id).run();
   return res.meta && res.meta.changes ? at : null;
 }
@@ -2024,6 +2024,7 @@ const API_POLICY = [
   // completely open to the internet before.
   ["GET", "registrations", "staff"],
   ["PATCH", "registrations", "staff"],
+  ["POST", "registrations", "staff", (parts) => Boolean(parts[2]) && parts[3] === "confirm-payment"],
   ["DELETE", "registrations", "staff"],
   ["GET", "expenses", "staff"],
   ["POST", "expenses", "staff"],
@@ -2059,13 +2060,6 @@ function isPublicApi(method, resource, parts) {
 
   // Anyone can register — that is the point of the site.
   if (resource === "registrations" && method === "POST" && !parts[2]) return true;
-
-  // "I'm back from Razorpay without paying" — the client pings this and the
-  // pending ticket email goes out. Safe public: needs the unguessable
-  // registration UUID, only ever sends the pending flavour, only once, and
-  // only while the booking is actually unpaid.
-  if (resource === "registrations" && method === "POST" && parts[2] && parts[3] === "notify")
-    return true;
 
   // The reflections list is the public WhatsApp-channel landing content, and
   // Meta itself fetches the card image when sending the daily template, so
@@ -2207,11 +2201,6 @@ async function applySpendLimits(env, ctx, request, { method, resource, parts, se
   if (resource === "payment" && parts[2] === "create-order") {
     const perIp = await rateLimit(env, "order:ip", ip, 10, 60 * 60);
     if (!perIp.allowed) return deny("order:ip", perIp);
-  }
-
-  if (resource === "registrations" && parts[3] === "notify") {
-    const perIp = await rateLimit(env, "notify:ip", ip, 10, 60 * 60);
-    if (!perIp.allowed) return deny("notify:ip", perIp);
   }
 
   return null;
@@ -2745,7 +2734,7 @@ const TICKET_GRADS = [
   ["#34d399", "#0ea5e9"],
 ];
 
-function registrationEmail(env, reg, paid) {
+function registrationEmail(env, reg) {
   const idx = Math.max(0, PRICING.findIndex((c) => c.id === reg.categoryId));
   const category = PRICING[idx] || null;
   const icon = TICKET_ICONS[idx % TICKET_ICONS.length];
@@ -2757,12 +2746,7 @@ function registrationEmail(env, reg, paid) {
   // category photo in the ticket band) is made absolute against the site's.
   const origin = (env.SITE_ORIGIN || "https://biaac.com").replace(/\/+$/, "");
 
-  const pill = paid
-    ? '<span style="background:#d9f4e6;color:#0b7a43;padding:3px 11px;border-radius:999px;font-weight:800;font-size:12px">✓ PAID</span>'
-    : '<span style="background:#fdf0d4;color:#8a6207;padding:3px 11px;border-radius:999px;font-weight:800;font-size:12px">⏳ PENDING</span>';
-  const payNote = paid
-    ? "Payment received, spot reserved, nothing left to do — just count the days with us."
-    : "Transfer the amount to the trust account and send your payment screenshot or transaction details on WhatsApp. Your place is confirmed once the team verifies it.";
+  const pill = '<span style="background:#d9f4e6;color:#0b7a43;padding:3px 11px;border-radius:999px;font-weight:800;font-size:12px">✓ PAID</span>';
   // The stub carries a real QR now, not a decorative barcode: it is what the
   // door scans. Served as PNG because no mail client renders SVG.
   const qrImg = reg.ticketCode
@@ -2779,7 +2763,7 @@ function registrationEmail(env, reg, paid) {
     '<div style="text-align:center;font-size:19px;letter-spacing:4px;margin-top:10px">🎊 🎉 🎊</div>' +
     '<h2 style="margin:6px 0 4px;text-align:center;font-size:23px;font-weight:900;' +
     "background:linear-gradient(90deg,#10b981,#5b5bf0,#7c3aed);-webkit-background-clip:text;background-clip:text;color:transparent\">" +
-    (paid ? "LET'S GOOOO — PAID &amp; IN!!" : "LET'S GOOOO — YOU'RE IN!!") +
+    "LET'S GOOOO — PAID &amp; IN!!" +
     "</h2>" +
     '<p style="color:#4b5563;text-align:center;margin:0 0 16px;line-height:1.65">' +
     "You did it, " + first + "!! The mascot printed your ticket itself and is extremely proud of the perforation.</p>" +
@@ -2806,7 +2790,7 @@ function registrationEmail(env, reg, paid) {
     "</div></div>" +
     '<p style="color:#8a91a8;font-size:12.5px;text-align:center;margin:14px 0 0;line-height:1.6">' +
     "Keep this email — the code above is your ticket. Show it at the door and we'll scan you straight in; " +
-    "if the picture doesn't load, the ten characters underneath work just as well. " + payNote + "</p>";
+    "if the picture doesn't load, the ten characters underneath work just as well. Payment received, spot reserved, nothing left to do — just count the days with us.</p>";
 
   const html =
     '<div style="background:#eef1fb;padding:22px 8px">' +
@@ -2819,18 +2803,17 @@ function registrationEmail(env, reg, paid) {
     '<p style="max-width:520px;margin:12px auto 0;text-align:center;color:#9aa1b9;font-size:11.5px;font-family:system-ui,sans-serif">Bangalore Convention 2027 · delivered by the site\'s little mascot 🤖<br>9–11 July 2027 · Bangalore, India</p>' +
     "</div>";
 
-  const subject = paid
-    ? "LET'S GOOOO — you're in AND paid!! 🎉 (" + ref + ")"
-    : "LET'S GOOOO — you're in!! 🎉 (" + ref + ")";
+  const subject = "LET'S GOOOO — you're in AND paid!! 🎉 (" + ref + ")";
   return { subject, html };
 }
 
-// Fire-and-forget, like the WhatsApp receipt: a mail hiccup must never break
-// a registration or a payment. The recipient is the STORED record's email.
-function sendRegistrationEmail(env, ctx, reg, paid) {
-  if (!reg || !reg.email) return;
+// Fire-and-forget: a mail hiccup must never undo a payment confirmation. This
+// function refuses unpaid records, and its only caller is the staff-confirm
+// route below. The recipient is always the STORED registration email.
+function sendRegistrationEmail(env, ctx, reg) {
+  if (!reg || !reg.email || !reg.paid) return;
   try {
-    const mail = registrationEmail(env, reg, paid);
+    const mail = registrationEmail(env, reg);
     const work = sendMail(env, reg.email, mail.subject, mail.html, { toName: reg.name || "" });
     if (ctx && ctx.waitUntil) ctx.waitUntil(work);
   } catch (e) {
@@ -3891,6 +3874,37 @@ async function handleApi(request, env, ctx) {
   if (resource === "registrations") {
     if (method === "GET" && !id) return json(await listRegistrations(env));
 
+    if (method === "POST" && id && parts[3] === "confirm-payment") {
+      const item = await getRegistration(env, id);
+      if (!item) return json({ error: "Not found." }, 404);
+
+      // Staff review the transfer proof before invoking this route. Persist the
+      // paid status first; retries and concurrent confirmations remain safe.
+      let paidReg = item;
+      if (!item.paid) {
+        paidReg = await markRegistrationPaid(env, id, "manual-bank-transfer");
+        if (!paidReg) paidReg = await getRegistration(env, id);
+      }
+      if (!paidReg || !paidReg.paid) {
+        return json({ error: "Could not confirm this payment. Refresh and try again." }, 409);
+      }
+
+      const claimedAt = await claimConfirmationEmail(env, id);
+      if (!claimedAt) {
+        return json({ ok: true, emailQueued: false, alreadyConfirmed: true, registration: paidReg });
+      }
+
+      const confirmedReg = { ...paidReg, confirmationEmailQueuedAt: claimedAt };
+      audit(env, ctx, auditFrom(request, {
+        type: item.paid ? "registration_confirmation_email_requested" : "registration_payment_confirmed",
+        staffId: session && session.staff && session.staff.id,
+        email: session && session.staff && session.staff.email,
+        detail: item.paid ? "paid registration confirmation email queued" : "manual bank transfer confirmed; paid ticket email queued",
+      }));
+      sendRegistrationEmail(env, ctx, confirmedReg);
+      return json({ ok: true, emailQueued: true, registration: confirmedReg });
+    }
+
     if (method === "POST" && !id) {
       // Checked before anything is validated or written. The two popups in the
       // browser are a courtesy; this is the gate, and it is the reason a
@@ -3930,31 +3944,9 @@ async function handleApi(request, env, ctx) {
         createdAt: new Date().toISOString(),
       };
       await insertRegistration(env, record);
-      // The browser asks the attendee to send payment proof by WhatsApp, then
-      // pings /:id/notify to send this pending registration by email as well.
+      // Email is intentionally held until staff verify the payment.
       return json(record, 201);
     }
-
-    // Send the pending bank-transfer registration email. Guarded
-    // three ways: the unguessable UUID is the capability, it only ever sends
-    // the pending flavour while the booking is really unpaid, and the
-    // emailedPendingAt flag makes it once-only however often it's called.
-    if (method === "POST" && id && parts[3] === "notify") {
-      const item = await getRegistration(env, id);
-      if (!item) return json({ error: "Not found." }, 404);
-      // The once-only guard is the UPDATE's WHERE clause rather than an if:
-      // two pings in the same instant cannot both claim the send.
-      const claimedAt = await claimPendingEmail(env, id);
-      if (!claimedAt) return json({ ok: true, skipped: true });
-      sendRegistrationEmail(env, ctx, { ...item, emailedPendingAt: claimedAt }, false);
-      return json({ ok: true });
-    }
-
-    // No PATCH route, deliberately. Paid is not an opinion staff can hold: a
-    // registration is paid because Razorpay verified a payment against it, and
-    // there is no legitimate reason to assert otherwise by hand. A refund or a
-    // correction belongs in the money trail, not in a toggle that leaves the
-    // gateway and this database disagreeing about what happened.
 
     if (method === "DELETE" && id) {
       const removed = await deleteRegistration(env, id);
@@ -4909,8 +4901,8 @@ async function handleApi(request, env, ctx) {
     // turn a successful payment into a failed request. No-ops until the
     // WHATSAPP_* config is in place.
     ctx.waitUntil(waSendConfirmation(env, paidReg, url.origin));
-    // The emailed ticket, paid flavour — same moment as the WhatsApp receipt.
-    sendRegistrationEmail(env, ctx, paidReg, true);
+    // Registration email is sent only after a staff member confirms payment
+    // from the registrations dashboard.
 
     return json({ ok: true, registration: paidReg });
   }

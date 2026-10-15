@@ -147,6 +147,9 @@
           `<div class="reg-drow"><span class="muted">Status</span><span><span class="pill ${
             r.paid ? "paid" : "pending"
           }">${r.paid ? "Paid" : "Pending"}</span></span></div>` +
+          `<div class="reg-drow"><span class="muted">Confirmation email</span><span>${
+            r.confirmationEmailQueuedAt ? "Queued " + escapeHtml(formatDate(r.confirmationEmailQueuedAt)) : "Waiting for admin confirmation"
+          }</span></div>` +
           `<div class="reg-drow"><span class="muted">Check-in</span><span>${
             r.checkedInAt
               ? `<span class="pill in">\u2713 Checked in</span> <span class="muted" style="font-size:12px">${escapeHtml(
@@ -158,6 +161,7 @@
             ? `<div class="reg-drow"><span class="muted">Notes</span><span>${escapeHtml(r.notes)}</span></div>`
             : "") +
           `<div class="reg-actions">
+            ${r.confirmationEmailQueuedAt ? "" : `<button class="btn primary" data-confirm-payment="${r.id}">${r.paid ? "Send confirmation email" : "Confirm payment & email ticket"}</button>`}
             <button class="btn danger" data-del="${r.id}">Delete</button>
           </div>`;
         if (retum) {
@@ -245,11 +249,32 @@
       document.getElementById("detailCard").addEventListener("click", async (e) => {
         const del = e.target.closest("[data-del]");
         const copy = e.target.closest("[data-copy]");
+        const confirmPayment = e.target.closest("[data-confirm-payment]");
         try {
-          // Paid/unpaid is not a switch anyone gets to flip: a registration is
-          // paid because Razorpay said so, and nothing else. The status below
-          // is a readout, not a control.
-          if (copy) {
+          if (confirmPayment) {
+            const id = confirmPayment.getAttribute("data-confirm-payment");
+            const r = ALL.find((x) => x.id === id);
+            if (!r || r.confirmationEmailQueuedAt) return;
+            const isAlreadyPaid = !!r.paid;
+            if (!(await mascotConfirm({
+              mood: "worried",
+              title: isAlreadyPaid ? "Queue the confirmation email?" : "Confirm this bank transfer?",
+              message: isAlreadyPaid
+                ? "This registration is already marked paid. Queue its official ticket confirmation email now?"
+                : "Only continue after checking the transfer proof. This marks the registration as paid and queues the ticket confirmation email to " + r.email + ".",
+              confirmText: isAlreadyPaid ? "Queue email" : "Confirm payment & email",
+              cancelText: "Go back",
+            }))) return;
+            confirmPayment.disabled = true;
+            confirmPayment.textContent = "Confirming…";
+            const result = await api(`/api/registrations/${id}/confirm-payment`, {
+              method: "POST",
+              body: JSON.stringify({}),
+            });
+            ALL = ALL.map((x) => x.id === id ? result.registration : x);
+            render();
+            toast(result.emailQueued ? "payment confirmed; ticket email queued" : "payment was already confirmed; email was already queued");
+          } else if (copy) {
             const r = ALL.find((x) => x.id === copy.getAttribute("data-copy"));
             if (!r) return;
             const text = [
@@ -282,6 +307,11 @@
             toast("registration deleted — the mascot needs a minute");
           }
         } catch (err) {
+          if (confirmPayment && confirmPayment.isConnected) {
+            const r = ALL.find((x) => x.id === confirmPayment.getAttribute("data-confirm-payment"));
+            confirmPayment.disabled = false;
+            confirmPayment.textContent = r && r.paid ? "Send confirmation email" : "Confirm payment & email ticket";
+          }
           toast(err.message, "error");
         }
       });

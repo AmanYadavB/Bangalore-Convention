@@ -1950,17 +1950,6 @@ function showWhatsAppPaymentProof(record) {
 // onSuccess(record) – called after payment succeeds OR if payment is skipped/dismissed
 //
 async function openRazorpay(record, onSuccess) {
-  // "Back from Razorpay without paying" — tell the server, which emails the
-  // pending ticket. Server-guarded: at most once, and only while unpaid, so
-  // calling it on every abandoned path is safe. Deliberately NOT called when
-  // a payment went through but verification failed — a "pay any time" email
-  // right after money left someone's account invites double payment.
-  const notifyPending = () => {
-    api("/api/registrations/" + encodeURIComponent(record.id) + "/notify", {
-      method: "POST",
-    }).catch(() => {});
-  };
-
   // Lazily load the Razorpay checkout SDK.
   if (!window.Razorpay) {
     await new Promise((resolve, reject) => {
@@ -1985,7 +1974,6 @@ async function openRazorpay(record, onSuccess) {
     // Say so. This used to fall through silently to onSuccess(), so a failed
     // order looked exactly like a completed one.
     console.warn("[payment] create-order failed:", err);
-    notifyPending();
     toast("We couldn't start the payment. Your registration is saved — you can pay at the venue.", "error");
     onSuccess(record);
     return;
@@ -1994,7 +1982,6 @@ async function openRazorpay(record, onSuccess) {
   // If keys are not configured yet, show a clear warning instead of silently skipping.
   if (orderData.skipped || !window.Razorpay) {
     console.warn("[payment] Razorpay not configured — add RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET to your Cloudflare Worker env vars.");
-    notifyPending();
     toast("⚠️ Payment gateway not configured yet — registration saved, payment pending.", "info");
     onSuccess(record);
     return;
@@ -2043,7 +2030,7 @@ async function openRazorpay(record, onSuccess) {
 
     modal: {
       // User closed the checkout without paying — show registration with pending status.
-      ondismiss: function () { notifyPending(); onSuccess(record); },
+      ondismiss: function () { onSuccess(record); },
     },
   };
 
@@ -2052,15 +2039,14 @@ async function openRazorpay(record, onSuccess) {
     rzp.open();
   } catch (err) {
     console.warn("[payment] checkout failed to open:", err);
-    notifyPending();
     toast("The payment window couldn't open. Your registration is saved — you can pay at the venue.", "error");
     onSuccess(record);
   }
 }
 
 // ---- The downloadable ticket ----------------------------------------------
-// Once a registration lands, the delegate should be able to walk away with the
-// thing itself — not just a promise that an email is coming. This paints the
+// Once a registration lands, the delegate can save a ticket right away. The
+// paid confirmation email is sent later, after staff verify the payment. This paints the
 // same ticket the wizard just built (same per-category icon and gradient, same
 // BC- reference, same stub) onto a canvas and hands it over as a PNG: it sits
 // in their photos, prints on any printer, and opens at the gate with no
@@ -3050,7 +3036,7 @@ function mountChat() {
         await downloadTicket(reg, catIndex);
         toast("Ticket saved \u2014 QR and all. Show it at the door.", "party");
       } catch (err) {
-        toast("Couldn't build the ticket image \u2014 your email copy carries the same QR.", "error");
+        toast("Couldn't build the ticket image — after payment is verified, your confirmation email will include it.", "error");
       } finally {
         btn.disabled = false;
         btn.textContent = label;
@@ -3121,9 +3107,6 @@ function mountChat() {
           }),
         });
         card.querySelector(".chat-confirm-actions").remove();
-        api("/api/registrations/" + encodeURIComponent(record.id) + "/notify", {
-          method: "POST",
-        }).catch(() => {});
         const ref = "BC-" + String(record.id || "").slice(0, 8).toUpperCase();
         addMsg("assistant", "✅ Your registration is saved as pending. Reference: **" + ref + "** · Amount: **" + money(record.amount) + "**\n\nBank details\nAccount name: " + BANK_DETAILS.accountName + "\nBank: " + BANK_DETAILS.bank + " · " + BANK_DETAILS.branch + "\nAccount: " + BANK_DETAILS.account + "\nIFSC: " + BANK_DETAILS.ifsc + "\n\nAfter transferring, send the screenshot or transaction ID on WhatsApp. The team will confirm your place after verification.");
         btn.textContent = "Preparing WhatsApp…";
