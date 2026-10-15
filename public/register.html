@@ -272,8 +272,9 @@
           if (state.registration) {
             d.innerHTML = paymentFlowHTML(state.registration);
           } else {
+            const mealSummary = c.id === "full-event" ? "Included (no breakfast)" : "Included, all three days";
             d.innerHTML =
-              `<div class="rev-row"><span>Meals & sessions</span><b>Included, all three days</b></div>` +
+              `<div class="rev-row"><span>Meals & sessions</span><b>${mealSummary}</b></div>` +
               `<div class="rev-row"><span>Payment method</span><b>Bank transfer</b></div>` +
               `<div class="rev-row"><span>Total payable</span><b style="font-size:17px">${money(c.price)}</b></div>` +
               `<div class="payment-prep-note"><span aria-hidden="true">✦</span><div><b>Your payment route is ready</b><small>Bookings open 15th October 2026. Registrations remain open while slots are available. Next, your booking reference and Trust bank details appear here.</small></div></div>` +

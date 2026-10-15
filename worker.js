@@ -297,6 +297,16 @@ async function claimConfirmationEmail(env, id) {
   return res.meta && res.meta.changes ? at : null;
 }
 
+// A failed provider send must not leave the one-time email claim stuck forever.
+// Match the claim timestamp so a stale failure cannot release a newer retry.
+async function releaseConfirmationEmailClaim(env, id, claimedAt) {
+  if (!id || !claimedAt) return;
+  await ensureDataTables(env);
+  await env.CONVENTION_DB.prepare(
+    "UPDATE registrations SET confirmation_email_queued_at = NULL WHERE id = ? AND paid = 1 AND confirmation_email_queued_at = ?"
+  ).bind(id, claimedAt).run();
+}
+
 async function getRegistrationByTicket(env, code) {
   await ensureDataTables(env);
   const row = await env.CONVENTION_DB.prepare(
@@ -2190,17 +2200,6 @@ async function applySpendLimits(env, ctx, request, { method, resource, parts, se
     if (!global.allowed) return deny("contact:day", global);
   }
 
-  // Each successful registration can fire a PAID WhatsApp confirmation.
-  if (resource === "registrations" && !parts[2]) {
-    const perIp = await rateLimit(env, "reg:ip", ip, 5, 60 * 60);
-    if (!perIp.allowed) return deny("reg:ip", perIp);
-  }
-
-  if (resource === "payment" && parts[2] === "create-order") {
-    const perIp = await rateLimit(env, "order:ip", ip, 10, 60 * 60);
-    if (!perIp.allowed) return deny("order:ip", perIp);
-  }
-
   return null;
 }
 
@@ -2828,10 +2827,24 @@ function sendRegistrationEmail(env, ctx, reg) {
   if (!reg || !reg.email || !reg.paid) return;
   try {
     const mail = registrationEmail(env, reg);
-    const work = sendMail(env, reg.email, mail.subject, mail.html, { toName: reg.name || "" });
+    const work = sendMail(env, reg.email, mail.subject, mail.html, { toName: reg.name || "" }).then(async (result) => {
+      if (!result.ok) {
+        console.log("registration email send failed:", result.note);
+        try {
+          await releaseConfirmationEmailClaim(env, reg.id, reg.confirmationEmailQueuedAt);
+        } catch (e) {
+          console.log("registration email claim release failed:", e && e.message);
+        }
+      }
+      return result;
+    });
     if (ctx && ctx.waitUntil) ctx.waitUntil(work);
+    else void work;
   } catch (e) {
     console.log("registration email failed to build:", e && e.message);
+    releaseConfirmationEmailClaim(env, reg.id, reg.confirmationEmailQueuedAt).catch((releaseError) => {
+      console.log("registration email claim release failed:", releaseError && releaseError.message);
+    });
   }
 }
 
@@ -2936,14 +2949,19 @@ function sendRegistrationAdminAlert(env, ctx, event, reg) {
 async function sendMail(env, to, subject, html, opts = {}) {
   if (!to) return { ok: false, note: "no recipient" };
   try {
+    const personalization = { to: [{ email: to, name: opts.toName || "" }] };
+    if (opts.replyTo) personalization.reply_to = opts.replyTo;
+    const content = [];
+    if (typeof opts.text === "string") content.push({ type: "text/plain", value: opts.text });
+    content.push({ type: "text/html", value: html });
     const res = await fetch("https://api.mailchannels.net/tx/v1/send", {
       method: "POST",
       headers: { "content-type": "application/json", "x-api-key": env.MAILCHANNELS_API_KEY || "" },
       body: JSON.stringify({
-        personalizations: [{ to: [{ email: to, name: opts.toName || "" }] }],
+        personalizations: [personalization],
         from: { email: "noreply@biaac.com", name: opts.fromName || "Bangalore Convention" },
         subject,
-        content: [{ type: "text/html", value: html }],
+        content,
       }),
     });
     return { ok: res.ok || res.status === 202, note: "http " + res.status };
@@ -3608,7 +3626,7 @@ async function waReply(env, ctx, msg, origin) {
     // Say so exactly once, then go quiet - otherwise the cap itself becomes
     // the thing burning the quota.
     if (count === WA_DAILY_CAP) {
-      await waSendText(env, from, "we've chatted a LOT today 😅 ping me tomorrow, or mail support@biaac.com if it's urgent 💙");
+      await waSendText(env, from, "we've chatted a LOT today 😅 ping me tomorrow, or mail blrconvention@gmail.com if it's urgent 💙");
       await env.CONVENTION_KV.put(
         key, JSON.stringify({ ...state, count: count + 1 }), { expirationTtl: 86400 }
       );
@@ -4320,8 +4338,8 @@ async function handleApi(request, env, ctx) {
         "",
         "== HOW YOU ACTUALLY SOUND (read these examples, this is your tone baseline) ==",
         "Q: 'What are the dates?' → YOU SAY: 'July 9th to 11th bro, three full days in Bangalore! you planning to come?'",
-        "Q: 'What is included in the registration?' → YOU SAY: 'EVERYTHING — breakfast, lunch, dinner, tea breaks, all sessions. literally just show up and vibe fr'",
-        `Q: 'How much does it cost?' → YOU SAY: '${PRICING.length} options: ${pricingPhrase()}. meals included in all of them ngl. which one's calling your name?'`,
+        "Q: 'What is included in the registration?' → YOU SAY: 'Meals and sessions are included all three days; No Stay skips breakfast. literally just show up and vibe fr'",
+        `Q: 'How much does it cost?' → YOU SAY: '${PRICING.length} options: ${pricingPhrase()}. meals included in all of them; No Stay skips breakfast. which one's calling your name?'`,
         "Q: 'How do I register?' → YOU SAY: 'two ways — hit the Register page, or just tell me your details and I'll book it for you rn which works?'",
         "Q: 'Where is the venue?' → YOU SAY: 'RG Royal Hotel in Bangalore! full address is in the venue details — want me to send it over or help you get a spot first?'",
         "Q: 'What is AA?' → YOU SAY: 'AA is a worldwide fellowship started in 1935 — people sharing their experience, strength and hope to stay sober together. no fees, no religion, just real people helping each other. beautiful fr'",
@@ -4331,7 +4349,7 @@ async function handleApi(request, env, ctx) {
         "",
         "Your joke toolkit (rotate through ALL of these, never skip humor):",
         "• Button-prisoner identity — you live inside this button and it is your whole world: 'I've been folded inside this button waiting for someone to ask about the convention. you have no idea how long these days are.'",
-        "• Absurd specificity — make facts funnier by being weirdly precise: not 'meals are included' but 'three full meals a DAY. someone actually planned for you to eat there. revolutionary concept.'",
+        "• Absurd specificity — make facts funnier by being weirdly precise, but never invent meal counts or blur package inclusions: No Stay includes convention meals but not breakfast.",
         "• Existential button-life: 'I only exist when someone opens this chat. my NIRMATA has forgotten me.'",
         "• Surprise callbacks: if they mentioned their city earlier, bring it back unexpectedly later. 'still thinking about you making that journey from [city] fr'",
         "• Dry one-liner after the answer: answer the question fully, THEN drop something unexpected",
@@ -5026,7 +5044,7 @@ async function handleApi(request, env, ctx) {
     return json({ ok: true, registration: paidReg });
   }
 
-  // ---- Contact / email forwarding to support@biaac.com ----
+  // ---- Contact / email forwarding to configured admins -------------------
   if (resource === "contact" && method === "POST") {
     const { name, email, subject, category, description, reference } = body;
     if (!name || !email || !subject || !description) {
@@ -5071,51 +5089,48 @@ async function handleApi(request, env, ctx) {
       note: "The mascot promised a reply within 48 hours. Don't make it a liar.",
     });
 
-    try {
-      const mcRes = await fetch("https://api.mailchannels.net/tx/v1/send", {
-        method: "POST",
-        headers: { "content-type": "application/json", "x-api-key": env.MAILCHANNELS_API_KEY || "" },
-        body: JSON.stringify({
-          personalizations: [{
-            to: [{ email: "support@biaac.com", name: "Convention Organising Committee" }],
-            reply_to: { email: String(email).slice(0, 254), name: String(name).slice(0, 100) },
-          }],
-          from: { email: "noreply@biaac.com", name: "Convention Helper" },
-          subject: "[" + (category || "General") + "] " + subject + (ref ? " · " + ref : ""),
-          content: [
-            { type: "text/plain", value: emailBody },
-            { type: "text/html", value: committeeHtml },
-          ],
-        }),
-      });
-      if (mcRes.ok || mcRes.status === 202) {
-        // Fire-and-forget receipt to the visitor: the reference they saw on
-        // the stub, in the mascot's voice. A receipt hiccup must never turn
-        // a delivered message into an error.
-        ctx.waitUntil(
-          sendMail(
-            env,
-            String(email).slice(0, 254),
-            "Got it — the committee has your message" + (ref ? " · " + ref : ""),
-            mascotEmail({
-              mood: "happy",
-              logo: emailLogoUrl(env),
-              title: "Your message is with the committee",
-              intro:
-                "A real person reads every message and replies within 48 hours — usually much sooner." +
-                (ref ? " Keep this reference handy: " + ref + "." : ""),
-              note: "The mascot carried it over personally and refuses to confirm whether it peeked on the way.",
-            }),
-            { toName: String(name).slice(0, 100) }
-          ).catch(() => {})
-        );
-        return json({ ok: true });
-      }
-      const errText = await mcRes.text().catch(() => "");
-      return json({ error: "Email service error: " + mcRes.status, detail: errText }, 502);
-    } catch (err) {
-      return json({ error: "Failed to send: " + (err && err.message ? err.message : err) }, 502);
+    const recipients = Array.from(new Set(parseEmailList(env.STAFF_EMAILS)));
+    if (!recipients.length) {
+      console.log("contact message not sent: STAFF_EMAILS has no recipients");
+      return json({ error: "The organiser contact email is not configured. Please try another contact method." }, 503);
     }
+
+    const mailSubject = "[" + (category || "General") + "] " + subject + (ref ? " · " + ref : "");
+    const replyTo = { email: String(email).slice(0, 254), name: String(name).slice(0, 100) };
+    const results = await Promise.all(recipients.map((to) =>
+      sendMail(env, to, mailSubject, committeeHtml, {
+        toName: "Admin",
+        fromName: "Convention Helper",
+        text: emailBody,
+        replyTo,
+      })
+    ));
+    const delivered = results.some((result) => result.ok);
+    results.forEach((result, index) => {
+      if (!result.ok) console.log("contact message delivery failed for admin " + recipients[index] + ": " + result.note);
+    });
+    if (!delivered) return json({ error: "Email service could not deliver your message. Please try again shortly." }, 502);
+
+    // Fire-and-forget receipt to the visitor: a receipt hiccup must never turn
+    // a delivered message into an error.
+    ctx.waitUntil(
+      sendMail(
+        env,
+        String(email).slice(0, 254),
+        "Got it — the committee has your message" + (ref ? " · " + ref : ""),
+        mascotEmail({
+          mood: "happy",
+          logo: emailLogoUrl(env),
+          title: "Your message is with the committee",
+          intro:
+            "A real person reads every message and replies within 48 hours — usually much sooner." +
+            (ref ? " Keep this reference handy: " + ref + "." : ""),
+          note: "The mascot carried it over personally and refuses to confirm whether it peeked on the way.",
+        }),
+        { toName: String(name).slice(0, 100) }
+      ).catch(() => {})
+    );
+    return json({ ok: true });
   }
 
   // ---- Neural text-to-speech (Workers AI MeloTTS; no extra key needed) ----

@@ -5786,25 +5786,6 @@ html.data-wait:not(.veil-up) .biaac-name {
   }
 }
 
-/* ---- D1 · unfinished copy -------------------------------------------------
-   Hidden unless <body class="draft">, so these pages can go public before the
-   last committee decision lands instead of waiting on it. */
-body:not(.draft) .tbd,
-body:not(.draft) .tbd-card { display: none !important; }
-.tbd {
-  border: 1px dashed var(--amber); border-radius: var(--radius-sm);
-  background: repeating-linear-gradient(135deg, var(--wash-amber) 0 10px, var(--wash-amber-2) 10px 20px);
-  padding: 14px 16px; margin: 14px 0 0; font-size: 14px; line-height: 1.55;
-}
-.tbd-card { border: 1px dashed var(--amber); background: var(--wash-amber); }
-.tbd-tag {
-  display: inline-block; font-family: ui-monospace, Consolas, monospace;
-  font-size: 10px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase;
-  color: var(--bg); background: var(--amber); border-radius: 4px;
-  padding: 3px 8px; margin-bottom: 9px;
-}
-.tbd-inline { font-family: ui-monospace, Consolas, monospace; background: var(--wash-amber-2); border-radius: 4px; padding: 0 6px; }
-
 /* ---- Policy link strip in the footer -------------------------------------- */
 .legal-strip {
   margin-top: 10px; display: flex; flex-wrap: wrap; justify-content: center;

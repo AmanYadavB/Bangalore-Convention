@@ -17,18 +17,11 @@
 
 export const PRICING = [
   {
-    id: "single-sharing",
-    name: "Single Sharing",
-    description: "Private room for one. All meals & sessions included.",
-    price: 19999,
-    image: "img/rooms/single-sharing.jpg",
-  },
-  {
-    id: "twin-sharing",
-    name: "Twin Sharing",
-    description: "Room shared by two. All meals & sessions included.",
-    price: 14999,
-    image: "img/rooms/twin-sharing.jpg",
+    id: "full-event",
+    name: "No Stay - Full Event",
+    description: "All three days. Meals included (no breakfast); accommodation not included.",
+    price: 5999,
+    image: "img/rooms/full-event.jpg",
   },
   {
     id: "triple-sharing",
@@ -38,11 +31,18 @@ export const PRICING = [
     image: "img/rooms/triple-sharing.jpg",
   },
   {
-    id: "full-event",
-    name: "No Stay - Full Event",
-    description: "All three days of the convention. Accommodation not included.",
-    price: 5999,
-    image: "img/rooms/full-event.jpg",
+    id: "twin-sharing",
+    name: "Twin Sharing",
+    description: "Room shared by two. All meals & sessions included.",
+    price: 14999,
+    image: "img/rooms/twin-sharing.jpg",
+  },
+  {
+    id: "single-sharing",
+    name: "Single Sharing",
+    description: "Private room for one. All meals & sessions included.",
+    price: 19999,
+    image: "img/rooms/single-sharing.jpg",
   },
 ];
 
@@ -67,5 +67,5 @@ export function pricingPhrase() {
 
 // The full line injected into the chat system prompt.
 export function pricingPromptLine() {
-  return `Prices: ${pricingPhrase()}. Meals included for the days you attend.`;
+  return `Prices: ${pricingPhrase()}. Meals are included for all categories; No Stay excludes breakfast.`;
 }

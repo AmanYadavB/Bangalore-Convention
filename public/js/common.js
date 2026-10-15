@@ -1038,7 +1038,7 @@ function mountDropdowns() {
 // and the chat's contact_organiser action. The form is styled as a ticket;
 // on success the stub's reference stays with the visitor while the mascot
 // flies the envelope off-screen. Delivery is the existing /api/contact
-// (support@biaac.com, reply-to the sender).
+// (the configured admin list, reply-to the sender).
 const CONTACT_TOPICS = ["Registration", "Payment", "Stay", "Travel", "Something else"];
 
 function contactRef() {

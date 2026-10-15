@@ -23,8 +23,8 @@ export const FACTS = {
     city: "Bangalore, India",
   },
   audience: "Anyone in recovery is welcome. Even non members are welcome.",
-  meals: ["breakfast", "lunch", "dinner", "tea breaks"],
-  withoutStay: "The 'No Stay – Full Event' category includes all three convention days without accommodation.",
+  meals: "With Stay packages include breakfast, lunch, dinner and tea breaks; No Stay includes meals except breakfast.",
+  withoutStay: "The 'No Stay – Full Event' category includes all three convention days and meals except breakfast, but does not include accommodation.",
   registerVia:
     "To register: Register page on this site, or I can book it right here in this chat.",
   aa: { founded: 1935, bigBookYear: 1939 },
@@ -72,7 +72,7 @@ export function factsPromptBlock(managedFacts = []) {
     `- ${FACTS.audience}`,
     "- Registration categories and prices:",
     priceLines,
-    `- Meals (${FACTS.meals.join(", ")}) and sessions included for the day(s) each category covers.`,
+    `- ${FACTS.meals} Sessions are included for the day(s) each category covers.`,
     `- ${FACTS.withoutStay}`,
     `- ${FACTS.registerVia}`,
   ];

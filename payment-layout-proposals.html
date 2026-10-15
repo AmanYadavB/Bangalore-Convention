@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f4f6fb">
+  <title>Payment Layout Proposals</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #151d31;
+      --muted: #687793;
+      --line: #e1e7f2;
+      --wash: #f2f5fc;
+      --accent: #594cf0;
+      --accent-2: #8738ed;
+      --card: #fff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: radial-gradient(ellipse at 12% -10%, #e7eafe 0, transparent 35rem), #f4f6fb;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    .shell { width: min(1500px, 100%); margin: auto; padding: 42px clamp(18px, 4vw, 58px) 72px; }
+    .intro { max-width: 800px; margin-bottom: 26px; }
+    .eyebrow { color: var(--accent); font-size: 11px; font-weight: 850; letter-spacing: .15em; text-transform: uppercase; }
+    h1 { margin: 8px 0 8px; font-size: clamp(30px, 4vw, 45px); letter-spacing: -.055em; line-height: 1.05; }
+    .intro p { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.6; }
+    .recommendation { display: inline-flex; align-items: center; gap: 8px; margin-top: 15px; padding: 8px 12px; border: 1px solid #d9d5ff; border-radius: 999px; color: #4537d9; background: #f1efff; font-size: 12px; font-weight: 800; }
+    .recommendation i { width: 7px; height: 7px; border-radius: 50%; background: #6557f5; }
+    .options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; gap: 18px; }
+    .option { min-width: 0; overflow: hidden; border: 1px solid #e0e6f1; border-radius: 20px; background: rgba(255,255,255,.82); box-shadow: 0 14px 36px rgba(23,35,69,.07); }
+    .option.recommended { border-color: #aaa3ff; box-shadow: 0 16px 42px rgba(84,70,234,.12); }
+    .option-head { min-height: 144px; padding: 19px 20px 16px; }
+    .option-meta { display: flex; justify-content: space-between; align-items: center; gap: 10px; color: var(--accent); font-size: 10px; font-weight: 850; letter-spacing: .12em; text-transform: uppercase; }
+    .option-meta b { color: #6d778d; font-size: 10px; letter-spacing: .08em; }
+    .option h2 { margin: 9px 0 5px; font-size: 20px; letter-spacing: -.035em; }
+    .option-head p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .preview { margin: 0 11px; padding: 14px; border: 1px solid #e3e8f2; border-radius: 16px; background: linear-gradient(145deg, #fbfcff, #f4f6fc); }
+    .steps { display: flex; align-items: center; gap: 6px; margin: 0 2px 12px; color: #8994aa; font-size: 9px; font-weight: 750; white-space: nowrap; }
+    .steps b { display: flex; align-items: center; gap: 5px; color: #596784; }
+    .steps b:first-child { color: var(--accent); }
+    .steps i { display: grid; width: 19px; height: 19px; place-items: center; border: 1px solid #dbe2f0; border-radius: 50%; background: #fff; font-size: 9px; font-style: normal; }
+    .steps b:first-child i { border-color: transparent; color: #fff; background: linear-gradient(135deg, #4278ee, #7739ef); }
+    .steps span { flex: 1; min-width: 5px; height: 1px; border-top: 1px dashed #d4dced; }
+    .mock { padding: 14px; border: 1px solid #e2e8f2; border-radius: 15px; background: var(--card); box-shadow: 0 7px 18px rgba(26,42,80,.045); }
+    .mock-title { margin: 0 0 12px; font-size: 23px; font-weight: 850; letter-spacing: -.055em; }
+    .bank { padding: 12px; border: 1px solid #e5eaf4; border-radius: 12px; background: #fff; }
+    .bank-kicker, .label { color: #697995; font-size: 8px; font-weight: 850; letter-spacing: .1em; }
+    .bank-name { margin-top: 4px; font-size: 15px; font-weight: 850; letter-spacing: -.03em; }
+    .branch { margin-top: 2px; color: var(--muted); font-size: 9px; }
+    .holder { margin-top: 10px; padding: 8px 9px; border-radius: 9px; background: var(--wash); }
+    .holder strong { display: block; margin-top: 3px; font-size: 9px; line-height: 1.3; }
+    .account-grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 7px; margin-top: 7px; }
+    .account { min-width: 0; padding: 8px 9px; border: 1px solid #e9edf5; border-radius: 9px; }
+    .account strong { display: block; margin-top: 4px; font-size: 11px; letter-spacing: .03em; white-space: nowrap; }
+    .amount-card { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border: 1px solid #d8d4ff; border-radius: 12px; color: #322d78; background: linear-gradient(100deg, #f1efff, #faf9ff); }
+    .amount-card span { color: #615c9e; font-size: 8px; font-weight: 850; letter-spacing: .1em; }
+    .amount-card strong { color: #4e43e3; font-size: 22px; font-weight: 900; letter-spacing: -.05em; white-space: nowrap; }
+    .amount-card small { display: block; margin-top: 2px; color: #7771aa; font-size: 8px; }
+    .amount-inline { margin-top: 8px; }
+    .amount-bottom { margin-top: 10px; padding: 12px 14px; border-color: rgba(255,255,255,.14); color: #fff; background: linear-gradient(115deg, #262c52, #5447ca 75%, #793be4); box-shadow: 0 8px 17px rgba(83,70,202,.16); }
+    .amount-bottom span, .amount-bottom small { color: #d2d2ff; }
+    .amount-bottom strong { color: #fff; }
+    .hint { display: flex; align-items: flex-start; gap: 8px; margin-top: 10px; padding: 9px 10px; border: 1px solid #e4e2ff; border-radius: 10px; background: #faf9ff; }
+    .hint i { display: grid; flex: 0 0 20px; width: 20px; height: 20px; place-items: center; border-radius: 7px; color: #fff; background: linear-gradient(140deg, #4278ee, #7939ee); font-size: 11px; font-style: normal; }
+    .hint strong { display: block; font-size: 9px; }
+    .hint p { margin: 2px 0 0; color: var(--muted); font-size: 8px; line-height: 1.4; }
+    .confirm { display: flex; align-items: center; justify-content: space-between; margin-top: 9px; padding: 10px 12px; border-radius: 10px; color: #fff; background: linear-gradient(120deg, #574dec, #8439e9); font-size: 10px; font-weight: 850; box-shadow: 0 7px 15px rgba(101,73,231,.18); }
+    .confirm i { display: grid; width: 19px; height: 19px; place-items: center; border: 1px solid rgba(255,255,255,.4); border-radius: 50%; font-size: 11px; font-style: normal; }
+    .caption { min-height: 60px; margin: 0; padding: 12px 17px 15px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+    .caption b { color: #34405d; }
+    .decision { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: center; margin-top: 20px; padding: 17px 20px; border: 1px solid #dfe5f1; border-radius: 15px; background: #fff; }
+    .decision-mark { display: grid; width: 37px; height: 37px; place-items: center; border-radius: 12px; color: #fff; background: linear-gradient(135deg, #4278ee, #7939ee); font-size: 18px; font-weight: 900; }
+    .decision strong { display: block; font-size: 13px; }
+    .decision p { margin: 3px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+    @media (max-width: 1060px) { .options { grid-template-columns: 1fr; max-width: 610px; margin: auto; } .option-head { min-height: 0; } .preview { padding: 16px; } .mock { padding: 16px; } }
+    @media (max-width: 430px) { .shell { padding-top: 28px; } .preview { margin: 0 8px; padding: 10px; } .mock { padding: 11px; } .mock-title { font-size: 20px; } .account-grid { grid-template-columns: 1fr; } .account strong { font-size: 12px; } .amount-card strong { font-size: 20px; } .steps { gap: 4px; font-size: 8px; } }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="intro">
+      <div class="eyebrow">Registration · Ticket &amp; pay</div>
+      <h1>Move the amount down into the payment flow.</h1>
+      <p>Three ways to keep “Make Payment” clean while putting the transfer amount where it’s useful. The mock amount is illustrative; the real page will continue to use the selected ticket price.</p>
+      <div class="recommendation"><i></i> My recommendation: Option 1</div>
+    </header>
+
+    <section class="options" aria-label="Payment layout options">
+      <article class="option recommended">
+        <div class="option-head">
+          <div class="option-meta">Option 1 <b>Recommended</b></div>
+          <h2>Amount just below bank details</h2>
+          <p>Keep the title simple. Show the exact amount immediately after the account information, before the transfer reminder.</p>
+        </div>
+        <div class="preview">
+          <div class="steps"><b><i>1</i> Transfer</b><span></span><b><i>2</i> Send proof</b><span></span><b><i>3</i> Confirmed</b></div>
+          <div class="mock">
+            <h3 class="mock-title">Make Payment</h3>
+            <div class="bank">
+              <div class="bank-kicker">TRANSFER DESTINATION</div>
+              <div class="bank-name">IDFC FIRST Bank</div><div class="branch">Koramangala Branch · Bengaluru</div>
+              <div class="holder"><span class="label">ACCOUNT HOLDER</span><strong>BENGALURU INTERNATIONAL CONVENTION TRUST</strong></div>
+              <div class="account-grid"><div class="account"><span class="label">ACCOUNT NUMBER</span><strong>60909202646</strong></div><div class="account"><span class="label">IFSC CODE</span><strong>IDFB008015</strong></div></div>
+            </div>
+            <div class="amount-card amount-inline"><div><span>AMOUNT TO TRANSFER</span><small>Transfer this exact amount</small></div><strong>₹14,999</strong></div>
+            <div class="hint"><i>↗</i><div><strong>After you transfer</strong><p>Send your details and payment proof on WhatsApp.</p></div></div>
+            <div class="confirm">Confirm payment <i>→</i></div>
+          </div>
+        </div>
+        <p class="caption"><b>Why it works:</b> amount and bank destination stay together, and the transfer instruction follows in the right order.</p>
+      </article>
+
+      <article class="option">
+        <div class="option-head">
+          <div class="option-meta">Option 2 <b>More emphasis</b></div>
+          <h2>Amount as a bold lower banner</h2>
+          <p>Let people review the bank details first, then give the amount a strong, memorable callout just above the action.</p>
+        </div>
+        <div class="preview">
+          <div class="steps"><b><i>1</i> Transfer</b><span></span><b><i>2</i> Send proof</b><span></span><b><i>3</i> Confirmed</b></div>
+          <div class="mock">
+            <h3 class="mock-title">Make Payment</h3>
+            <div class="bank">
+              <div class="bank-kicker">TRANSFER DESTINATION</div>
+              <div class="bank-name">IDFC FIRST Bank</div><div class="branch">Koramangala Branch · Bengaluru</div>
+              <div class="holder"><span class="label">ACCOUNT HOLDER</span><strong>BENGALURU INTERNATIONAL CONVENTION TRUST</strong></div>
+              <div class="account-grid"><div class="account"><span class="label">ACCOUNT NUMBER</span><strong>60909202646</strong></div><div class="account"><span class="label">IFSC CODE</span><strong>IDFB008015</strong></div></div>
+            </div>
+            <div class="hint"><i>↗</i><div><strong>After you transfer</strong><p>Send your details and payment proof on WhatsApp.</p></div></div>
+            <div class="amount-card amount-bottom"><div><span>AMOUNT TO TRANSFER</span><small>Use this amount for your bank transfer</small></div><strong>₹14,999</strong></div>
+            <div class="confirm">Confirm payment <i>→</i></div>
+          </div>
+        </div>
+        <p class="caption"><b>Feel:</b> strongest visual emphasis. The amount and button form one clear final action zone.</p>
+      </article>
+
+      <article class="option">
+        <div class="option-head">
+          <div class="option-meta">Option 3 <b>Most compact</b></div>
+          <h2>Amount inside the bank card</h2>
+          <p>Make the destination and required amount one concise transfer card, saving vertical space on mobile.</p>
+        </div>
+        <div class="preview">
+          <div class="steps"><b><i>1</i> Transfer</b><span></span><b><i>2</i> Send proof</b><span></span><b><i>3</i> Confirmed</b></div>
+          <div class="mock">
+            <h3 class="mock-title">Make Payment</h3>
+            <div class="bank">
+              <div class="bank-kicker">TRANSFER DESTINATION</div>
+              <div class="bank-name">IDFC FIRST Bank</div><div class="branch">Koramangala Branch · Bengaluru</div>
+              <div class="holder"><span class="label">ACCOUNT HOLDER</span><strong>BENGALURU INTERNATIONAL CONVENTION TRUST</strong></div>
+              <div class="account-grid"><div class="account"><span class="label">ACCOUNT NUMBER</span><strong>60909202646</strong></div><div class="account"><span class="label">IFSC CODE</span><strong>IDFB008015</strong></div></div>
+              <div class="amount-card amount-inline"><div><span>TRANSFER AMOUNT</span></div><strong>₹14,999</strong></div>
+            </div>
+            <div class="hint"><i>↗</i><div><strong>After you transfer</strong><p>Send your details and payment proof on WhatsApp.</p></div></div>
+            <div class="confirm">Confirm payment <i>→</i></div>
+          </div>
+        </div>
+        <p class="caption"><b>Feel:</b> compact and practical, though the bank-information card becomes denser.</p>
+      </article>
+    </section>
+
+    <aside class="decision">
+      <div class="decision-mark">✓</div>
+      <div><strong>Suggested sequence</strong><p>Make Payment → payment steps → bank details → amount to transfer → WhatsApp reminder → Confirm payment. No other page copy or payment behavior needs to change.</p></div>
+    </aside>
+  </main>
+</body>
+</html>
