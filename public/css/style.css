@@ -4787,6 +4787,19 @@ select.dd-native {
   flex-wrap: wrap;
 }
 
+.bank-transfer { max-width: 520px; max-height: calc(100vh - 40px); overflow: auto; text-align: left; position: relative; }
+.bank-transfer h3 { text-align: center; padding-right: 24px; }
+.bank-transfer-open { text-align: center; }
+.bank-transfer-close { position: absolute; top: 10px; right: 12px; border: 0; background: transparent; color: var(--muted); font-size: 28px; line-height: 1; cursor: pointer; }
+.bank-transfer-section { margin: 16px 0; padding: 14px; border: 1px solid var(--border); border-radius: 12px; background: color-mix(in srgb, var(--accent) 5%, var(--card)); }
+.bank-transfer-section > b { font-size: 12px; letter-spacing: .06em; color: var(--accent); }
+.bank-transfer-section p { margin: 7px 0 12px; }
+.bank-transfer-section .btn { width: 100%; text-align: center; }
+.bank-transfer dl { display: grid; grid-template-columns: 110px 1fr; gap: 7px 12px; margin: 12px 0 0; }
+.bank-transfer dt { color: var(--muted); }
+.bank-transfer dd { margin: 0; font-weight: 700; overflow-wrap: anywhere; }
+.bank-transfer-done { display: block; margin: 0 auto; }
+
 /* An equal-width, equal-height pair — always centered as a unit. */
 .mconfirm-actions .btn {
   flex: 1 1 0;

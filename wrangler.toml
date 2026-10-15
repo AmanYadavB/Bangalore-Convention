@@ -87,11 +87,8 @@ crons = ["*/10 * * * *"]
 AUTH_ORIGIN = "https://biaac.com"
 
 # ARE REGISTRATIONS LIVE?
-# "0" (the default) turns bookings away: the Register Now button and the
-# register screen's Confirm & Pay both explain that registrations are not
-# open yet, and POST /api/registrations refuses with the same sentence.
-# Set to "1" on the day bookings open. Nothing else needs changing.
-REGISTRATIONS_OPEN = "0"
+# Registrations opened on 15 October 2026 and remain open while places last.
+REGISTRATIONS_OPEN = "1"
 
 # THE CHECK-IN WINDOW. A ticket only opens the door on the days of the
 # convention; outside these dates the scanner answers "not yet" or "closed"

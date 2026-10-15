@@ -2762,7 +2762,7 @@ function registrationEmail(env, reg, paid) {
     : '<span style="background:#fdf0d4;color:#8a6207;padding:3px 11px;border-radius:999px;font-weight:800;font-size:12px">⏳ PENDING</span>';
   const payNote = paid
     ? "Payment received, spot reserved, nothing left to do — just count the days with us."
-    : "You can pay online any time or hand it to the team at the venue — zero stress either way. Your spot is saved.";
+    : "Transfer the amount to the trust account and send your payment screenshot or transaction details on WhatsApp. Your place is confirmed once the team verifies it.";
   // The stub carries a real QR now, not a decorative barcode: it is what the
   // door scans. Served as PNG because no mail client renders SVG.
   const qrImg = reg.ticketCode
@@ -3930,13 +3930,12 @@ async function handleApi(request, env, ctx) {
         createdAt: new Date().toISOString(),
       };
       await insertRegistration(env, record);
-      // No email yet: the paid ticket goes out when Razorpay verifies, and
-      // the pending ticket only when the visitor comes BACK from checkout
-      // without paying (the client pings /:id/notify at that moment).
+      // The browser asks the attendee to send payment proof by WhatsApp, then
+      // pings /:id/notify to send this pending registration by email as well.
       return json(record, 201);
     }
 
-    // "Back from Razorpay unpaid" — send the pending ticket email. Guarded
+    // Send the pending bank-transfer registration email. Guarded
     // three ways: the unguessable UUID is the capability, it only ever sends
     // the pending flavour while the booking is really unpaid, and the
     // emailedPendingAt flag makes it once-only however often it's called.
@@ -4291,7 +4290,7 @@ async function handleApi(request, env, ctx) {
         "NAVIGATION RULES: ONLY navigate when user EXPLICITLY asks to go somewhere. Never auto-navigate. Never claim you moved them — the site does that.",
         "Booking: gather name, email, phone, category ONE question at a time (never list all fields). Category ids: " +
           catLines + ".",
-        'When you have ALL FOUR: [[ACTION]]{"action":"review_booking","name":"...","email":"...","phone":"...","category":"CATEGORY_ID"}. Site shows confirm card → Razorpay opens automatically. Say you\'ve prepared it for them to review, not that it\'s done.',
+        'When you have ALL FOUR: [[ACTION]]{"action":"review_booking","name":"...","email":"...","phone":"...","category":"CATEGORY_ID"}. Site shows a confirmation card, then bank-transfer details and a WhatsApp button. Say you\'ve prepared it for them to review, not that it\'s done.',
         'Contact organiser — STRICT LAST RESORT: Must try answering yourself first. Only use [[ACTION]]{"action":"contact_organiser","subject":"..."} when (1) specific concrete question only the team can answer, (2) truly no fallback, (3) not just casual curiosity. NEVER use it for questions you can answer or deflect with "details TBC". At most once per conversation.',
     ];
 

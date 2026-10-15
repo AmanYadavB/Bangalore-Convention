@@ -1884,7 +1884,66 @@ function mountRegisterCtas() {
   });
 }
 
-// ---- Razorpay payment helper (used by register.html form AND in-chat booking) ----
+// ---- Bank-transfer instructions (used by register.html and in-chat booking) ----
+const PAYMENT_WHATSAPP = "919731034500";
+const BANK_DETAILS = {
+  accountName: "BENGALURU INTERNATIONAL CONVENTION TRUST",
+  bank: "IDFC FIRST Bank",
+  branch: "Koramangala Branch",
+  account: "60909202646",
+  ifsc: "IDFB008015",
+};
+
+function showBankTransferInstructions(record) {
+  const ref = "BC-" + String(record.id || "").slice(0, 8).toUpperCase();
+  const message = [
+    "Hello, I would like to register for the Bangalore Convention.",
+    "Name: " + (record.name || ""),
+    "Mobile: " + (record.phone || ""),
+    "Email: " + (record.email || ""),
+    "Package: " + (record.categoryName || ""),
+    "Amount: " + money(record.amount),
+    "Booking reference: " + ref,
+    "I have transferred the payment and attached the screenshot / transaction details.",
+  ].join("\n");
+  const whatsappUrl = "https://wa.me/" + PAYMENT_WHATSAPP + "?text=" + encodeURIComponent(message);
+
+  return new Promise((resolve) => {
+    const wrap = document.createElement("div");
+    wrap.className = "mconfirm-backdrop bank-transfer-backdrop";
+    wrap.innerHTML =
+      '<section class="mconfirm bank-transfer" role="dialog" aria-modal="true" aria-labelledby="bankTransferTitle">' +
+      '<button class="bank-transfer-close" type="button" aria-label="Close">×</button>' +
+      '<h3 id="bankTransferTitle">Begin your registration here</h3>' +
+      '<p class="bank-transfer-open">Bookings open 15th October 2026<br>Registrations remain open while slots are available.</p>' +
+      '<div class="bank-transfer-section"><b>SHARE YOUR DETAILS</b><p>Send your name, mobile number, email address and payment screenshot or transaction details on WhatsApp.</p>' +
+      '<a class="btn primary" target="_blank" rel="noopener" href="' + whatsappUrl + '">Send on WhatsApp: +91 97310 34500</a></div>' +
+      '<div class="bank-transfer-section"><b>BANK DETAILS</b><dl>' +
+      '<dt>Account name</dt><dd>' + escapeHtml(BANK_DETAILS.accountName) + '</dd>' +
+      '<dt>Bank</dt><dd>' + escapeHtml(BANK_DETAILS.bank) + '</dd>' +
+      '<dt>Branch</dt><dd>' + escapeHtml(BANK_DETAILS.branch) + '</dd>' +
+      '<dt>Account</dt><dd>' + escapeHtml(BANK_DETAILS.account) + '</dd>' +
+      '<dt>IFSC</dt><dd>' + escapeHtml(BANK_DETAILS.ifsc) + '</dd></dl></div>' +
+      '<button type="button" class="btn ghost bank-transfer-done">I’ll send the payment details</button>' +
+      '</section>';
+    const close = () => {
+      document.removeEventListener("keydown", onKey);
+      wrap.classList.remove("show");
+      setTimeout(() => wrap.remove(), 220);
+      resolve();
+    };
+    const onKey = (event) => { if (event.key === "Escape") close(); };
+    wrap.querySelector(".bank-transfer-close").addEventListener("click", close);
+    wrap.querySelector(".bank-transfer-done").addEventListener("click", close);
+    wrap.addEventListener("click", (event) => { if (event.target === wrap) close(); });
+    document.addEventListener("keydown", onKey);
+    document.body.appendChild(wrap);
+    requestAnimationFrame(() => wrap.classList.add("show"));
+  });
+}
+
+// Kept for compatibility with older pages; new registrations use the bank
+// transfer instructions above and never open Razorpay.
 //
 // record  – the registration object returned by POST /api/registrations
 //           (must have: id, amount, name, email, phone, categoryName)
@@ -3062,19 +3121,15 @@ function mountChat() {
           }),
         });
         card.querySelector(".chat-confirm-actions").remove();
-        btn.textContent = "Opening payment…";
-        // Open Razorpay checkout; on success OR dismiss show the confirmation message.
-        await openRazorpay(record, (r) => {
-          const ref = "BC-" + String(r.id || "").slice(0, 8).toUpperCase();
-          if (r.paid) {
-            addMsg("assistant", "✅ Payment received! You're all set. Your reference is **" + ref + "**. See you at the convention! 🎉");
-          } else {
-            addMsg("assistant", "✅ You're registered! Your reference is **" + ref + "**. Complete your payment at your convenience — the team will confirm your spot once received.");
-          }
-          // A booking finished in the chat is still a booking: it gets the same
-          // downloadable ticket the register page hands over.
-          offerTicketDownload(r);
-        });
+        api("/api/registrations/" + encodeURIComponent(record.id) + "/notify", {
+          method: "POST",
+        }).catch(() => {});
+        btn.textContent = "Showing bank details…";
+        await showBankTransferInstructions(record);
+        const ref = "BC-" + String(record.id || "").slice(0, 8).toUpperCase();
+        addMsg("assistant", "✅ Your registration is saved! Your reference is **" + ref + "**. Please transfer the amount and send your payment screenshot or transaction details on WhatsApp. The team will confirm your spot once the transfer is verified.");
+        // A bank-transfer registration is pending until the team verifies it.
+        offerTicketDownload(record);
       } catch (err) {
         btn.disabled = false;
         btn.textContent = "Confirm & register";
