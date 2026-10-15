@@ -4821,7 +4821,7 @@ async function handleApi(request, env, ctx) {
     }
     // The amount is looked up from the stored registration and NEVER taken
     // from the request. It used to come straight out of the body, so anyone
-    // could create a ₹1 order for a ₹6000 booking and then have it verified
+    // could create a ₹1 order for a ₹5999 booking and then have it verified
     // and marked paid.
     const { registrationId } = body;
     if (!registrationId) return json({ error: "registrationId required" }, 400);
@@ -4855,7 +4855,7 @@ async function handleApi(request, env, ctx) {
     // only covers orderId|paymentId — it says nothing about WHICH registration
     // the payment was for. Without this binding, someone could pay for their
     // own ₹1500 booking and then submit that same valid signature against a
-    // ₹6000 registration to mark it paid.
+    // ₹5999 registration to mark it paid.
     await setRegistrationOrder(env, registrationId, rzpOrder.id, rzpOrder.amount);
 
     return json({
