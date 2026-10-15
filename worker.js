@@ -2732,6 +2732,22 @@ const TICKET_GRADS = [
   ["#34d399", "#0ea5e9"],
 ];
 
+// Registration alerts use the same mobile-first visual frame as attendee
+// receipts: branded banner, centered mascot, and a narrow stacked layout.
+function registrationAlertEmailFrame(env, mood, inner) {
+  return (
+    '<div style="background:#eef1fb;padding:22px 8px">' +
+    '<div style="max-width:520px;margin:0 auto;border-radius:20px;overflow:hidden;border:1px solid #e2e6f8;background:#ffffff;font-family:system-ui,-apple-system,\'Segoe UI\',Roboto,sans-serif;color:#1f2937">' +
+    '<div style="background-color:#5b5bf0;background-image:linear-gradient(120deg,#38bdf8,#5b5bf0 55%,#7c3aed);padding:14px 16px 42px;text-align:center">' +
+    '<img src="' + emailLogoUrl(env) + '" width="34" height="34" alt="" style="display:inline-block;vertical-align:middle;border-radius:10px">' +
+    '<span style="color:#ffffff;font-weight:700;font-size:14.5px;margin-left:9px;vertical-align:middle">Bangalore Convention 2027</span></div>' +
+    '<div style="margin-top:-32px">' + emailMascot(mood || "wave") + "</div>" +
+    '<div style="padding:4px 16px 22px">' + inner + "</div></div>" +
+    '<p style="max-width:520px;margin:12px auto 0;text-align:center;color:#9aa1b9;font-size:11.5px;font-family:system-ui,sans-serif">Bangalore Convention 2027 &#183; event registration<br>9&#8211;11 July 2027 &#183; Bengaluru, India</p>' +
+    "</div>"
+  );
+}
+
 function registrationEmail(env, reg) {
   const idx = Math.max(0, PRICING.findIndex((c) => c.id === reg.categoryId));
   const category = PRICING[idx] || null;
@@ -2860,7 +2876,6 @@ function sendRegistrationAdminAlert(env, ctx, event, reg) {
 
   const amount = "₹" + Number(reg.amount || 0).toLocaleString("en-IN");
   const details = [
-    ["Status", eventInfo.status],
     ["Name", reg.name],
     ["Email", reg.email],
     ["Mobile", reg.phone],
@@ -2870,31 +2885,34 @@ function sendRegistrationAdminAlert(env, ctx, event, reg) {
     ["Ticket code", reg.ticketCode],
     ["Payment ID", reg.paymentId],
   ];
-  const bodyHtml =
-    '<div style="border:1px solid #e2e6f8;border-radius:12px;overflow:hidden;margin:18px 0">' +
-    '<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;font-size:14px">' +
-    details
-      .filter(([, value]) => value !== null && value !== undefined && value !== "")
-      .map(([label, value], index) =>
-        '<tr style="background:' + (index % 2 ? "#ffffff" : "#f7f8fe") + '">' +
-        '<td style="padding:10px 12px;color:#68728d;font-weight:600;white-space:nowrap">' + esc(label) + "</td>" +
-        '<td style="padding:10px 12px;color:#172033;font-weight:700;word-break:break-word">' + esc(value) + "</td>" +
-        "</tr>"
-      )
-      .join("") +
-    "</table></div>";
+  const statusColors = {
+    pending: ["#fff5df", "#855300"],
+    paid: ["#dff6e9", "#087342"],
+    unpaid: ["#fff2dc", "#8a5700"],
+    deleted: ["#fde8e8", "#a52828"],
+  }[event] || ["#eef1fb", "#4f46e5"];
+  const reference = "BC-" + String(reg.id || "").slice(0, 8).toUpperCase();
+  const detailsHtml = details
+    .filter(([, value]) => value !== null && value !== undefined && value !== "")
+    .map(([label, value], index) =>
+      '<div style="padding:10px 12px;' + (index ? "border-top:1px solid #e9edf5;" : "") + '">' +
+      '<div style="color:#68728d;font-size:9px;font-weight:800;letter-spacing:1px;text-transform:uppercase">' + esc(label) + "</div>" +
+      '<div style="margin-top:3px;color:#172033;font-size:13px;font-weight:700;line-height:1.45;word-break:break-word;overflow-wrap:anywhere">' + esc(value) + "</div></div>"
+    )
+    .join("");
   const siteOrigin = String(env.SITE_ORIGIN || env.AUTH_ORIGIN || "https://biaac.com").replace(/\/+$/, "");
-  const html = mascotEmail({
-    mood: eventInfo.mood,
-    logo: emailLogoUrl(env),
-    title: eventInfo.title,
-    intro: "Registration update · " + istClock() + " IST",
-    bodyHtml,
-    button: {
-      href: siteOrigin + "/registrations.html",
-      label: "Open registrations",
-    },
-  });
+  const inner =
+    '<h2 style="margin:6px 0 8px;text-align:center;color:#111827;font-size:22px;letter-spacing:-0.4px">' + esc(eventInfo.title) + "</h2>" +
+    '<p style="color:#4b5563;line-height:1.6;text-align:center;margin:0 0 16px;font-size:13px">Registration update · ' + esc(istClock()) + " IST</p>" +
+    '<div style="margin:0 0 14px;padding:13px 14px;border:1px solid #e2e6f8;border-radius:14px;background:#f8f9ff;text-align:center">' +
+    '<span style="display:inline-block;padding:5px 10px;border-radius:999px;background:' + statusColors[0] + ";color:" + statusColors[1] + ';font-size:10px;font-weight:850;letter-spacing:.5px">' + esc(eventInfo.status) + "</span>" +
+    '<div style="margin-top:9px;color:#68728d;font-size:9px;font-weight:800;letter-spacing:1px">BOOKING REFERENCE</div>' +
+    '<div style="margin-top:3px;color:#172033;font-family:ui-monospace,Consolas,monospace;font-size:16px;font-weight:850;letter-spacing:1.5px">' + esc(reference) + "</div></div>" +
+    '<div style="border:1px solid #e2e6f8;border-radius:14px;overflow:hidden;background:#ffffff">' +
+    '<div style="padding:11px 12px;background:#f3f5fc;color:#52617d;font-size:10px;font-weight:850;letter-spacing:1px">REGISTRATION DETAILS</div>' +
+    detailsHtml + "</div>" +
+    '<p style="margin:14px 0 0;text-align:center"><a href="' + esc(siteOrigin + "/registrations.html") + '" style="background:#4f46e5;color:#ffffff;padding:12px 24px;border-radius:11px;text-decoration:none;font-size:13px;font-weight:700;display:inline-block">Open registrations</a></p>';
+  const html = registrationAlertEmailFrame(env, eventInfo.mood, inner);
 
   const work = Promise.allSettled(
     recipients.map(async (to) => {
