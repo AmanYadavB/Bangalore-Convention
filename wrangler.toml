@@ -2,6 +2,12 @@ name = "bangalore-convention"
 main = "worker.js"
 compatibility_date = "2024-11-01"
 
+# Keep the production domain under Wrangler management. Without this entry,
+# deploys remove the custom-domain route configured in the dashboard.
+[[routes]]
+pattern = "biaac.com"
+custom_domain = true
+
 # Serve the static site (public/) through the ASSETS binding.
 [assets]
 directory = "./public"
@@ -52,8 +58,9 @@ crons = ["*/10 * * * *"]
 # AUTHENTICATION
 # ---------------------------------------------------------------------------
 # Staff sign in at /login.html with Google, an emailed link, or a password.
-# Roles: viewer < admin < owner. Access is enforced SERVER-SIDE, both on /api/*
-# and on the protected HTML pages.
+# Roles are separate: staff/admin gets registrations, check-in, dashboard and
+# expenses; developer gets reflections, Ops and Feed AI. Access is enforced
+# SERVER-SIDE, both on /api/* and on the protected HTML pages.
 #
 # THREE SECRETS MUST BE SET BEFORE DEPLOYING — they must NOT go in this file,
 # which is committed to git:
@@ -107,11 +114,13 @@ CHECKIN_CLOSES_IST = "2027-07-11"
 # Add or remove an email and redeploy; removal takes effect on that person's
 # very next request, because the role is re-checked against config every time.
 #
-# DEVELOPER_EMAILS also get Ops (email digests, Deepgram/Cloudflare billing
-# figures) and Feed AI (the knowledge base injected into every chat reply).
+# DEVELOPER_EMAILS get reflections, Ops (email digests, Deepgram/Cloudflare
+# billing figures), and Feed AI (the knowledge base injected into every chat
+# reply). Developer access does not include staff/admin features.
 # Set as a secret so the address is not published:
 #   npx wrangler secret put DEVELOPER_EMAILS
-# The organising committee: registrations, dashboard, expenses, reflections.
+# The organising committee/admin role: registrations, check-in, dashboard,
+# expenses.
 # Comma-separated, e.g. "asha@example.com, ravi@example.com"
 # Set as a secret so committee addresses are not published:
 #   npx wrangler secret put STAFF_EMAILS
