@@ -74,18 +74,10 @@ async function api(path, options) {
     }
     throw new Error(data.error || "Please sign in.");
   }
-  if (!res.ok) {
-    if (res.status === 429) {
-      const retryAfter = Number(res.headers.get("retry-after"));
-      if (retryAfter > 0) {
-        const minutes = Math.max(1, Math.ceil(retryAfter / 60));
-        throw new Error(`Too many requests from this network. Please try again in about ${minutes} minute${minutes === 1 ? "" : "s"}.`);
-      }
-    }
+  if (!res.ok)
     throw new Error(
       data.error || "something broke and even the mascot doesn't know what — try that again in a sec"
     );
-  }
   return data;
 }
 

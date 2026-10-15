@@ -2190,10 +2190,9 @@ async function applySpendLimits(env, ctx, request, { method, resource, parts, se
     if (!global.allowed) return deny("contact:day", global);
   }
 
-  // Keep signup abuse bounded while allowing groups sharing a network, and
-  // tolerate retries without making the normal checkout path feel brittle.
+  // Each successful registration can fire a PAID WhatsApp confirmation.
   if (resource === "registrations" && !parts[2]) {
-    const perIp = await rateLimit(env, "reg:ip", ip, 15, 60 * 60);
+    const perIp = await rateLimit(env, "reg:ip", ip, 5, 60 * 60);
     if (!perIp.allowed) return deny("reg:ip", perIp);
   }
 
