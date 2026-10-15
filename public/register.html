@@ -84,6 +84,7 @@
       const state = {
         step: 0,
         sel: null, // index into PRICING
+        registration: null,
         name: "", email: "", phone: "", city: "", gender: "", notes: "",
       };
 
@@ -153,6 +154,62 @@
         );
       }
 
+      function paymentFlowHTML(record) {
+        const ref = "BC-" + String(record.id || "").slice(0, 8).toUpperCase();
+        const copyRow = (label, value, extraClass) =>
+          `<div class="transfer-row ${extraClass || ""}"><span>${label}</span><strong>${escapeHtml(value)}</strong><button class="transfer-copy" type="button" data-copy-value="${escapeHtml(value)}" aria-label="Copy ${label}">Copy</button></div>`;
+        return `
+          <section class="payment-flow" aria-labelledby="paymentFlowTitle">
+            <header class="payment-flow-hero">
+              <div class="payment-flow-top"><span class="payment-flow-kicker"><i></i> SECURE TRANSFER ROUTE</span><span class="payment-flow-count">01 <b>/</b> 03</span></div>
+              <div class="payment-flow-main">
+                <div><p class="payment-flow-overline">YOUR PLACE IS TAKING SHAPE</p><h2 id="paymentFlowTitle">Make your transfer</h2><p class="payment-flow-caption">Use the details below. We’ll confirm your place once the team verifies your payment.</p></div>
+                <div class="payment-total"><span>AMOUNT</span><strong>${money(record.amount)}</strong></div>
+              </div>
+              <div class="payment-reference"><span>BOOKING REFERENCE</span><b>${escapeHtml(ref)}</b><small>${escapeHtml(record.categoryName || "Convention registration")}</small></div>
+              <div class="payment-orbit" aria-hidden="true"><i></i><b>₹</b></div>
+            </header>
+            <div class="payment-route" aria-label="Payment steps">
+              <div class="route-stop current"><i>1</i><span>Transfer</span></div><b class="route-line"></b><div class="route-stop"><i>2</i><span>Send proof</span></div><b class="route-line"></b><div class="route-stop"><i>3</i><span>Confirmed</span></div>
+            </div>
+            <section class="transfer-card" aria-label="Bank transfer details">
+              <div class="transfer-card-head"><div><span class="transfer-card-kicker">TRANSFER DESTINATION</span><h3>${escapeHtml(BANK_DETAILS.bank)}</h3></div><span class="transfer-bank-mark" aria-hidden="true">IF</span></div>
+              <p class="transfer-branch">${escapeHtml(BANK_DETAILS.branch)} <span>·</span> Bengaluru</p>
+              <div class="transfer-account-name"><span>ACCOUNT HOLDER</span><strong>${escapeHtml(BANK_DETAILS.accountName)}</strong></div>
+              <div class="transfer-details-grid">
+                ${copyRow("ACCOUNT NUMBER", BANK_DETAILS.account, "account-number")}
+                ${copyRow("IFSC CODE", BANK_DETAILS.ifsc, "ifsc-code")}
+              </div>
+            </section>
+            <div class="payment-proof-hint"><span class="proof-hint-icon" aria-hidden="true">↗</span><div><strong>After you transfer</strong><p>Send your name, mobile, email and a screenshot or transaction ID to the organisers on WhatsApp.</p></div></div>
+            <div class="payment-flow-actions"><button class="btn primary payment-confirm-btn" id="confirmPayment" type="button"><span>Confirm payment</span><i aria-hidden="true">→</i></button><small>Your status stays pending until the transfer is verified.</small></div>
+          </section>`;
+      }
+
+      function attachPaymentFlowActions() {
+        stageEl.querySelectorAll("[data-copy-value]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const value = btn.dataset.copyValue || "";
+            try {
+              await navigator.clipboard.writeText(value);
+              const previous = btn.textContent;
+              btn.textContent = "Copied";
+              btn.classList.add("copied");
+              setTimeout(() => {
+                btn.textContent = previous;
+                btn.classList.remove("copied");
+              }, 1400);
+            } catch (err) {
+              toast("Copy isn’t available here. You can select the bank detail and copy it manually.", "info");
+            }
+          });
+        });
+        stageEl.querySelector("#confirmPayment").addEventListener("click", async () => {
+          const sentToWhatsApp = await showWhatsAppPaymentProof(state.registration);
+          if (sentToWhatsApp) showConfirmation(state.registration);
+        });
+      }
+
       function paintStage() {
         stageEl.innerHTML = "";
         const d = document.createElement("div");
@@ -220,15 +277,21 @@
           });
         } else {
           const c = cat();
-          d.innerHTML =
-            `<div class="rev-row"><span>Meals & sessions</span><b>Included, all three days</b></div>` +
-            `<div class="rev-row"><span>Payment</span><b>Bank transfer via WhatsApp</b></div>` +
-            `<div class="rev-row"><span>Total payable</span><b style="font-size:17px">${money(c.price)}</b></div>` +
-            `<div class="wiz-nav"><button class="btn ghost" id="wBack2" type="button">← Details</button><button class="btn primary" id="wPay" type="button">Confirm registration</button></div>`;
-          d.querySelector("#wBack2").addEventListener("click", () => go(1));
-          d.querySelector("#wPay").addEventListener("click", (e) => confirmAndPay(e.target));
+          if (state.registration) {
+            d.innerHTML = paymentFlowHTML(state.registration);
+          } else {
+            d.innerHTML =
+              `<div class="rev-row"><span>Meals & sessions</span><b>Included, all three days</b></div>` +
+              `<div class="rev-row"><span>Payment method</span><b>Bank transfer</b></div>` +
+              `<div class="rev-row"><span>Total payable</span><b style="font-size:17px">${money(c.price)}</b></div>` +
+              `<div class="payment-prep-note"><span aria-hidden="true">✦</span><div><b>Your payment route is ready</b><small>Bookings open 15th October 2026. Registrations remain open while slots are available. Next, your booking reference and Trust bank details appear here.</small></div></div>` +
+              `<div class="wiz-nav"><button class="btn ghost" id="wBack2" type="button">← Details</button><button class="btn primary" id="wPay" type="button">Make payment <span aria-hidden="true">→</span></button></div>`;
+            d.querySelector("#wBack2").addEventListener("click", () => go(1));
+            d.querySelector("#wPay").addEventListener("click", (e) => makePayment(e.target));
+          }
         }
         stageEl.appendChild(d);
+        if (state.step === 2 && state.registration) attachPaymentFlowActions();
       }
 
       function go(n, retumTicket) {
@@ -240,14 +303,14 @@
         window.scrollTo({ top: 0, behavior: "smooth" });
       }
 
-      async function confirmAndPay(btn) {
+      async function makePayment(btn) {
         const c = cat();
         // Nothing is posted while bookings are shut — the visitor gets the
         // same sentence here as on the home page, and the wizard stays exactly
         // as they left it so nothing they typed is lost.
         if (!(await ensureRegistrationsOpen())) return;
         btn.disabled = true;
-        btn.textContent = "Confirming…";
+        btn.textContent = "Preparing your transfer…";
         try {
           const record = await api("/api/registrations", {
             method: "POST",
@@ -261,16 +324,17 @@
               categoryId: c.id,
             }),
           });
+          state.registration = record;
           api("/api/registrations/" + encodeURIComponent(record.id) + "/notify", {
             method: "POST",
           }).catch(() => {});
-          btn.textContent = "Preparing bank details…";
-          await showBankTransferInstructions(record);
-          showConfirmation(record);
+          paintStage();
+          paintTicket(false);
+          stageEl.scrollIntoView({ behavior: "smooth", block: "center" });
         } catch (err) {
           toast(err.message, "error");
           btn.disabled = false;
-          btn.textContent = "Confirm registration";
+          btn.innerHTML = 'Make payment <span aria-hidden="true">→</span>';
         }
       }
 
@@ -309,11 +373,11 @@
             <div class="mascot-stage party" style="margin-top:4px">
               <span class="mascot-scale">${mascotHTML(isPaid ? "scene-jump" : "dance")}</span>
             </div>
-            <h2 style="margin:0 0 6px">${isPaid ? "PAYMENT RECEIVED — LET'S GOOOO!!" : "LET'S GOOOO — you're in!!"}</h2>
+            <h2 style="margin:0 0 6px">${isPaid ? "PAYMENT RECEIVED — LET'S GOOOO!!" : "REGISTRATION SAVED — PAYMENT PENDING"}</h2>
             <p class="muted" style="margin:0 0 20px">
               ${isPaid
                 ? escapeHtml(r.name) + ", your payment is confirmed and your spot is officially reserved. The mascot is doing laps around the inside of its button."
-                : "You did it, " + escapeHtml(r.name) + "!! Your spot at the convention is saved and the mascot has not stopped dancing since."}
+                : "Thanks, " + escapeHtml(r.name) + ". Your registration is saved. The team will confirm your place once the Trust verifies your bank transfer."}
             </p>
             <div style="text-align:left;border:1px solid var(--border);border-radius:12px;padding:16px">
               <div class="bar-row" style="grid-template-columns:1fr auto;margin-bottom:8px">
@@ -341,7 +405,7 @@
             <p class="muted" style="font-size:13px;margin:16px 0 20px">
               ${isPaid
                 ? "Your payment is in, safe and sound. The team will be in touch shortly — until then, the mascot is counting down the days right there with you."
-                : "Please transfer the amount to the trust account and send your payment screenshot or transaction details on WhatsApp. Your place is confirmed once the team verifies the transfer."}
+                : "To finish, transfer the amount to the Trust account and send your screenshot or transaction ID on WhatsApp. Your registration remains pending until payment is verified."}
             </p>
             <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
               ${r.ticketCode ? '<button class="btn primary" type="button" id="dlTicket">\u2b07 Download ticket</button>' : ""}

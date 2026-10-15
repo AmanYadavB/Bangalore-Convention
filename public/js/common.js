@@ -1894,7 +1894,7 @@ const BANK_DETAILS = {
   ifsc: "IDFB008015",
 };
 
-function showBankTransferInstructions(record) {
+function showWhatsAppPaymentProof(record) {
   const ref = "BC-" + String(record.id || "").slice(0, 8).toUpperCase();
   const message = [
     "Hello, I would like to register for the Bangalore Convention.",
@@ -1904,38 +1904,38 @@ function showBankTransferInstructions(record) {
     "Package: " + (record.categoryName || ""),
     "Amount: " + money(record.amount),
     "Booking reference: " + ref,
-    "I have transferred the payment and attached the screenshot / transaction details.",
+    "I have transferred the payment. I will attach the screenshot or share the transaction ID here.",
   ].join("\n");
   const whatsappUrl = "https://wa.me/" + PAYMENT_WHATSAPP + "?text=" + encodeURIComponent(message);
 
   return new Promise((resolve) => {
     const wrap = document.createElement("div");
-    wrap.className = "mconfirm-backdrop bank-transfer-backdrop";
+    wrap.className = "mconfirm-backdrop payment-proof-backdrop";
     wrap.innerHTML =
-      '<section class="mconfirm bank-transfer" role="dialog" aria-modal="true" aria-labelledby="bankTransferTitle">' +
-      '<button class="bank-transfer-close" type="button" aria-label="Close">×</button>' +
-      '<h3 id="bankTransferTitle">Begin your registration here</h3>' +
-      '<p class="bank-transfer-open">Bookings open 15th October 2026<br>Registrations remain open while slots are available.</p>' +
-      '<div class="bank-transfer-section"><b>SHARE YOUR DETAILS</b><p>Send your name, mobile number, email address and payment screenshot or transaction details on WhatsApp.</p>' +
-      '<a class="btn primary" target="_blank" rel="noopener" href="' + whatsappUrl + '">Send on WhatsApp: +91 97310 34500</a></div>' +
-      '<div class="bank-transfer-section"><b>BANK DETAILS</b><dl>' +
-      '<dt>Account name</dt><dd>' + escapeHtml(BANK_DETAILS.accountName) + '</dd>' +
-      '<dt>Bank</dt><dd>' + escapeHtml(BANK_DETAILS.bank) + '</dd>' +
-      '<dt>Branch</dt><dd>' + escapeHtml(BANK_DETAILS.branch) + '</dd>' +
-      '<dt>Account</dt><dd>' + escapeHtml(BANK_DETAILS.account) + '</dd>' +
-      '<dt>IFSC</dt><dd>' + escapeHtml(BANK_DETAILS.ifsc) + '</dd></dl></div>' +
-      '<button type="button" class="btn ghost bank-transfer-done">I’ll send the payment details</button>' +
+      '<section class="mconfirm payment-proof-dialog" role="dialog" aria-modal="true" aria-labelledby="paymentProofTitle">' +
+      '<button class="payment-proof-close" type="button" aria-label="Close">×</button>' +
+      '<div class="proof-orbit" aria-hidden="true"><span>↗</span></div>' +
+      '<div class="proof-kicker">YOUR LAST STEP</div>' +
+      '<h3 id="paymentProofTitle">Send your payment proof</h3>' +
+      '<p>WhatsApp to <strong>+91 97310 34500</strong> will open with your name, package, amount and booking reference ready. Attach your transfer screenshot or add the transaction ID before you send.</p>' +
+      '<div class="proof-reference"><span>BOOKING REFERENCE</span><b>' + escapeHtml(ref) + '</b><small>' + escapeHtml(money(record.amount)) + ' · ' + escapeHtml(record.categoryName || "Convention registration") + '</small></div>' +
+      '<a class="btn primary proof-send" target="_blank" rel="noopener" href="' + whatsappUrl + '"><span aria-hidden="true">◉</span> Open WhatsApp · +91 97310 34500</a>' +
+      '<button type="button" class="btn ghost proof-later">I still need to make the transfer</button>' +
       '</section>';
-    const close = () => {
+    let settled = false;
+    const close = (openedWhatsApp) => {
+      if (settled) return;
+      settled = true;
       document.removeEventListener("keydown", onKey);
       wrap.classList.remove("show");
       setTimeout(() => wrap.remove(), 220);
-      resolve();
+      resolve(!!openedWhatsApp);
     };
-    const onKey = (event) => { if (event.key === "Escape") close(); };
-    wrap.querySelector(".bank-transfer-close").addEventListener("click", close);
-    wrap.querySelector(".bank-transfer-done").addEventListener("click", close);
-    wrap.addEventListener("click", (event) => { if (event.target === wrap) close(); });
+    const onKey = (event) => { if (event.key === "Escape") close(false); };
+    wrap.querySelector(".payment-proof-close").addEventListener("click", () => close(false));
+    wrap.querySelector(".proof-later").addEventListener("click", () => close(false));
+    wrap.querySelector(".proof-send").addEventListener("click", () => close(true));
+    wrap.addEventListener("click", (event) => { if (event.target === wrap) close(false); });
     document.addEventListener("keydown", onKey);
     document.body.appendChild(wrap);
     requestAnimationFrame(() => wrap.classList.add("show"));
@@ -3124,11 +3124,12 @@ function mountChat() {
         api("/api/registrations/" + encodeURIComponent(record.id) + "/notify", {
           method: "POST",
         }).catch(() => {});
-        btn.textContent = "Showing bank details…";
-        await showBankTransferInstructions(record);
         const ref = "BC-" + String(record.id || "").slice(0, 8).toUpperCase();
-        addMsg("assistant", "✅ Your registration is saved! Your reference is **" + ref + "**. Please transfer the amount and send your payment screenshot or transaction details on WhatsApp. The team will confirm your spot once the transfer is verified.");
-        // A bank-transfer registration is pending until the team verifies it.
+        addMsg("assistant", "✅ Your registration is saved as pending. Reference: **" + ref + "** · Amount: **" + money(record.amount) + "**\n\nBank details\nAccount name: " + BANK_DETAILS.accountName + "\nBank: " + BANK_DETAILS.bank + " · " + BANK_DETAILS.branch + "\nAccount: " + BANK_DETAILS.account + "\nIFSC: " + BANK_DETAILS.ifsc + "\n\nAfter transferring, send the screenshot or transaction ID on WhatsApp. The team will confirm your place after verification.");
+        btn.textContent = "Preparing WhatsApp…";
+        const openedWhatsApp = await showWhatsAppPaymentProof(record);
+        if (openedWhatsApp) addMsg("assistant", "WhatsApp is open with your registration details. Attach your transfer screenshot or add the transaction ID before sending.");
+        // A bank-transfer registration remains pending until the team verifies it.
         offerTicketDownload(record);
       } catch (err) {
         btn.disabled = false;
