@@ -736,14 +736,6 @@ function paintNav(active, opts) {
       if (document.__brochureTrigger) document.__brochureTrigger.focus();
     };
     const openBrochure = (trigger) => {
-      // Mobile browsers frequently refuse to paint a PDF inside an iframe
-      // (notably iOS Safari and in-app webviews), even though they can render
-      // that exact PDF as a top-level document. Keep the animated reader on
-      // larger screens and hand phones to their native, scrollable PDF viewer.
-      if (matchMedia("(max-width: 720px)").matches) {
-        location.assign(new URL(trigger.getAttribute("href"), location.href).href);
-        return;
-      }
       const r = trigger.getBoundingClientRect();
       brochureSheet.style.setProperty("--brochure-x", (r.left + r.width / 2 - innerWidth / 2) + "px");
       brochureSheet.style.setProperty("--brochure-y", (r.top + r.height / 2 - innerHeight / 2) + "px");
