@@ -2240,7 +2240,9 @@ const CSP = [
   "object-src 'none'",
   "base-uri 'none'",
   "form-action 'self'",
-  "frame-ancestors 'none'",
+  // The brochure reader embeds a same-site PDF in an iframe. Keep external
+  // clickjacking blocked while allowing biaac.com to frame its own asset.
+  "frame-ancestors 'self'",
 ].join("; ");
 
 function withSecurityHeaders(res, env, url) {
@@ -2271,7 +2273,12 @@ function withSecurityHeaders(res, env, url) {
 
   h.set("x-content-type-options", "nosniff");
   h.set("referrer-policy", "strict-origin-when-cross-origin");
-  h.set("x-frame-options", "DENY");
+  // The brochure is the sole same-origin iframe on the site. X-Frame-Options
+  // must agree with frame-ancestors or browsers will reject the embedded PDF.
+  h.set(
+    "x-frame-options",
+    url.pathname === "/docs/BIAAC_2027_High_Resolution_GSO.pdf" ? "SAMEORIGIN" : "DENY"
+  );
   h.set("cross-origin-opener-policy", "same-origin");
   // microphone=(self) and camera=(self), NOT () — the chat widget uses
   // getUserMedia for voice mode and the check-in desk uses it for the ticket
