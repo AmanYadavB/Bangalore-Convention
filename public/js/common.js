@@ -586,7 +586,15 @@ function renderNav(active, opts) {
               <button class="brochure-close" type="button" aria-label="Close brochure">×</button>
             </div>
           </header>
-          <div class="brochure-reader"><iframe src="docs/BIAAC_2027_High_Resolution_GSO.pdf" title="BIAAC 2027 convention brochure"></iframe></div>
+          <div class="brochure-reader">
+            <iframe src="docs/BIAAC_2027_High_Resolution_GSO.pdf" title="BIAAC 2027 convention brochure"></iframe>
+            <div class="brochure-mobile-pages" aria-label="BIAAC 2027 convention brochure pages">
+              <img src="img/brochure/page-1.jpg" alt="BIAAC 2027 convention brochure, page 1" fetchpriority="high">
+              <img src="img/brochure/page-2.jpg" alt="BIAAC 2027 convention brochure, page 2" loading="lazy">
+              <img src="img/brochure/page-3.jpg" alt="BIAAC 2027 convention brochure, page 3" loading="lazy">
+              <img src="img/brochure/page-4.jpg" alt="BIAAC 2027 convention brochure, page 4" loading="lazy">
+            </div>
+          </div>
         </section>
       </div>`;
 
