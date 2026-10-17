@@ -3539,6 +3539,50 @@ select.dd-native {
   transition-delay: calc(var(--i, 0) * 70ms);
 }
 
+/* ---------- Convention brochure reader ---------- */
+/* Same frosted full-screen stage as the pricing burst. The document owns the
+   scroll area, leaving the download action visible at the top. */
+body.brochure-open { overflow: hidden; }
+
+.brochure-dialog {
+  position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 18px;
+  background: color-mix(in srgb, var(--bg) 80%, transparent);
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity .24s ease, visibility 0s linear .24s;
+}
+.brochure-dialog.open { opacity: 1; visibility: visible; pointer-events: auto; transition: opacity .24s ease; }
+.brochure-sheet {
+  width: min(1120px, 100%); height: min(860px, calc(100vh - 36px)); display: flex; flex-direction: column;
+  overflow: hidden; border: 1px solid var(--border); border-radius: 18px; background: var(--card);
+  box-shadow: 0 28px 80px -22px rgba(0, 0, 0, .48);
+  transform: translate(var(--brochure-x, 0), var(--brochure-y, -40px)) rotate(-7deg) scale(.08); opacity: 0;
+  transition: transform .7s cubic-bezier(.2, 1.55, .4, 1), opacity .18s ease;
+}
+.brochure-dialog.open .brochure-sheet { transform: none; opacity: 1; }
+.brochure-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px; flex: 0 0 auto;
+  padding: 12px 14px 12px 18px; border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--card) 92%, var(--accent) 8%);
+}
+.brochure-kicker { display: block; color: var(--accent); font-size: 10px; font-weight: 800; letter-spacing: 1.35px; text-transform: uppercase; }
+.brochure-bar h2 { margin: 1px 0 0; font-size: 17px; }
+.brochure-actions { display: flex; align-items: center; gap: 9px; }
+.brochure-download, .brochure-close { min-height: 38px; border: 1px solid var(--border); border-radius: 9px; font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; }
+.brochure-download { display: inline-flex; align-items: center; gap: 7px; padding: 0 12px; background: var(--accent); border-color: var(--accent); color: #fff; }
+.brochure-download:hover { color: #fff; filter: brightness(1.06); }
+.brochure-close { width: 38px; padding: 0; background: var(--card); color: var(--text); font-size: 24px; line-height: 1; }
+.brochure-reader { min-height: 0; flex: 1; background: #52565d; }
+.brochure-reader iframe { display: block; width: 100%; height: 100%; border: 0; }
+
+@media (max-width: 560px) {
+  .brochure-dialog { padding: 0; }
+  .brochure-sheet { width: 100%; height: 100%; border: 0; border-radius: 0; }
+  .brochure-bar { padding-left: 13px; gap: 8px; }
+  .brochure-download { padding: 0 9px; }
+  .brochure-download span { display: none; }
+}
+
 .pb-card:hover {
   color: var(--text);
   border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
@@ -3584,6 +3628,7 @@ select.dd-native {
   .mem-wall.pop .mem-tile { animation: none; opacity: 1; }
   .mem-inner, .mem-fig, .pb-card { transition: none; }
   .pburst.open .pb-card { opacity: 1; transform: none; }
+  .brochure-sheet { transition: none; }
 }
 
 /* N4: the Sign in button in the bar is a quiet outlined chip, not a filled

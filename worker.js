@@ -2236,7 +2236,7 @@ const CSP = [
   // data: is required — greeting audio is played from a base64 data URL.
   "media-src 'self' data: blob:",
   "connect-src 'self' https://lumberjack.razorpay.com https://cloudflareinsights.com",
-  "frame-src https://api.razorpay.com https://checkout.razorpay.com",
+  "frame-src 'self' https://api.razorpay.com https://checkout.razorpay.com",
   "object-src 'none'",
   "base-uri 'none'",
   "form-action 'self'",

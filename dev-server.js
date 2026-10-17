@@ -77,6 +77,7 @@ const MIME = {
   ".jpg": "image/jpeg",
   ".ico": "image/x-icon",
   ".json": "application/json; charset=utf-8",
+  ".pdf": "application/pdf",
   ".woff2": "font/woff2",
 };
 

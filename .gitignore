@@ -5,3 +5,5 @@ node_modules/
 .screenshots/
 docs/
 *.pdf
+!public/docs/
+!public/docs/BIAAC_2027_High_Resolution_GSO.pdf

@@ -492,6 +492,8 @@ const NAV_LINKS = [
   // the FAQ, as three sections. Someone deciding whether to register needs it
   // one click away; the policy pages below do not belong in a visitor's nav.
   { href: "about.html", label: "About", key: "about", icon: "🕊️" },
+  // Opens in the shared in-page viewer; the PDF is also downloadable there.
+  { href: "docs/BIAAC_2027_High_Resolution_GSO.pdf", label: "Brochure", key: "brochure", icon: "📄" },
   // Registration is public, but the developer workbench should not present it
   // as one of that role's pages. Signed-out visitors and admins still see it.
   { href: "register.html", label: "Register", key: "register", icon: "📝" },
@@ -573,6 +575,21 @@ function renderNav(active, opts) {
     ? ""
     : `<a class="link" style="--i:${links.length}" data-contact="1" href="#contact"><span class="link-ico" aria-hidden="true">✉️</span><span class="link-label">Contact Us</span></a>`;
 
+  const brochureViewer = bare
+    ? ""
+    : `<div class="brochure-dialog" id="brochureDialog" role="dialog" aria-modal="true" aria-labelledby="brochureTitle" aria-hidden="true">
+        <section class="brochure-sheet" id="brochureSheet" tabindex="-1">
+          <header class="brochure-bar">
+            <div><span class="brochure-kicker">BIAAC 2027</span><h2 id="brochureTitle">Convention brochure</h2></div>
+            <div class="brochure-actions">
+              <a class="brochure-download" href="docs/BIAAC_2027_High_Resolution_GSO.pdf" download>Download PDF <span aria-hidden="true">↓</span></a>
+              <button class="brochure-close" type="button" aria-label="Close brochure">×</button>
+            </div>
+          </header>
+          <div class="brochure-reader"><iframe src="docs/BIAAC_2027_High_Resolution_GSO.pdf" title="BIAAC 2027 convention brochure"></iframe></div>
+        </section>
+      </div>`;
+
   return `
   <nav class="nav">
     <span class="brand">
@@ -594,7 +611,7 @@ function renderNav(active, opts) {
   <div class="nav-overlay" id="navOverlay">
     ${linkItems(true)}
     ${contactIcon}
-  </div>`}`;
+  </div>${brochureViewer}`}`;
 }
 
 // Draw the nav and wire its controls. Safe to call twice — refreshUser()
@@ -642,6 +659,14 @@ function paintNav(active, opts) {
   document.__profileEsc = (e) => {
     if (e.key !== "Escape") return;
     closeProfileMenu();
+    const brochure = document.getElementById("brochureDialog");
+    if (brochure && brochure.classList.contains("open")) {
+      brochure.classList.remove("open");
+      brochure.setAttribute("aria-hidden", "true");
+      document.body.classList.remove("brochure-open");
+      if (document.__brochureTrigger) document.__brochureTrigger.focus();
+      return;
+    }
     const ov = document.getElementById("navOverlay");
     const nt = document.getElementById("navToggle");
     if (ov) ov.classList.remove("open");
@@ -699,6 +724,39 @@ function paintNav(active, opts) {
   // Mobile melting capsule: past the top of the page the B·I·A·A·C wordmark
   // melts away leaving logo + menu; back at the top it breathes back in.
   // (The class is harmless on desktop — only the ≤720px styles react to it.)
+  // The brochure flies out of the nav link, then settles into a dedicated
+  // reading surface. Its header stays fixed while the PDF has its own scroll.
+  const brochureDialog = document.getElementById("brochureDialog");
+  if (brochureDialog) {
+    const brochureSheet = document.getElementById("brochureSheet");
+    const closeBrochure = () => {
+      brochureDialog.classList.remove("open");
+      brochureDialog.setAttribute("aria-hidden", "true");
+      document.body.classList.remove("brochure-open");
+      if (document.__brochureTrigger) document.__brochureTrigger.focus();
+    };
+    const openBrochure = (trigger) => {
+      const r = trigger.getBoundingClientRect();
+      brochureSheet.style.setProperty("--brochure-x", (r.left + r.width / 2 - innerWidth / 2) + "px");
+      brochureSheet.style.setProperty("--brochure-y", (r.top + r.height / 2 - innerHeight / 2) + "px");
+      document.__brochureTrigger = trigger;
+      brochureDialog.classList.add("open");
+      brochureDialog.setAttribute("aria-hidden", "false");
+      document.body.classList.add("brochure-open");
+      brochureSheet.focus({ preventScroll: true });
+    };
+    document.querySelectorAll('.nav a[href="docs/BIAAC_2027_High_Resolution_GSO.pdf"], #navOverlay a[href="docs/BIAAC_2027_High_Resolution_GSO.pdf"]').forEach((a) =>
+      a.addEventListener("click", (e) => {
+        e.preventDefault();
+        openBrochure(a);
+      })
+    );
+    brochureDialog.querySelector(".brochure-close").addEventListener("click", closeBrochure);
+    brochureDialog.addEventListener("click", (e) => {
+      if (e.target === brochureDialog) closeBrochure();
+    });
+  }
+
   const navBar = holder.querySelector(".nav");
   const meltNav = () => {
     if (navBar) navBar.classList.toggle("shrunk", window.scrollY > 90);
