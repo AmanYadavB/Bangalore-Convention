@@ -582,7 +582,7 @@ function renderNav(active, opts) {
           <header class="brochure-bar">
             <div><span class="brochure-kicker">BIAAC 2027</span><h2 id="brochureTitle">Convention brochure</h2></div>
             <div class="brochure-actions">
-              <a class="brochure-download" href="docs/BIAAC_2027_High_Resolution_GSO.pdf" download>Download PDF <span aria-hidden="true">↓</span></a>
+              <a class="brochure-download" href="docs/BIAAC_2027_High_Resolution_GSO.pdf" download>Download <span aria-hidden="true">↓</span></a>
               <button class="brochure-close" type="button" aria-label="Close brochure">×</button>
             </div>
           </header>
