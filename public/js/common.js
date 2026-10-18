@@ -1954,7 +1954,7 @@ const BANK_DETAILS = {
   bank: "IDFC FIRST Bank",
   branch: "Koramangala Branch",
   account: "60909202646",
-  ifsc: "IDFB008015",
+  ifsc: "IDFB0080152",
 };
 
 function showWhatsAppPaymentProof(record) {
