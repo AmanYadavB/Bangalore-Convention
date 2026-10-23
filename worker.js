@@ -53,6 +53,33 @@ const json = (obj, status = 200) =>
 // contacting real people, or changing real booking/payment state. This is an
 // explicit allow-list: an absent or misspelled environment is safe by default.
 const isProduction = (env) => env.ENVIRONMENT === "production";
+const isStaging = (env) => env.ENVIRONMENT === "staging";
+
+// Staging uses the real delivery provider only for the two explicitly named
+// test accounts. This lets us exercise login and confirmation flows without
+// turning the staging Worker into a way to email real registrants.
+function stagingMailAllowed(env, to) {
+  return (
+    isStaging(env) &&
+    String(env.STAGING_ALLOW_OUTBOUND_EMAILS || "") === "1" &&
+    parseEmailList(env.STAGING_EMAIL_ALLOWLIST).includes(normalizeEmail(to))
+  );
+}
+
+function publicPaymentSettings(env) {
+  if (!isStaging(env)) return { testMode: false };
+  return {
+    testMode: true,
+    whatsapp: env.STAGING_PAYMENT_WHATSAPP || "919625018330",
+    bankDetails: {
+      accountName: "STAGING ONLY — DO NOT TRANSFER",
+      bank: "Test Bank",
+      branch: "Staging Branch",
+      account: "000000000000",
+      ifsc: "TEST0000000",
+    },
+  };
+}
 
 async function loadList(env, key) {
   const data = await env.CONVENTION_KV.get(key, { type: "json" });
@@ -2959,11 +2986,11 @@ function sendRegistrationAdminAlert(env, ctx, event, reg) {
 // comes from a database row, never from a request body, which is what stops
 // this becoming the open relay that POST /api/contact currently is.
 async function sendMail(env, to, subject, html, opts = {}) {
-  if (!isProduction(env)) {
-    console.log("mail blocked outside production");
-    return { ok: false, note: "mail is disabled outside production" };
-  }
   if (!to) return { ok: false, note: "no recipient" };
+  if (!isProduction(env) && !stagingMailAllowed(env, to)) {
+    console.log("mail blocked for non-allowlisted staging recipient");
+    return { ok: false, note: "mail is disabled for this environment or recipient" };
+  }
   try {
     const personalization = { to: [{ email: to, name: opts.toName || "" }] };
     if (opts.replyTo) personalization.reply_to = opts.replyTo;
@@ -3965,6 +3992,7 @@ async function handleApi(request, env, ctx) {
       registrationsMessage: REGISTRATIONS_CLOSED_MESSAGE,
       checkinOpens: opens,
       checkinCloses: closes,
+      payment: publicPaymentSettings(env),
     });
   }
 
@@ -4066,8 +4094,8 @@ async function handleApi(request, env, ctx) {
       // Checked before anything is validated or written. The two popups in the
       // browser are a courtesy; this is the gate, and it is the reason a
       // hand-rolled POST cannot book a place either.
-      if (!isProduction(env)) {
-        return json({ error: "Registrations are disabled outside production.", registrationsOpen: false }, 403);
+      if (!isProduction(env) && !isStaging(env)) {
+        return json({ error: "Registrations are disabled in this environment.", registrationsOpen: false }, 403);
       }
       if (!registrationsOpen(env)) {
         return json({ error: REGISTRATIONS_CLOSED_MESSAGE, registrationsOpen: false }, 403);

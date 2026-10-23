@@ -19,12 +19,16 @@ database_id = "c8ae9de5-a10e-425f-b3ef-ba5b4a83bb54"
 
 [vars]
 ENVIRONMENT = "staging"
-AUTH_ORIGIN = "https://bangalore-convention-staging.workers.dev"
-SITE_ORIGIN = "https://bangalore-convention-staging.workers.dev"
+AUTH_ORIGIN = "https://bangalore-convention-staging.amankumaryadavasasmd.workers.dev"
+SITE_ORIGIN = "https://bangalore-convention-staging.amankumaryadavasasmd.workers.dev"
 
-# Never accept real bookings or payments in staging.
-REGISTRATIONS_OPEN = "0"
+# Test registrations use the isolated D1 database. Payment APIs still reject
+# every request outside production.
+REGISTRATIONS_OPEN = "1"
 RAZORPAY_KEY_ID = ""
+STAGING_ALLOW_OUTBOUND_EMAILS = "1"
+STAGING_PAYMENT_WHATSAPP = "919625018330"
+GOOGLE_CLIENT_ID = "174171220198-tlbiujfi2ltpamuobf1nio4doqouu6ck.apps.googleusercontent.com"
 
 # Do not schedule automated email or WhatsApp activity in staging.
 DIGEST_TIME_IST = "00:00"

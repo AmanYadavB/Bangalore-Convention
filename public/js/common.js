@@ -1948,17 +1948,42 @@ function mountRegisterCtas() {
 }
 
 // ---- Bank-transfer instructions (used by register.html and in-chat booking) ----
-const PAYMENT_WHATSAPP = "919731034500";
+const STAGING_HOST = "bangalore-convention-staging.amankumaryadavasasmd.workers.dev";
+const IS_STAGING_SITE = window.location.hostname === STAGING_HOST;
+let PAYMENT_WHATSAPP = IS_STAGING_SITE ? "919625018330" : "919731034500";
 const BANK_DETAILS = {
-  accountName: "BENGALURU INTERNATIONAL CONVENTION TRUST",
-  bank: "IDFC FIRST Bank",
-  branch: "Koramangala Branch",
-  account: "60909202646",
-  ifsc: "IDFB0080152",
+  accountName: IS_STAGING_SITE ? "STAGING ONLY — DO NOT TRANSFER" : "BENGALURU INTERNATIONAL CONVENTION TRUST",
+  bank: IS_STAGING_SITE ? "Test Bank" : "IDFC FIRST Bank",
+  branch: IS_STAGING_SITE ? "Staging Branch" : "Koramangala Branch",
+  account: IS_STAGING_SITE ? "000000000000" : "60909202646",
+  ifsc: IS_STAGING_SITE ? "TEST0000000" : "IDFB0080152",
 };
+
+function applyPaymentSettings(payment) {
+  if (!payment || !payment.testMode) return;
+  if (payment.whatsapp) PAYMENT_WHATSAPP = payment.whatsapp;
+  if (payment.bankDetails) Object.assign(BANK_DETAILS, payment.bankDetails);
+  document.querySelectorAll("[data-payment-whatsapp]").forEach((el) => {
+    el.href = "https://wa.me/" + PAYMENT_WHATSAPP;
+    el.textContent = "+" + PAYMENT_WHATSAPP.slice(0, 2) + " " + PAYMENT_WHATSAPP.slice(2, 7) + " " + PAYMENT_WHATSAPP.slice(7);
+  });
+  const details = {
+    accountName: BANK_DETAILS.accountName,
+    bank: BANK_DETAILS.bank,
+    branch: BANK_DETAILS.branch,
+    account: BANK_DETAILS.account,
+    ifsc: BANK_DETAILS.ifsc,
+  };
+  Object.entries(details).forEach(([key, value]) => {
+    document.querySelectorAll("[data-payment-" + key + "]").forEach((el) => { el.textContent = value; });
+  });
+}
+
+siteState().then((st) => applyPaymentSettings(st && st.payment));
 
 function showWhatsAppPaymentProof(record) {
   const ref = "BC-" + String(record.id || "").slice(0, 8).toUpperCase();
+  const whatsappDisplay = "+" + PAYMENT_WHATSAPP.slice(0, 2) + " " + PAYMENT_WHATSAPP.slice(2, 7) + " " + PAYMENT_WHATSAPP.slice(7);
   const message = [
     "Hello, I would like to register for the Bangalore Convention.",
     "Name: " + (record.name || ""),
@@ -1980,9 +2005,9 @@ function showWhatsAppPaymentProof(record) {
       '<div class="proof-orbit" aria-hidden="true"><span>↗</span></div>' +
       '<div class="proof-kicker">YOUR LAST STEP</div>' +
       '<h3 id="paymentProofTitle">Send your payment proof</h3>' +
-      '<p>WhatsApp to <strong>+91 97310 34500</strong> will open with your name, package, amount and booking reference ready. Attach your transfer screenshot or add the transaction ID before you send.</p>' +
+      '<p>WhatsApp to <strong>' + escapeHtml(whatsappDisplay) + '</strong> will open with your name, package, amount and booking reference ready. Attach your transfer screenshot or add the transaction ID before you send.</p>' +
       '<div class="proof-reference"><span>BOOKING REFERENCE</span><b>' + escapeHtml(ref) + '</b><small>' + escapeHtml(money(record.amount)) + ' · ' + escapeHtml(record.categoryName || "Convention registration") + '</small></div>' +
-      '<a class="btn primary proof-send" target="_blank" rel="noopener" href="' + whatsappUrl + '"><span aria-hidden="true">◉</span><span class="proof-send-label">Open WhatsApp</span><span class="proof-send-number">· +91 97310 34500</span></a>' +
+      '<a class="btn primary proof-send" target="_blank" rel="noopener" href="' + whatsappUrl + '"><span aria-hidden="true">◉</span><span class="proof-send-label">Open WhatsApp</span><span class="proof-send-number">· ' + escapeHtml(whatsappDisplay) + '</span></a>' +
       '<button type="button" class="btn ghost proof-later">I still need to make the transfer</button>' +
       '</section>';
     let settled = false;
