@@ -49,6 +49,11 @@ const json = (obj, status = 200) =>
     headers: { "content-type": "application/json; charset=utf-8" },
   });
 
+// Staging must be able to exercise the application without spending money,
+// contacting real people, or changing real booking/payment state. This is an
+// explicit allow-list: an absent or misspelled environment is safe by default.
+const isProduction = (env) => env.ENVIRONMENT === "production";
+
 async function loadList(env, key) {
   const data = await env.CONVENTION_KV.get(key, { type: "json" });
   return Array.isArray(data) ? data : [];
@@ -2954,6 +2959,10 @@ function sendRegistrationAdminAlert(env, ctx, event, reg) {
 // comes from a database row, never from a request body, which is what stops
 // this becoming the open relay that POST /api/contact currently is.
 async function sendMail(env, to, subject, html, opts = {}) {
+  if (!isProduction(env)) {
+    console.log("mail blocked outside production");
+    return { ok: false, note: "mail is disabled outside production" };
+  }
   if (!to) return { ok: false, note: "no recipient" };
   try {
     const personalization = { to: [{ email: to, name: opts.toName || "" }] };
@@ -3280,6 +3289,10 @@ async function getDigestTime(env) {
 }
 
 async function runSchedules(env) {
+  if (!isProduction(env)) {
+    console.log("scheduled side effects blocked outside production");
+    return { ok: true, skipped: true, note: "schedules are disabled outside production" };
+  }
   const ist = new Date(Date.now() + 5.5 * 3600 * 1000); // IST = UTC+5:30
   const today = ist.toISOString().slice(0, 10);
   const hhmm = ist.toISOString().slice(11, 16);
@@ -3402,6 +3415,10 @@ function waNormalize(raw) {
 }
 
 async function waPost(env, payload) {
+  if (!isProduction(env)) {
+    console.log("WhatsApp send blocked outside production");
+    return null;
+  }
   if (!env.WHATSAPP_TOKEN || !env.WHATSAPP_PHONE_ID) {
     // Silent here would look exactly like "the bot ignored me".
     console.log(
@@ -4049,6 +4066,9 @@ async function handleApi(request, env, ctx) {
       // Checked before anything is validated or written. The two popups in the
       // browser are a courtesy; this is the gate, and it is the reason a
       // hand-rolled POST cannot book a place either.
+      if (!isProduction(env)) {
+        return json({ error: "Registrations are disabled outside production.", registrationsOpen: false }, 403);
+      }
       if (!registrationsOpen(env)) {
         return json({ error: REGISTRATIONS_CLOSED_MESSAGE, registrationsOpen: false }, 403);
       }
@@ -4949,6 +4969,9 @@ async function handleApi(request, env, ctx) {
 
   // ---- Razorpay payment: create order ----
   if (resource === "payment" && parts[2] === "create-order" && method === "POST") {
+    if (!isProduction(env)) {
+      return json({ error: "Payments are disabled outside production." }, 403);
+    }
     if (!env.RAZORPAY_KEY_ID || !env.RAZORPAY_KEY_SECRET) {
       // Keys not configured yet — return a sentinel so the frontend can skip payment.
       return json({ skipped: true, reason: "Razorpay not configured" });
@@ -5002,6 +5025,9 @@ async function handleApi(request, env, ctx) {
 
   // ---- Razorpay payment: verify signature and mark paid ----
   if (resource === "payment" && parts[2] === "verify" && method === "POST") {
+    if (!isProduction(env)) {
+      return json({ error: "Payments are disabled outside production." }, 403);
+    }
     const { registrationId, razorpayOrderId, razorpayPaymentId, razorpaySignature } = body;
     if (!registrationId || !razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
       return json({ error: "All payment fields required" }, 400);

@@ -90,6 +90,10 @@ crons = ["*/10 * * * *"]
 # ---------------------------------------------------------------------------
 
 [vars]
+# Explicit production marker. Worker side effects use this as an allow-list;
+# any other environment, or a missing value, defaults to safe no-send mode.
+ENVIRONMENT = "production"
+
 # Public origin. Used to build redirect URLs and to validate request Origin
 # headers. NEVER derived from the Host header (host-header injection).
 AUTH_ORIGIN = "https://biaac.com"
