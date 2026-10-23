@@ -1,0 +1,30 @@
+name = "bangalore-convention-staging"
+main = "worker.js"
+compatibility_date = "2024-11-01"
+workers_dev = true
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = true
+
+[[kv_namespaces]]
+binding = "CONVENTION_KV"
+id = "fe26835e4ef3473f804de21439a1a606"
+
+[[d1_databases]]
+binding = "CONVENTION_DB"
+database_name = "convention-staging"
+database_id = "c8ae9de5-a10e-425f-b3ef-ba5b4a83bb54"
+
+[vars]
+ENVIRONMENT = "staging"
+AUTH_ORIGIN = "https://bangalore-convention-staging.<your-subdomain>.workers.dev"
+SITE_ORIGIN = "https://bangalore-convention-staging.<your-subdomain>.workers.dev"
+
+# Never accept real bookings or payments in staging.
+REGISTRATIONS_OPEN = "0"
+RAZORPAY_KEY_ID = ""
+
+# Do not schedule automated email or WhatsApp activity in staging.
+DIGEST_TIME_IST = "00:00"
