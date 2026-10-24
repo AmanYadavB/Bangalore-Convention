@@ -128,20 +128,7 @@ jobs:
               --base main \
               --head dev \
               --title "Release: Promote dev to production" \
-              --body "## 🛡️ Automated Release Gate Summary
-
-All 5 Build Gate verification stages passed on \`dev\`:
-- [x] **Syntax Verification**: Passed Node syntax checks on all scripts and modules.
-- [x] **Asset Integrity**: Verified all 16 HTML routes and core static assets.
-- [x] **Secret Hygiene**: Scanned tracked files for accidental credential leaks.
-- [x] **Production Worker**: Validated bundle compilation against \`wrangler.toml\`.
-- [x] **Staging Worker**: Validated bundle compilation against \`wrangler.staging.toml\`.
-
----
-### Approver Checklist:
-- [ ] Review commits attached to this PR.
-- [ ] Staging test verified on \`bangalore-convention-staging\`.
-- [ ] Ready to merge to trigger production deployment on \`main\`."
+              --body $'## 🛡️ Automated Release Gate Summary\n\nAll 5 Build Gate verification stages passed on dev:\n- [x] **Syntax Verification**: Passed Node syntax checks on all scripts and modules.\n- [x] **Asset Integrity**: Verified all 16 HTML routes and core static assets.\n- [x] **Secret Hygiene**: Scanned tracked files for accidental credential leaks.\n- [x] **Production Worker**: Validated bundle compilation against wrangler.toml.\n- [x] **Staging Worker**: Validated bundle compilation against wrangler.staging.toml.\n\n---\n### Approver Checklist:\n- [ ] Review commits attached to this PR.\n- [ ] Staging test verified on bangalore-convention-staging.\n- [ ] Ready to merge to trigger production deployment on main.'
           else
             echo "PR #$EXISTING_PR is already open. Commits automatically synchronized."
           fi
