@@ -1,14 +1,224 @@
 name = "bangalore-convention"
 main = "worker.js"
 compatibility_date = "2024-11-01"
+workers_dev = true
+
+# Keep the production domain under Wrangler management. Without this entry,
+# deploys remove the custom-domain route configured in the dashboard.
+[[routes]]
+pattern = "biaac.com"
+custom_domain = true
 
 # Serve the static site (public/) through the ASSETS binding.
 [assets]
 directory = "./public"
 binding = "ASSETS"
 
+# REQUIRED FOR THE PAGE GATE TO WORK. By default Cloudflare serves a matching
+# static file directly from the edge and never invokes the Worker — which
+# means the authorization check in fetch() would simply not run for
+# /dashboard, /registrations, /ops and friends. Verified: without this,
+# GET /dashboard returned 200 to an anonymous request.
+#
+# With run_worker_first the Worker sees every request, canonicalises the path
+# once (see canonicalPage) and decides. Public assets still come from
+# env.ASSETS.fetch() at the end of the handler.
+run_worker_first = true
+
 # KV storage for registrations and expenses.
 # Replace PASTE_YOUR_KV_NAMESPACE_ID_HERE with the ID of the KV namespace you create.
 [[kv_namespaces]]
 binding = "CONVENTION_KV"
-id = "PASTE_YOUR_KV_NAMESPACE_ID_HERE"
+id = "523334e302664ae8a883e5a0c44119a0"
+
+# D1 database. Holds the staff/auth tables, developer-generated pages, and —
+# since Aug 2026 — registrations and expenses, which used to be single JSON
+# blobs in KV where concurrent writes silently overwrote each other.
+# Existing KV data is imported automatically on first boot and left in place.
+# Create it once:  npx wrangler d1 create convention-db
+# then paste the printed database_id below.
+[[d1_databases]]
+binding = "CONVENTION_DB"
+database_name = "convention-db"
+database_id = "60bc0f91-4595-478b-a576-1841ebb41588"
+
+# Cloudflare Workers AI powers the chat assistant (env.AI).
+# remote = true only affects `wrangler dev`: it proxies AI calls to Cloudflare
+# (there is no local AI runtime), so the chatbot works in local dev too.
+[ai]
+binding = "AI"
+remote = true
+
+# Ops dashboard emails: one cron ticks every 10 minutes and the Worker decides
+# what's due — the daily digest at DIGEST_TIME_IST (set below, plain IST time,
+# no UTC math), and the critical-only check every 6 hours.
+[triggers]
+crons = ["*/10 * * * *"]
+
+# ---------------------------------------------------------------------------
+# AUTHENTICATION
+# ---------------------------------------------------------------------------
+# Staff sign in at /login.html with Google, an emailed link, or a password.
+# Roles are separate: staff/admin gets registrations, check-in, dashboard and
+# expenses; developer gets reflections, Ops and Feed AI. Access is enforced
+# SERVER-SIDE, both on /api/* and on the protected HTML pages.
+#
+# THREE SECRETS MUST BE SET BEFORE DEPLOYING — they must NOT go in this file,
+# which is committed to git:
+#
+#   npx wrangler secret put PASSWORD_PEPPER        # required for password login
+#   npx wrangler secret put SESSION_PEPPER         # optional but recommended
+#   npx wrangler secret put GOOGLE_CLIENT_SECRET   # required for Google SSO
+#
+# PASSWORD_PEPPER is the single most important secret here. Passwords are
+# HMAC'd with it before hashing, so an attacker holding a full database dump
+# but not the pepper cannot crack them offline at any speed. Generate one with:
+#   node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
+#
+# Local development uses .dev.vars (gitignored) instead — see that file.
+
+# ---------------------------------------------------------------------------
+# NOTHING SECRET BELONGS IN THIS FILE. It is committed, and the repository was
+# public — every value ever written here should be treated as disclosed and
+# rotated. Secrets and personal contact details go in:
+#   production  ->  npx wrangler secret put NAME
+#   local dev   ->  .dev.vars  (gitignored, never committed)
+# What may stay here: resource ids, timings, feature flags, and identifiers
+# that are public by design (a Google OAuth client id, a Razorpay key id —
+# both are sent to the browser anyway).
+# See docs/SECURITY-ROTATION.md for what to rotate and in what order.
+# ---------------------------------------------------------------------------
+
+[vars]
+# Explicit production marker. Worker side effects use this as an allow-list;
+# any other environment, or a missing value, defaults to safe no-send mode.
+ENVIRONMENT = "production"
+
+# Public origin. Used to build redirect URLs and to validate request Origin
+# headers. NEVER derived from the Host header (host-header injection).
+AUTH_ORIGIN = "https://biaac.com"
+
+# ARE REGISTRATIONS LIVE?
+# Registrations opened on 15 October 2026 and remain open while places last.
+REGISTRATIONS_OPEN = "1"
+
+# THE CHECK-IN WINDOW. A ticket only opens the door on the days of the
+# convention; outside these dates the scanner answers "not yet" or "closed"
+# instead of admitting someone. Set CHECKIN_ENFORCE_WINDOW = "0" to lift the
+# window for a rehearsal — leaving it unset means the window is enforced.
+CHECKIN_OPENS_IST = "2027-07-09"
+CHECKIN_CLOSES_IST = "2027-07-11"
+
+# WHO CAN SIGN IN, AND AS WHAT.
+#
+# These two lists are the entire access-control system. There is no invite
+# flow and no admin screen for managing people: for a committee this size,
+# two lists you can read at a glance are safer than a UI nobody audits.
+#
+# Anyone NOT on a list is refused, even with a valid Google account.
+# Add or remove an email and redeploy; removal takes effect on that person's
+# very next request, because the role is re-checked against config every time.
+#
+# DEVELOPER_EMAILS get reflections, Ops (email digests, Deepgram/Cloudflare
+# billing figures), and Feed AI (the knowledge base injected into every chat
+# reply). Developer access does not include staff/admin features.
+# Set as a secret so the address is not published:
+#   npx wrangler secret put DEVELOPER_EMAILS
+# The organising committee/admin role: registrations, check-in, dashboard,
+# expenses.
+# Comma-separated, e.g. "asha@example.com, ravi@example.com"
+# Set as a secret so committee addresses are not published:
+#   npx wrangler secret put STAFF_EMAILS
+# Google OAuth client id (public — the secret is set with `wrangler secret put`).
+# Create at console.cloud.google.com -> APIs & Services -> Credentials ->
+# OAuth client ID -> Web application, and register these redirect URIs:
+#   https://biaac.com/api/auth/google/callback
+#   http://localhost:8787/api/auth/google/callback
+GOOGLE_CLIENT_ID = "174171220198-tlbiujfi2ltpamuobf1nio4doqouu6ck.apps.googleusercontent.com"
+
+# Optional: restrict Google sign-in to one Workspace domain, e.g. "biaac.com".
+# Leave empty to allow any Google account that matches an invited staff email.
+GOOGLE_HD = ""
+
+# PBKDF2 iterations for password hashing. 12000 costs ~4ms of CPU, which fits
+# the Workers FREE plan's 10ms budget. On Workers Paid (30s CPU) raise this to
+# 600000 — the iteration count is stored inside each hash, so existing
+# passwords keep working and upgrade automatically on next sign-in.
+PBKDF2_ITERATIONS = "12000"
+
+# Break-glass machine token. No longer a user-facing credential: it can ONLY
+# recover a locked-out owner (POST /api/auth/bootstrap, capped at 3/day, always
+# audited, always emails DASHBOARD_EMAIL) and trigger ops reports from curl.
+# Prefer setting it as a secret:  npx wrangler secret put DEV_KEY
+# ROTATE + set as a secret, never here:  npx wrangler secret put DEV_KEY
+# ROTATE + set as a secret:  npx wrangler secret put MAILCHANNELS_API_KEY
+RAZORPAY_KEY_ID = "rzp_test_TIK9lJop7jGPPi"
+# ROTATE + set as a secret:  npx wrangler secret put RAZORPAY_KEY_SECRET
+# ROTATE + set as a secret:  npx wrangler secret put DEEPGRAM_API_KEY
+# Where the ops dashboard emails go. CHANGE THIS to your Gmail address.
+# Set as a secret:  npx wrangler secret put DASHBOARD_EMAIL
+# Daily digest time in IST (24h "HH:MM"). Can also be changed live without a
+# redeploy:  POST /api/report/schedule  {"devKey":"...","time":"18:40"}
+DIGEST_TIME_IST = "17:00"
+# Critical alert fires when Deepgram credit drops below this many dollars.
+ALERT_DEEPGRAM_MIN = "2"
+# Deepgram's starting free credit in dollars — used to compute the "credit
+# used %" bar in the digest (new accounts get $200).
+DEEPGRAM_CREDIT_TOTAL = "200"
+# The main DEEPGRAM_API_KEY can speak but may lack permission to read the
+# account balance (403). To show "dollars remaining", create a key with
+# Owner/Administrator scope in the Deepgram console and paste it here:
+# ROTATE + set as a secret:  npx wrangler secret put DEEPGRAM_BALANCE_KEY
+# Optional — enables the "Cloudflare requests (24h)" row in the digest:
+#   CF_ACCOUNT_ID  = your account id (dash.cloudflare.com → Workers → right sidebar)
+#   CF_API_TOKEN   = create an API token with "Account Analytics: Read", then run
+#                    npx wrangler secret put CF_API_TOKEN
+CF_ACCOUNT_ID = "8d7633c4e9136784b6f1f567c35728ad"
+# Optional — enables the "Unique visitors" row (a real person-count, unlike
+# the raw Cloudflare requests row above which counts bots/assets too).
+# biaac.com already has a Web Analytics site (dash.cloudflare.com →
+# Analytics & Logs → Web Analytics → biaac.com). Its "Automatic Setup" is
+# ON but verified NOT actually injecting the beacon into what the Worker
+# serves — curled the live homepage on 2026-09-15, proper Cloudflare proxy
+# headers but no beacon anywhere in the HTML, which is why 2 months of real
+# traffic show as 0 visits. worker.js now injects it manually instead
+# (injectWebAnalytics), which needs this same site's token:
+#   1. Web Analytics → biaac.com → Manage site → find the token in its JS
+#      snippet (shown even though Automatic Setup was relying on it silently)
+#   2. CF_WEB_ANALYTICS_TOKEN = that value, set below (not a secret — it's
+#      visible in every page's HTML source once injected, same as before)
+CF_WEB_ANALYTICS_TOKEN = "7b482c4bddbe4967afa3dfdafb6b91e6"
+
+# ---- WhatsApp Cloud API ----
+# The "Phone number ID" from the API Setup page. Not a secret - it is useless
+# without the token, which must NOT go here. Set the three secrets with:
+#   npx wrangler secret put WHATSAPP_TOKEN         (permanent system-user token)
+#   npx wrangler secret put WHATSAPP_VERIFY_TOKEN  (any random string you invent)
+#   npx wrangler secret put WHATSAPP_APP_SECRET    (App Settings -> Basic -> App secret)
+WHATSAPP_PHONE_ID = "1168920729645898"
+# Must match the templates as approved in WhatsApp Manager. Both live templates
+# ("registration_conf", "daily_reflection") are plain English = "en".
+WHATSAPP_TEMPLATE_LANG = "en"
+# Public WhatsApp Channel for the daily reflections. Paste the "Share link" from
+# the channel (WhatsApp -> Updates -> your channel -> Channel info -> Share link).
+# Until this is set, the follow button on reflections.html stays hidden.
+WHATSAPP_CHANNEL_URL = "https://whatsapp.com/channel/0029VbDRqVyJkK77DOFXs00o"
+
+# ---- Daily reflection broadcast (paid: Marketing template, ~Rs 0.80/message) ----
+# Comma-separated numbers, any format - "+91 98765 43210", "09876543210" and
+# "919876543210" all normalise the same way. Leave EMPTY to disable the
+# broadcast entirely; the free WhatsApp Channel above is unaffected either way.
+# While on the Meta test number, only your 5 verified test recipients can receive.
+# Personal phone numbers — set as a secret, not in a tracked file:
+#   npx wrangler secret put REFLECTION_RECIPIENTS
+# When the broadcast goes out, IST 24h "HH:MM". The 10-minute cron means the
+# real send lands within 10 minutes after this.
+REFLECTION_TIME_IST = "07:00"
+# Must match the daily_reflection template EXACTLY as approved:
+#   "image" -> the template has a Media/Image header (send one every time)
+#   "none"  -> the template is body-only (never send a header)
+# Getting this wrong fails every send with a parameter mismatch.
+REFLECTION_TEMPLATE_HEADER = "image"
+# Public origin of this site. Used to build the template header image URL from
+# the cron, where there is no incoming request to read an origin from.
+SITE_ORIGIN = "https://biaac.com"

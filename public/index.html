@@ -3,66 +3,160 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f5f7fc" />
     <title>Bangalore Convention</title>
     <link rel="stylesheet" href="css/style.css" />
+    <!-- L2 veil: EVERY page load starts covered from the first paint, so an
+         empty layout is never visible - not on cold entry, not on reload,
+         not when clicking between pages. It lifts when the page is ready
+         (data pages hand it to html.data-wait until their fetches land),
+         with a 350ms minimum so it never blinks and a 900ms cap so the veil
+         itself never becomes the lag. The lift cues the entrance
+         animations (see mountReveals). -->
+    <script>
+      (function () {
+        var d = document.documentElement;
+        d.classList.add("veiling");
+        var lifted = false;
+        var t0 = Date.now();
+        window.__liftVeil = function () {
+          if (lifted) return;
+          lifted = true;
+          var go = function () {
+            // A page still fetching keeps the same cover (html.data-wait);
+            // its pageLoading(false) will do the fade instead.
+            if (d.classList.contains("data-wait") || window.__bcDataWait) {
+              d.classList.remove("veiling");
+              d.classList.add("data-wait");
+              return;
+            }
+            d.classList.add("veil-up");
+            document.dispatchEvent(new CustomEvent("bc:veil-up"));
+            setTimeout(function () { d.classList.remove("veiling", "veil-up"); }, 460);
+          };
+          var hold = 350 - (Date.now() - t0);
+          if (hold > 0) setTimeout(go, hold);
+          else go();
+        };
+        setTimeout(window.__liftVeil, 900);
+      })();
+    </script>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
   </head>
   <body>
     <div id="nav"></div>
 
     <section class="hero">
-      <div class="eyebrow">Annual Recovery Gathering</div>
-      <h1>Bangalore Convention 2026</h1>
-      <p>
-        A weekend of unity, fellowship and service. Join friends from across the
-        region for shared meals, sessions and sober fun. Everyone in recovery is
-        welcome.
-      </p>
+      <div class="hero-grid"></div>
+      <!-- B5: accent waves drifting along the hero floor. currentColor keeps
+           them on-theme in daylight and midnight alike. -->
+      <div class="hero-waves" aria-hidden="true">
+        <svg viewBox="0 0 1200 130" preserveAspectRatio="none" style="color: color-mix(in srgb, var(--accent) 14%, transparent)">
+          <path d="M0,70 C150,30 300,110 450,70 C600,30 750,110 900,70 C1050,30 1150,90 1200,70 L1200,130 L0,130 Z" fill="currentColor"/>
+        </svg>
+        <svg class="w2" viewBox="0 0 1200 130" preserveAspectRatio="none" style="color: color-mix(in srgb, var(--accent-3) 16%, transparent)">
+          <path d="M0,80 C180,40 360,115 540,80 C720,45 900,115 1080,80 C1140,68 1180,75 1200,78 L1200,130 L0,130 Z" fill="currentColor"/>
+        </svg>
+      </div>
+      <!-- H4d+H4f hero: five letter tiles fall in with gravity and keep
+           gently bobbing; the name drops down after they land. The tiles are
+           aria-hidden so the page's accessible title is the full name. -->
+      <h1>
+        <span class="biaac-tiles" aria-hidden="true">
+          <i style="--r: -4deg"><b>B</b></i>
+          <i style="--r: 2.5deg; --dy: 6px"><b>I</b></i>
+          <i class="aa" style="--r: -2deg"><b>A</b></i>
+          <i class="aa" style="--r: 3.5deg; --dy: 5px"><b>A</b></i>
+          <i style="--r: -3deg"><b>C</b></i>
+        </span>
+        <span class="biaac-name">Bangalore International <span class="grad">AA Convention</span></span>
+      </h1>
+
+      <div class="countdown" id="countdown" aria-label="Countdown to the convention"></div>
+
       <div class="hero-meta">
-        <div>📅 <b>09 – 11 July 2026</b></div>
+        <div>📅 <b>09 – 11 July 2027</b></div>
         <div>📍 <b>Bangalore</b></div>
-        <div>🎟️ <b>Registrations open</b></div>
+        <div>🎟️ <b data-reg-state>Registrations opening soon</b></div>
       </div>
-      <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap">
-        <a class="btn primary" href="register.html">Register Now</a>
-        <a class="btn ghost" href="#pricing">View Pricing</a>
+      <div class="hero-cta" style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap">
+        <a class="btn primary" href="register.html" data-register-cta>Register Now</a>
+        <!-- JS intercepts this into the burst overlay; the href is the
+             graceful no-JS fallback. -->
+        <a class="btn ghost" href="register.html" id="viewPricingBtn">View Pricing</a>
       </div>
+
+      <!-- (The cycling category spotlight that lived here is removed for
+           now — pricing is reachable via the View Pricing burst and the
+           Register page. Its CSS (.price-spot/.spot-*) is kept, so putting
+           it back is just markup + the small JS block.) -->
     </section>
 
     <div class="container">
-      <div id="pricing" class="section-head">
-        <h2>Registration Categories</h2>
-        <a class="btn small" href="register.html">Book a spot →</a>
-      </div>
-      <div id="pricing-grid" class="grid cols-4">
-        <div class="empty">Loading pricing…</div>
-      </div>
-
       <div class="section-head">
         <h2>What's Included</h2>
       </div>
-      <div class="grid cols-3">
-        <div class="card">
-          <h3>🍽️ Meals & Refreshments</h3>
+      <!-- Phones: the three cards collapse into one cycling spotlight card
+           (the .inc-spot below); desktop shows this grid as before. -->
+      <div class="inc-spot">
+        <div class="inc-card" id="incCard"></div>
+        <div class="inc-dots" id="incDots" aria-hidden="true"></div>
+      </div>
+      <div class="grid cols-3 inc-grid">
+        <div class="card feature-card">
+          <div class="feature-icon">🍽️</div>
+          <h3>Meals &amp; Refreshments</h3>
           <p class="muted">
-            Breakfast, lunch, dinner and tea breaks are covered for all stay
-            categories through the convention.
+            With Stay includes breakfast, lunch, dinner and tea breaks. No Stay
+            includes meals except breakfast.
           </p>
         </div>
-        <div class="card">
-          <h3>🎤 Sessions & Speakers</h3>
+        <div class="card feature-card">
+          <div class="feature-icon">🎤</div>
+          <h3>Sessions &amp; Speakers</h3>
           <p class="muted">
             Open meetings, workshops and speaker sharings across all three days
             for every registered guest.
           </p>
         </div>
-        <div class="card">
-          <h3>🤝 Fellowship</h3>
+        <div class="card feature-card">
+          <div class="feature-icon">🤝</div>
+          <h3>Fellowship</h3>
           <p class="muted">
             Marathon meetings, entertainment evenings and time to connect with
             friends new and old.
           </p>
         </div>
       </div>
+
+      <div class="section-head">
+        <h2>The Venue &amp; Attractions in Bangalore</h2>
+      </div>
+      <p class="muted" style="margin: -6px 0 16px; max-width: 62ch">
+        Start with where you'll actually be — RG Royal Hotel — then a few quiet
+        corners of the city worth a spare morning. Chosen with the fellowship in
+        mind, so there is nothing here you would have to walk out of.
+      </p>
+      <!-- The living wall: tiles breathe, and every few seconds one flips to
+           show why the place is worth the trip. Gradient placeholders where
+           `img` is null — set it on an entry in the ATTRACTIONS manifest below
+           (file lives in img/gallery/) and the tile and lightbox both use it. -->
+      <div class="mem-wall" id="memWall" aria-label="The venue and peaceful places to visit in Bangalore"></div>
+    </div>
+
+    <!-- "View Pricing" burst overlay (P2d) -->
+    <div class="pburst" id="pburst">
+      <button class="pburst-x" type="button" aria-label="Close">✕</button>
+      <div class="pburst-grid" id="pburstGrid"></div>
+    </div>
+
+    <!-- Attraction lightbox -->
+    <div class="mem-lightbox" id="memLightbox">
+      <button class="mem-x" type="button" aria-label="Close">✕</button>
+      <figure class="mem-fig">
+        <div class="mem-ph" id="memPh"></div>
+        <figcaption><b id="memTitle"></b><small id="memSub"></small></figcaption>
+      </figure>
     </div>
 
     <div class="footer">
@@ -73,27 +167,234 @@
     <script src="js/common.js"></script>
     <script>
       mountNav("home");
-      (async () => {
-        try {
-          const pricing = await api("/api/pricing");
-          const grid = document.getElementById("pricing-grid");
-          grid.innerHTML = pricing
+
+      // Live countdown to the convention (09 July 2027, 09:00 IST).
+      (function () {
+        const target = new Date("2027-07-09T09:00:00+05:30").getTime();
+        const el = document.getElementById("countdown");
+        function tick() {
+          // Nothing to redraw for a screen nobody is looking at. The value is
+          // computed from the target date rather than counted down, so skipping
+          // ticks loses nothing — coming back re-renders the true time at once.
+          if (document.hidden) return;
+          const diff = target - Date.now();
+          if (diff <= 0) {
+            el.style.display = "none";
+            return;
+          }
+          const units = [
+            [Math.floor(diff / 8.64e7), "Days"],
+            [Math.floor((diff / 3.6e6) % 24), "Hours"],
+            [Math.floor((diff / 6e4) % 60), "Mins"],
+            [Math.floor((diff / 1e3) % 60), "Secs"],
+          ];
+          el.innerHTML = units
             .map(
-              (c, i) => `
-            <div class="card price-card ${i === 2 ? "featured" : ""}">
-              ${i === 2 ? '<span class="badge">Popular</span>' : ""}
-              <h3>${escapeHtml(c.name)}</h3>
-              <div class="desc">${escapeHtml(c.description)}</div>
-              <div class="amount">${money(c.price)} <span>/ person</span></div>
-              <a class="btn primary" style="margin-top:auto"
-                 href="register.html?category=${c.id}">Select</a>
-            </div>`
+              ([n, cap]) =>
+                `<div class="count-box"><div class="num">${String(n).padStart(2, "0")}</div><span class="cap">${cap}</span></div>`
             )
             .join("");
-        } catch (e) {
-          document.getElementById("pricing-grid").innerHTML =
-            '<div class="empty">Could not load pricing.</div>';
         }
+        tick();
+        setInterval(tick, 1000);
+        document.addEventListener("visibilitychange", () => {
+          if (!document.hidden) tick();
+        });
+      })();
+
+      const CAT_ICONS = ["🚪", "👥", "👨‍👩‍👦", "🎟️", "🌅", "🌞", "🌇"];
+      const CAT_GRADS = [
+        "linear-gradient(140deg,#22d3ee,#3b82f6)",
+        "linear-gradient(140deg,#818cf8,#c084fc)",
+        "linear-gradient(140deg,#fb7185,#f59e0b)",
+        "linear-gradient(140deg,#f59e0b,#ef4444)",
+        "linear-gradient(140deg,#38bdf8,#5b5bf0)",
+        "linear-gradient(140deg,#a78bfa,#7c3aed)",
+        "linear-gradient(140deg,#34d399,#0ea5e9)",
+      ];
+
+      // The "View Pricing" burst overlay, fed by the pricing fetch. (The
+      // hero spotlight card that also used this data is removed for now.)
+      (async () => {
+        let pricing;
+        try {
+          pricing = await api("/api/pricing");
+        } catch (e) {
+          return; // pricing unavailable — the View Pricing link simply
+                  // navigates like it always did
+        }
+        if (!Array.isArray(pricing) || !pricing.length) return;
+        const burst = document.getElementById("pburst");
+        const grid = document.getElementById("pburstGrid");
+        const vpBtn = document.getElementById("viewPricingBtn");
+        grid.innerHTML = pricing
+          .map((c, n) => {
+            // A category with a real photo (RG Royal Hotel room/venue shots)
+            // shows that instead of the icon+gradient placeholder.
+            const ph = c.image
+              ? `style="background-image:url(${c.image});background-size:cover;background-position:center"`
+              : `style="--ph:${CAT_GRADS[n % CAT_GRADS.length]}"`;
+            const face = c.image ? "" : CAT_ICONS[n % CAT_ICONS.length];
+            return `
+          <a class="pb-card" style="--i:${n}" href="register.html?category=${encodeURIComponent(c.id)}">
+            <span class="pb-ph" ${ph} aria-hidden="true">${face}</span>
+            <span class="pb-body"><b>${escapeHtml(c.name)}</b><small>${escapeHtml(
+              c.description || ""
+            )}</small><span class="pb-price">${money(c.price)}</span></span>
+          </a>`;
+          })
+          .join("");
+
+        vpBtn.addEventListener("click", (e) => {
+          e.preventDefault();
+          // Aim every card's flight at the button. offsetLeft/offsetTop
+          // ignore transforms, so the hidden-but-laid-out grid measures true.
+          const br = vpBtn.getBoundingClientRect();
+          const bx = br.left + br.width / 2;
+          const by = br.top + br.height / 2;
+          grid.querySelectorAll(".pb-card").forEach((el) => {
+            let x = 0, y = 0, p = el;
+            while (p && p !== document.body) { x += p.offsetLeft; y += p.offsetTop; p = p.offsetParent; }
+            el.style.setProperty("--fx", bx - (x + el.offsetWidth / 2) + "px");
+            el.style.setProperty("--fy", by - (y + el.offsetHeight / 2) + "px");
+          });
+          burst.classList.add("open");
+        });
+        const closeBurst = () => {
+          burst.classList.remove("open");
+          grid.style.transform = "";
+        };
+        burst.addEventListener("click", (e) => {
+          if (e.target === burst || e.target.classList.contains("pburst-x")) closeBurst();
+        });
+        // The P2d tilt: desktop pointers only.
+        if (matchMedia("(hover: hover) and (pointer: fine)").matches) {
+          burst.addEventListener("mousemove", (e) => {
+            if (!burst.classList.contains("open")) return;
+            const rx = (e.clientY / innerHeight - 0.5) * -8;
+            const ry = (e.clientX / innerWidth - 0.5) * 10;
+            grid.style.transform =
+              "perspective(900px) rotateX(" + rx.toFixed(2) + "deg) rotateY(" + ry.toFixed(2) + "deg)";
+          });
+        }
+        document.addEventListener("keydown", (e) => {
+          if (e.key === "Escape") closeBurst();
+        });
+      })();
+
+      // ---- Mobile What's Included: one cycling card ----------------------
+      // On phones the .inc-grid is hidden and this compact spotlight cycles
+      // through the same three points with the tumble (desktop never sees it).
+      (() => {
+        const INC = [
+          ["🍽️", "Meals & Refreshments", "With Stay includes breakfast, lunch, dinner and tea breaks. No Stay includes meals except breakfast."],
+          ["🎤", "Sessions & Speakers", "Open meetings, workshops and speaker sharings across the weekend."],
+          ["🤝", "Fellowship", "Marathon meetings, entertainment evenings and time to connect."],
+        ];
+        const card = document.getElementById("incCard");
+        const dots = document.getElementById("incDots");
+        dots.innerHTML = INC.map(() => "<i></i>").join("");
+        let i = 0;
+        function show(n) {
+          i = n;
+          card.innerHTML =
+            `<span class="inc-ic" aria-hidden="true">${INC[n][0]}</span>` +
+            `<span><b>${INC[n][1]}</b><small>${INC[n][2]}</small></span>`;
+          card.classList.remove("anim");
+          void card.offsetWidth;
+          card.classList.add("anim");
+          dots.querySelectorAll("i").forEach((d, j) => d.classList.toggle("on", j === n));
+        }
+        show(0);
+        setInterval(() => {
+          // skip the work while hidden (backgrounded tab or desktop layout)
+          if (!document.hidden && card.offsetParent !== null) show((i + 1) % INC.length);
+        }, 3200);
+      })();
+
+      // ---- Attractions in Bangalore: the living wall ----------------------
+      // Places a delegate can reach in a spare morning. Deliberately no
+      // breweries, no bar streets, no "nightlife" — the usual Bangalore list is
+      // half pubs, and this convention is the last place that belongs.
+      // `img: null` renders the gradient placeholder; drop a photograph into
+      // img/gallery/ and set `img` to use it in the tile and the lightbox.
+      (() => {
+        const ATTRACTIONS = [
+          { img: "img/gallery/rg-royal-exterior.jpg", e: "🏨", t: "RG Royal Hotel", y: "The venue · Yeshwantpur", q: "Where the whole convention happens — sessions, stay and meals, all under one roof.", g: "linear-gradient(150deg,#f59e0b,#ef4444)", h: 190 },
+          { img: "img/gallery/rg-royal-convention-hall.jpg", e: "🎤", t: "RG Royal Hotel — Convention Hall", y: "Where sessions happen", q: "The main hall — meetings, workshops and speakers, all three days.", g: "linear-gradient(150deg,#a78bfa,#7c3aed)", h: 170 },
+          { img: "img/gallery/rg-royal-dining.jpg", e: "🍽️", t: "RG Royal Hotel — Dining Hall", y: "Convention dining", q: "Meals are served here during the convention; No Stay includes meals except breakfast.", g: "linear-gradient(150deg,#fb7185,#f59e0b)", h: 200 },
+          { img: "img/gallery/cubbon-park.jpg", e: "🌳", t: "Cubbon Park", y: "City centre · free", q: "Three hundred acres in the middle of everything. A few trees in and the traffic simply stops existing.", g: "linear-gradient(150deg,#34d399,#0ea5e9)", h: 190 },
+          { img: "img/gallery/lalbagh.jpg", e: "🌺", t: "Lalbagh Botanical Garden", y: "Glass House & lake", q: "Two-hundred-year-old trees and a lake loop. Walk it at opening time and you get the quietest hour in the city.", g: "linear-gradient(150deg,#f59e0b,#ef4444)", h: 160 },
+          { img: "img/gallery/sankey-tank.jpg", e: "💧", t: "Sankey Tank", y: "Malleswaram", q: "One slow lap of the water is a whole morning's thinking. Locals have walked it daily for decades.", g: "linear-gradient(150deg,#0ea5e9,#5b5bf0)", h: 210 },
+          { img: "img/gallery/ramakrishna-math.jpg", e: "🕯️", t: "Ramakrishna Math", y: "Basavanagudi", q: "A shrine, a reading room, and nobody in any hurry. Sit at the back as long as you like.", g: "linear-gradient(150deg,#a78bfa,#7c3aed)", h: 170 },
+          { img: "img/gallery/bugle-rock.jpg", e: "🪨", t: "Bugle Rock Park", y: "Beside the Bull Temple", q: "Granite outcrops and old shade trees. A place to sit rather than a place to see.", g: "linear-gradient(150deg,#fb7185,#f59e0b)", h: 150 },
+          { img: "img/gallery/art-of-living.jpg", e: "🧘", t: "Art of Living Centre", y: "Kanakapura Road", q: "Guided meditation on a hilltop campus, open to visitors. Go for a morning session and leave the afternoon free.", g: "linear-gradient(150deg,#5b5bf0,#a78bfa)", h: 220 },
+          { img: "img/gallery/nandi-hills.jpg", e: "🌄", t: "Nandi Hills", y: "60 km north · sunrise", q: "Above the clouds by six in the morning. Worth one early alarm while you are here.", g: "linear-gradient(150deg,#38bdf8,#34d399)", h: 200 },
+          { img: "img/gallery/ulsoor-lake.jpg", e: "🚣", t: "Ulsoor Lake", y: "Central · boating", q: "Herons, rowing boats and a path that asks nothing of you.", g: "linear-gradient(150deg,#0ea5e9,#a78bfa)", h: 165 },
+        ];
+        const GALLERY = ATTRACTIONS;
+
+        const wall = document.getElementById("memWall");
+        const lb = document.getElementById("memLightbox");
+        const lbTitle = document.getElementById("memTitle");
+        const lbSub = document.getElementById("memSub");
+
+        GALLERY.forEach((m, n) => {
+          const tile = document.createElement("button");
+          tile.type = "button";
+          tile.className = "mem-tile";
+          tile.style.setProperty("--i", n);
+          const face = m.img
+            ? `<img src="${m.img}" alt="${escapeHtml(m.t)}" loading="lazy" />`
+            : `<span class="mem-ph" style="--ph:${m.g};height:${m.h}px" aria-hidden="true">${m.e}</span>`;
+          tile.innerHTML =
+            `<span class="mem-inner">` +
+            `<span class="mem-front">${face}<span class="mem-cap">${escapeHtml(m.t)} · ${escapeHtml(m.y)}</span></span>` +
+            `<span class="mem-back" style="min-height:${m.h}px">${escapeHtml(m.q)}<small>${escapeHtml(
+              m.t
+            )} · ${escapeHtml(m.y)}</small></span>` +
+            `</span>`;
+          tile.addEventListener("click", () => {
+            if (tile.classList.contains("flip")) return;
+            // Re-query: the swap below replaces the node, so a cached
+            // reference would go stale after the first open.
+            const ph = document.getElementById("memPh");
+            ph.outerHTML = m.img
+              ? `<img id="memPh" src="${m.img}" alt="${escapeHtml(m.t)}" />`
+              : `<div class="mem-ph" id="memPh" style="--ph:${m.g}">${m.e}</div>`;
+            lbTitle.textContent = m.t;
+            lbSub.textContent = m.y;
+            lb.classList.add("open");
+          });
+          wall.appendChild(tile);
+        });
+
+        // Tiles pop in when the wall scrolls into view…
+        new IntersectionObserver(
+          (entries, io) => {
+            if (!entries.some((en) => en.isIntersecting)) return;
+            wall.classList.add("pop");
+            io.disconnect();
+          },
+          { threshold: 0.15 }
+        ).observe(wall);
+
+        // …then the wall lives: every few seconds a random tile flips over.
+        setInterval(() => {
+          if (document.hidden || !wall.classList.contains("pop")) return;
+          const tiles = [...wall.querySelectorAll(".mem-tile:not(.flip)")];
+          if (!tiles.length) return;
+          const t = tiles[Math.floor(Math.random() * tiles.length)];
+          t.classList.add("flip");
+          setTimeout(() => t.classList.remove("flip"), 2600);
+        }, 3400);
+
+        lb.addEventListener("click", (e) => {
+          if (e.target === lb || e.target.classList.contains("mem-x")) lb.classList.remove("open");
+        });
+        document.addEventListener("keydown", (e) => {
+          if (e.key === "Escape") lb.classList.remove("open");
+        });
       })();
     </script>
   </body>

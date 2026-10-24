@@ -3,8 +3,45 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f5f7fc" />
     <title>Registrations · Bangalore Convention</title>
     <link rel="stylesheet" href="css/style.css" />
+    <!-- L2 veil: EVERY page load starts covered from the first paint, so an
+         empty layout is never visible - not on cold entry, not on reload,
+         not when clicking between pages. It lifts when the page is ready
+         (data pages hand it to html.data-wait until their fetches land),
+         with a 350ms minimum so it never blinks and a 900ms cap so the veil
+         itself never becomes the lag. The lift cues the entrance
+         animations (see mountReveals). -->
+    <script>
+      (function () {
+        var d = document.documentElement;
+        d.classList.add("veiling");
+        var lifted = false;
+        var t0 = Date.now();
+        window.__liftVeil = function () {
+          if (lifted) return;
+          lifted = true;
+          var go = function () {
+            // A page still fetching keeps the same cover (html.data-wait);
+            // its pageLoading(false) will do the fade instead.
+            if (d.classList.contains("data-wait") || window.__bcDataWait) {
+              d.classList.remove("veiling");
+              d.classList.add("data-wait");
+              return;
+            }
+            d.classList.add("veil-up");
+            document.dispatchEvent(new CustomEvent("bc:veil-up"));
+            setTimeout(function () { d.classList.remove("veiling", "veil-up"); }, 460);
+          };
+          var hold = 350 - (Date.now() - t0);
+          if (hold > 0) setTimeout(go, hold);
+          else go();
+        };
+        setTimeout(window.__liftVeil, 900);
+      })();
+    </script>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
   </head>
   <body>
     <div id="nav"></div>
@@ -13,55 +50,47 @@
       <div class="section-head">
         <div>
           <h1 class="page-title" style="margin-bottom: 2px">All Registrations</h1>
-          <p class="page-sub" style="margin: 0" id="count-line">Loading…</p>
+          <p class="page-sub" style="margin: 0" id="count-line"><span class="bc-load-mark" role="status" aria-label="Loading">B<i>·</i>I<i>·</i>A<i>·</i>A<i>·</i>C</span></p>
         </div>
-        <a class="btn primary" href="register.html">+ New Registration</a>
       </div>
 
+      <!-- One search box, ONE filter (status + categories combined), export. -->
       <div class="toolbar">
         <input id="search" placeholder="Search name, email, phone, city…" />
-        <select id="filter-cat">
-          <option value="">All categories</option>
-        </select>
-        <select id="filter-paid">
-          <option value="">All payment status</option>
-          <option value="paid">Paid</option>
-          <option value="pending">Pending</option>
+        <select id="filter">
+          <option value="">All registrations</option>
+          <option value="paid">Paid only</option>
+          <option value="checkedin">Checked in</option>
+          <option value="notcheckedin">Not checked in</option>
+          <option value="pending">Pending only</option>
         </select>
         <button class="btn small" id="export">Export CSV</button>
       </div>
 
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Contact</th>
-              <th>City</th>
-              <th>Category</th>
-              <th>Amount</th>
-              <th>Status</th>
-              <th>Registered</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="rows">
-            <tr><td colspan="8" class="empty">Loading…</td></tr>
-          </tbody>
-        </table>
+      <!-- RG3 master–detail: person list left, detail panel right. On phones
+           the detail opens as a frosted popup over the blurred page. -->
+      <div class="reg-md">
+        <div class="card reg-list" id="regList">
+          <div class="bc-loading" role="status" aria-label="Loading"><span class="bc-load-mark">B<i>·</i>I<i>·</i>A<i>·</i>A<i>·</i>C</span></div>
+        </div>
+        <div class="reg-detail-wrap" id="detailWrap">
+          <div class="card reg-detail" id="detailCard">
+            <div class="empty">Pick a person to see their details.</div>
+          </div>
+        </div>
       </div>
     </div>
 
     <script src="js/common.js"></script>
     <script>
+      // No client-side gate: the Worker refuses to serve this page at all
+      // without a session that has at least the staff role.
       mountNav("registrations");
-      if (!ensureAdmin()) throw new Error("admin required");
       let ALL = [];
 
       function applyFilters() {
         const q = document.getElementById("search").value.trim().toLowerCase();
-        const cat = document.getElementById("filter-cat").value;
-        const paid = document.getElementById("filter-paid").value;
+        const f = document.getElementById("filter").value;
         return ALL.filter((r) => {
           const matchesQ =
             !q ||
@@ -69,98 +98,241 @@
               .join(" ")
               .toLowerCase()
               .includes(q);
-          const matchesCat = !cat || r.categoryId === cat;
-          const matchesPaid =
-            !paid || (paid === "paid" ? r.paid : !r.paid);
-          return matchesQ && matchesCat && matchesPaid;
+          const matchesF =
+            !f ||
+            (f === "paid"
+              ? r.paid
+              : f === "pending"
+              ? !r.paid
+              : f === "checkedin"
+              ? !!r.checkedInAt
+              : f === "notcheckedin"
+              ? !r.checkedInAt
+              : r.categoryId === f.slice(4)); // "cat:<id>"
+          return matchesQ && matchesF;
         });
+      }
+
+      let selId = null;
+      const wrap = document.getElementById("detailWrap");
+
+      function selected() {
+        return ALL.find((r) => r.id === selId) || null;
+      }
+
+      function paintDetail(retum) {
+        const card = document.getElementById("detailCard");
+        const r = selected();
+        if (!r) {
+          card.innerHTML = '<div class="empty">Pick a person to see their details.</div>';
+          return;
+        }
+        card.innerHTML =
+          `<button class="reg-detail-x" id="detailClose" type="button" aria-label="Close">✕</button>` +
+          `<button class="reg-detail-copy" data-copy="${r.id}" type="button"
+                   aria-label="Copy details" title="Copy details">⧉</button>` +
+          `<div style="display:flex;align-items:center;gap:11px;margin-bottom:10px">
+            <span class="reg-avat" style="width:42px;height:42px;font-size:16px">${escapeHtml(
+              (r.name || "?").charAt(0).toUpperCase()
+            )}</span>
+            <div><b style="font-size:16px">${escapeHtml(r.name)}</b><br>
+            <span class="muted" style="font-size:12px">registered ${formatDate(r.createdAt)}</span></div>
+          </div>` +
+          `<div class="reg-drow"><span class="muted">Email</span><span><b>${escapeHtml(r.email)}</b></span></div>` +
+          `<div class="reg-drow"><span class="muted">Phone</span><span><b>${escapeHtml(r.phone)}</b></span></div>` +
+          `<div class="reg-drow"><span class="muted">City</span><span>${escapeHtml(r.city) || "—"}</span></div>` +
+          `<div class="reg-drow"><span class="muted">Gender</span><span>${escapeHtml(r.gender) || "—"}</span></div>` +
+          `<div class="reg-drow"><span class="muted">Category</span><span><b>${escapeHtml(r.categoryName)}</b></span></div>` +
+          `<div class="reg-drow"><span class="muted">Amount</span><span><b style="font-size:15px">${money(r.amount)}</b></span></div>` +
+          `<div class="reg-drow"><span class="muted">Status</span><span><span class="pill ${
+            r.paid ? "paid" : "pending"
+          }">${r.paid ? "Paid" : "Pending"}</span></span></div>` +
+          `<div class="reg-drow"><span class="muted">Confirmation email</span><span>${
+            r.confirmationEmailQueuedAt ? "Queued " + escapeHtml(formatDate(r.confirmationEmailQueuedAt)) : "Waiting for admin confirmation"
+          }</span></div>` +
+          `<div class="reg-drow"><span class="muted">Check-in</span><span>${
+            r.checkedInAt
+              ? `<span class="pill in">\u2713 Checked in</span> <span class="muted" style="font-size:12px">${escapeHtml(
+                  new Date(r.checkedInAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })
+                )}</span>`
+              : '<span class="muted">Not yet</span>'
+          }</span></div>` +
+          (r.notes
+            ? `<div class="reg-drow"><span class="muted">Notes</span><span>${escapeHtml(r.notes)}</span></div>`
+            : "") +
+          `<div class="reg-actions">
+            ${r.confirmationEmailQueuedAt ? "" : `<button class="btn primary" data-confirm-payment="${r.id}">${r.paid ? "Send confirmation email" : "Confirm payment & email ticket"}</button>`}
+            <button class="btn danger" data-del="${r.id}">Delete</button>
+          </div>`;
+        if (retum) {
+          card.classList.remove("retum");
+          void card.offsetWidth;
+          card.classList.add("retum");
+        }
+        const x = document.getElementById("detailClose");
+        if (x) x.addEventListener("click", () => wrap.classList.remove("open"));
       }
 
       function render() {
         const rows = applyFilters().sort(
           (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
         );
-        const tbody = document.getElementById("rows");
         document.getElementById("count-line").textContent =
           `${ALL.length} total · ${ALL.filter((r) => r.paid).length} paid · showing ${rows.length}`;
 
+        const list = document.getElementById("regList");
         if (!rows.length) {
-          tbody.innerHTML = '<tr><td colspan="8" class="empty">No registrations found.</td></tr>';
+          list.innerHTML = '<div class="empty">No registrations found.</div>';
+          selId = null;
+          paintDetail(false);
           return;
         }
+        // Keep the selection if it survived the filters; else pick the top row.
+        if (!rows.some((r) => r.id === selId)) selId = rows[0].id;
 
-        tbody.innerHTML = rows
+        list.innerHTML = rows
           .map(
             (r) => `
-          <tr>
-            <td>
-              <b>${escapeHtml(r.name)}</b>
-              ${r.notes ? `<br><span class="muted" style="font-size:12px">${escapeHtml(r.notes)}</span>` : ""}
-            </td>
-            <td>${escapeHtml(r.email)}<br><span class="muted">${escapeHtml(r.phone)}</span></td>
-            <td>${escapeHtml(r.city) || "—"}</td>
-            <td>${escapeHtml(r.categoryName)}</td>
-            <td>${money(r.amount)}</td>
-            <td><span class="pill ${r.paid ? "paid" : "pending"}">${r.paid ? "Paid" : "Pending"}</span></td>
-            <td class="muted">${formatDate(r.createdAt)}</td>
-            <td style="white-space:nowrap">
-              <button class="btn small" data-toggle="${r.id}">${r.paid ? "Mark Unpaid" : "Mark Paid"}</button>
-              <button class="btn danger" data-del="${r.id}">Delete</button>
-            </td>
-          </tr>`
+          <button class="mrow${r.id === selId ? " on" : ""}" data-id="${r.id}" type="button">
+            <span class="reg-avat">${escapeHtml((r.name || "?").charAt(0).toUpperCase())}</span>
+            <span style="min-width:0">
+              <span class="m-nm">${escapeHtml(r.name)}</span><br>
+              <span class="m-sub">${escapeHtml(r.categoryName)} · ${money(r.amount)}</span>
+            </span>
+            ${r.checkedInAt ? '<span class="m-chip pill in">\u2713 in</span>' : ""}
+            <span class="m-chip pill ${r.paid ? "paid" : "pending"}">${r.paid ? "✓" : "…"}</span>
+          </button>`
           )
           .join("");
+        paintDetail(false);
       }
 
       async function load() {
         ALL = await api("/api/registrations");
         const pricing = await api("/api/pricing");
-        document.getElementById("filter-cat").innerHTML =
-          '<option value="">All categories</option>' +
-          pricing.map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join("");
+        // Categories join the single filter under a separator row.
+        document.getElementById("filter").innerHTML =
+          '<option value="">All registrations</option>' +
+          '<option value="paid">Paid only</option>' +
+          '<option value="checkedin">Checked in</option>' +
+          '<option value="notcheckedin">Not checked in</option>' +
+          '<option value="pending">Pending only</option>' +
+          '<option value="" disabled>── categories ──</option>' +
+          pricing.map((c) => `<option value="cat:${c.id}">${escapeHtml(c.name)}</option>`).join("");
         render();
       }
 
       document.getElementById("search").addEventListener("input", render);
-      document.getElementById("filter-cat").addEventListener("change", render);
-      document.getElementById("filter-paid").addEventListener("change", render);
+      document.getElementById("filter").addEventListener("change", render);
 
-      document.getElementById("rows").addEventListener("click", async (e) => {
-        const toggle = e.target.closest("[data-toggle]");
+      // Selecting a person: paint the panel; on phones it opens as the
+      // frosted popup (the .open class only has an effect ≤700px).
+      document.getElementById("regList").addEventListener("click", (e) => {
+        const row = e.target.closest(".mrow");
+        if (!row) return;
+        selId = row.getAttribute("data-id");
+        document.querySelectorAll(".mrow").forEach((m) =>
+          m.classList.toggle("on", m.getAttribute("data-id") === selId)
+        );
+        paintDetail(true);
+        wrap.classList.add("open");
+      });
+
+      // Frost tap (not the card) and Escape close the mobile popup.
+      wrap.addEventListener("click", (e) => {
+        if (e.target === wrap) wrap.classList.remove("open");
+      });
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") wrap.classList.remove("open");
+      });
+
+      document.getElementById("detailCard").addEventListener("click", async (e) => {
         const del = e.target.closest("[data-del]");
+        const copy = e.target.closest("[data-copy]");
+        const confirmPayment = e.target.closest("[data-confirm-payment]");
         try {
-          if (toggle) {
-            const id = toggle.getAttribute("data-toggle");
-            const cur = ALL.find((r) => r.id === id);
-            const updated = await api(`/api/registrations/${id}`, {
-              method: "PATCH",
-              body: JSON.stringify({ paid: !cur.paid }),
+          if (confirmPayment) {
+            const id = confirmPayment.getAttribute("data-confirm-payment");
+            const r = ALL.find((x) => x.id === id);
+            if (!r || r.confirmationEmailQueuedAt) return;
+            const isAlreadyPaid = !!r.paid;
+            if (!(await mascotConfirm({
+              mood: "worried",
+              title: isAlreadyPaid ? "Queue the confirmation email?" : "Confirm this bank transfer?",
+              message: isAlreadyPaid
+                ? "This registration is already marked paid. Queue its official ticket confirmation email now?"
+                : "Only continue after checking the transfer proof. This marks the registration as paid and queues the ticket confirmation email to " + r.email + ".",
+              confirmText: isAlreadyPaid ? "Queue email" : "Confirm payment & email",
+              cancelText: "Go back",
+            }))) return;
+            confirmPayment.disabled = true;
+            confirmPayment.textContent = "Confirming…";
+            const result = await api(`/api/registrations/${id}/confirm-payment`, {
+              method: "POST",
+              body: JSON.stringify({}),
             });
-            cur.paid = updated.paid;
+            ALL = ALL.map((x) => x.id === id ? result.registration : x);
             render();
-            toast(updated.paid ? "Marked as paid" : "Marked as pending");
+            toast(result.emailQueued ? "payment confirmed; ticket email queued" : "payment was already confirmed; email was already queued");
+          } else if (copy) {
+            const r = ALL.find((x) => x.id === copy.getAttribute("data-copy"));
+            if (!r) return;
+            const text = [
+              r.name,
+              r.email,
+              r.phone,
+              r.city,
+              `${r.categoryName} — ${money(r.amount)}`,
+              r.paid ? "Paid" : "Pending",
+            ]
+              .filter(Boolean)
+              .join("\n");
+            await navigator.clipboard.writeText(text);
+            toast("details copied — paste away");
           } else if (del) {
             const id = del.getAttribute("data-del");
-            if (!confirm("Delete this registration?")) return;
+            if (!(await mascotConfirm({
+              mood: "sad",
+              danger: true,
+              title: "Delete this registration?",
+              message: "Their booking vanishes from the list and the totals, and there's no undo — the mascot checked. Twice.",
+              confirmText: "Delete it",
+              cancelText: "Keep them in",
+            }))) return;
             await api(`/api/registrations/${id}`, { method: "DELETE" });
             ALL = ALL.filter((r) => r.id !== id);
+            selId = null;
+            wrap.classList.remove("open");
             render();
-            toast("Registration deleted");
+            toast("registration deleted — the mascot needs a minute");
           }
         } catch (err) {
+          if (confirmPayment && confirmPayment.isConnected) {
+            const r = ALL.find((x) => x.id === confirmPayment.getAttribute("data-confirm-payment"));
+            confirmPayment.disabled = false;
+            confirmPayment.textContent = r && r.paid ? "Send confirmation email" : "Confirm payment & email ticket";
+          }
           toast(err.message, "error");
         }
       });
 
       document.getElementById("export").addEventListener("click", () => {
         const rows = applyFilters();
-        if (!rows.length) return toast("Nothing to export", "error");
+        if (!rows.length) return toast("nothing to export — the list is empty. add or unfilter some registrations first", "error");
+        // Excel and Sheets execute any cell beginning with = + - @ (or a
+        // leading tab/CR) as a formula. A registrant can put anything in the
+        // notes field, so prefix those with an apostrophe to neutralise them.
+        const csvCell = (v) => {
+          let s = String(v === null || v === undefined ? "" : v);
+          if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+          return `"${s.replace(/"/g, '""')}"`;
+        };
         const header = ["Name", "Email", "Phone", "City", "Gender", "Category", "Amount", "Paid", "Registered", "Notes"];
         const csv = [header.join(",")]
           .concat(
             rows.map((r) =>
               [r.name, r.email, r.phone, r.city, r.gender, r.categoryName, r.amount, r.paid ? "Yes" : "No", r.createdAt, r.notes]
-                .map((v) => `"${String(v || "").replace(/"/g, '""')}"`)
+                .map(csvCell)
                 .join(",")
             )
           )
@@ -173,7 +345,10 @@
         URL.revokeObjectURL(a.href);
       });
 
-      load().catch((e) => toast(e.message, "error"));
+      pageLoading(true);
+      load()
+        .catch((e) => toast(e.message, "error"))
+        .finally(() => pageLoading(false));
     </script>
   </body>
 </html>

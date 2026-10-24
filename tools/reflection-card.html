@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Daily Reflection card — PNG generator</title>
+<style>
+  /* ---- Page chrome (NOT part of the exported image) ---------------------- */
+  body {
+    margin: 0;
+    padding: 28px;
+    background: #0b0f1a;
+    color: #eef2fb;
+    font: 15px/1.5 "Segoe UI", system-ui, sans-serif;
+  }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  p.hint { margin: 0 0 18px; color: #94a3b8; font-size: 13px; }
+  .editor { max-width: 700px; margin-bottom: 22px; }
+  .editor label { display: block; font-size: 13px; color: #94a3b8; margin: 12px 0 5px; }
+  .editor input, .editor textarea {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px 12px;
+    font: 15px/1.5 "Segoe UI", system-ui, sans-serif;
+    color: #eef2fb;
+    background: #141b2d;
+    border: 1px solid #2a344d;
+    border-radius: 8px;
+    resize: vertical;
+  }
+  .stage {
+    width: 1125px;
+    height: 600px;
+    transform: scale(0.62);
+    transform-origin: top left;
+    margin-bottom: -228px;
+  }
+  button {
+    margin-top: 12px;
+    padding: 10px 20px;
+    font: 600 14px "Segoe UI", system-ui, sans-serif;
+    color: #fff;
+    background: linear-gradient(135deg, #818cf8, #a78bfa);
+    border: 0;
+    border-radius: 10px;
+    cursor: pointer;
+  }
+  #status, #fit { margin-left: 12px; color: #94a3b8; font-size: 13px; }
+  #fit.over { color: #fca5a5; }
+</style>
+
+<!-- Cloned verbatim into the exported PNG: system fonts only, no color-mix(),
+     no external images, solid text colours (gradient-clipped text is the first
+     thing to drop out of an SVG <foreignObject> render). -->
+<style id="cardStyle">
+  .card {
+    position: relative;
+    width: 1125px;
+    height: 600px;
+    overflow: hidden;
+    box-sizing: border-box;
+    background:
+      radial-gradient(600px 380px at 12% 112%, rgba(251, 191, 36, 0.26), transparent 62%),
+      radial-gradient(720px 460px at 90% -14%, rgba(124, 111, 255, 0.24), transparent 60%),
+      #0b0f1a;
+    font-family: "Segoe UI", system-ui, sans-serif;
+  }
+  .card-grid {
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(circle at 1px 1px, rgba(238, 242, 251, 0.07) 1px, transparent 0);
+    background-size: 34px 34px;
+  }
+
+  /* ---- Masthead: mascot + label, kept small so the text gets the room ---- */
+  .masthead {
+    position: absolute;
+    top: 44px; left: 76px;
+    display: flex;
+    align-items: center;
+    gap: 60px;
+  }
+  .mascot-slot { position: relative; width: 46px; height: 56px; flex: none; }
+  .mascot {
+    position: absolute;
+    top: 0; left: 0;
+    width: 44px; height: 53px;
+    transform: scale(1.05);
+    transform-origin: top left;
+  }
+  .fm-head {
+    position: absolute;
+    top: 8px; left: 4px;
+    width: 36px; height: 26px;
+    border-radius: 10px;
+    background: linear-gradient(160deg, #eef2ff, #c7d2fe);
+    border: 1px solid #b9c0f7;
+    box-shadow: inset 0 -3px 6px rgba(99, 102, 241, 0.25);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  /* Eyes closed — contemplative, not the cheering pose on the payment card. */
+  .fm-eye { width: 7px; height: 2.4px; border-radius: 2px; background: #6366f1; }
+  .fm-antenna {
+    position: absolute;
+    top: 0; left: 50%;
+    width: 2px; height: 9px;
+    margin-left: -1px;
+    background: #b0b8f7;
+  }
+  .fm-antenna::after {
+    content: "";
+    position: absolute;
+    top: -5px; left: 50%;
+    margin-left: -3.5px;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: #fbbf24;
+    box-shadow: 0 0 8px 1px rgba(251, 191, 36, 0.75);
+  }
+  .fm-body {
+    position: absolute;
+    top: 31px; left: 7px;
+    width: 30px; height: 15px;
+    border-radius: 8px 8px 6px 6px;
+    background: linear-gradient(160deg, #818cf8, #a78bfa);
+  }
+  .fm-arm { position: absolute; top: 34px; width: 10px; height: 3px; border-radius: 2px; background: #fff; }
+  .fm-arm.right { right: -2px; transform-origin: left center; transform: rotate(16deg); }
+  .fm-arm.left  { left: -2px;  transform-origin: right center; transform: rotate(-16deg); }
+  .fm-legs { position: absolute; top: 45px; left: 12px; width: 20px; height: 8px; }
+  .fm-legs i { position: absolute; top: 0; width: 5px; height: 8px; border-radius: 3px; background: #6366f1; }
+  .fm-legs i:first-child { left: 0; }
+  .fm-legs i:last-child  { right: 0; }
+
+  .eyebrow {
+    font-size: 19px;
+    font-weight: 600;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: #fcd34d;
+  }
+  .stamp {
+    position: absolute;
+    top: 48px; right: 76px;
+    font-size: 19px;
+    font-weight: 500;
+    letter-spacing: 0.4px;
+    color: #8d97b0;
+  }
+
+  /* ---- The reflection itself -------------------------------------------- */
+  .body-wrap {
+    position: absolute;
+    left: 76px; right: 76px;
+    top: 132px; bottom: 96px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .r-title {
+    margin: 0 0 22px;
+    font-weight: 800;
+    letter-spacing: -0.8px;
+    color: #f2f5ff;
+    font-size: 46px;
+    line-height: 1.12;
+  }
+  .r-body {
+    margin: 0;
+    white-space: pre-wrap;
+    color: #dbe2f4;
+    font-size: 30px;
+    line-height: 1.5;
+    font-weight: 400;
+  }
+
+  .footer {
+    position: absolute;
+    left: 76px; bottom: 46px;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+  }
+  .rule { width: 78px; height: 4px; border-radius: 4px; background: linear-gradient(90deg, #fbbf24, #a78bfa); }
+  .footer span { font-size: 20px; color: #8d97b0; font-weight: 500; }
+</style>
+</head>
+<body>
+
+<h1>Daily Reflection card</h1>
+<p class="hint">Type the reflection, watch it lay out, download. 1125&nbsp;&times;&nbsp;600. Preview scaled to 62%; export is full resolution.</p>
+
+<div class="editor">
+  <label for="inTitle">Title</label>
+  <input id="inTitle" value="One day at a time" />
+
+  <label for="inBody">Reflection</label>
+  <textarea id="inBody" rows="5">We are not saints. The point is that we are willing to grow along spiritual lines. We claim spiritual progress rather than spiritual perfection.</textarea>
+
+  <label for="inStamp">Date / stamp (top right)</label>
+  <input id="inStamp" placeholder="e.g. 2 August" />
+</div>
+
+<div class="stage">
+  <div class="card" id="card">
+    <div class="card-grid"></div>
+
+    <div class="masthead">
+      <div class="mascot-slot">
+        <div class="mascot">
+          <div class="fm-antenna"></div>
+          <div class="fm-head"><span class="fm-eye"></span><span class="fm-eye"></span></div>
+          <div class="fm-body"></div>
+          <div class="fm-arm left"></div>
+          <div class="fm-arm right"></div>
+          <div class="fm-legs"><i></i><i></i></div>
+        </div>
+      </div>
+      <div class="eyebrow">Daily Reflection</div>
+    </div>
+
+    <div class="stamp" id="outStamp"></div>
+
+    <div class="body-wrap">
+      <h2 class="r-title" id="outTitle"></h2>
+      <p class="r-body" id="outBody"></p>
+    </div>
+
+    <div class="footer">
+      <div class="rule"></div>
+      <span>Bangalore Convention 2027</span>
+    </div>
+  </div>
+</div>
+
+<button id="dl">Download PNG</button>
+<span id="fit"></span>
+<span id="status"></span>
+
+<script>
+  const inTitle = document.getElementById("inTitle");
+  const inBody = document.getElementById("inBody");
+  const inStamp = document.getElementById("inStamp");
+  const outTitle = document.getElementById("outTitle");
+  const outBody = document.getElementById("outBody");
+  const outStamp = document.getElementById("outStamp");
+  const fitEl = document.getElementById("fit");
+
+  // Longer reflections get smaller type so the card never overflows. Tuned by
+  // character count rather than measuring, which keeps the export deterministic.
+  function sizeFor(len) {
+    if (len <= 120) return { body: 36, title: 50 };
+    if (len <= 220) return { body: 31, title: 46 };
+    if (len <= 340) return { body: 26, title: 42 };
+    if (len <= 480) return { body: 22, title: 38 };
+    return { body: 19, title: 34 };
+  }
+
+  function paint() {
+    const title = inTitle.value.trim();
+    const body = inBody.value.trim();
+
+    outTitle.textContent = title;
+    outTitle.style.display = title ? "" : "none";
+    outBody.textContent = body;
+    outStamp.textContent = inStamp.value.trim();
+
+    const s = sizeFor(body.length);
+    outBody.style.fontSize = s.body + "px";
+    outTitle.style.fontSize = s.title + "px";
+
+    // Warn when the text genuinely will not fit rather than silently clipping.
+    const wrap = document.querySelector(".body-wrap");
+    const over = wrap.scrollHeight > wrap.clientHeight + 2;
+    fitEl.textContent = over
+      ? "too long — trim it or it will clip"
+      : body.length + " chars";
+    fitEl.className = over ? "over" : "";
+  }
+
+  [inTitle, inBody, inStamp].forEach((el) => el.addEventListener("input", paint));
+
+  // Default the stamp to today, in the same style the site uses.
+  inStamp.value = new Date().toLocaleDateString("en-IN", { day: "numeric", month: "long" });
+  paint();
+
+  // ---- Export: DOM -> SVG <foreignObject> -> canvas -> PNG ----------------
+  // data: URL rather than blob: so the canvas stays untainted and toBlob works.
+  document.getElementById("dl").addEventListener("click", async () => {
+    const status = document.getElementById("status");
+    status.textContent = "rendering…";
+
+    const W = 1125, H = 600;
+    const css = document.getElementById("cardStyle").textContent;
+    const clone = document.getElementById("card").cloneNode(true);
+    const markup = new XMLSerializer().serializeToString(clone);
+
+    const svg =
+      '<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H + '">' +
+        '<foreignObject x="0" y="0" width="' + W + '" height="' + H + '">' +
+          '<div xmlns="http://www.w3.org/1999/xhtml">' +
+            "<style>" + css + "</style>" +
+            markup +
+          "</div>" +
+        "</foreignObject>" +
+      "</svg>";
+
+    const img = new Image();
+    img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+
+    try {
+      await img.decode();
+    } catch (e) {
+      status.textContent = "render failed — screenshot the card instead";
+      return;
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#0b0f1a";
+    ctx.fillRect(0, 0, W, H);
+    ctx.drawImage(img, 0, 0, W, H);
+
+    canvas.toBlob((blob) => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      const stamp = (inStamp.value.trim() || "reflection").toLowerCase().replace(/[^a-z0-9]+/g, "-");
+      a.download = "reflection-" + stamp + ".png";
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      status.textContent = "saved";
+    }, "image/png");
+  });
+</script>
+</body>
+</html>

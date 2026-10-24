@@ -1,138 +1,298 @@
-:root {
-  --bg: #0e1320;
-  --bg-2: #161d2e;
-  --card: #1a2233;
-  --card-2: #222c40;
-  --border: #2c3850;
-  --text: #eaf0fa;
-  --muted: #98a6be;
-  --accent: #8b9dff;
-  --accent-2: #6d5dfc;
-  --green: #3fd07f;
-  --amber: #f6c453;
-  --red: #ff6b6b;
-  --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
-  --radius: 14px;
-  --bg-glow: radial-gradient(1200px 600px at 80% -10%, #26305a 0%, var(--bg) 55%);
-  --nav-bg: rgba(15, 23, 32, 0.85);
-}
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Sora:wght@600;700;800&display=swap");
 
-[data-theme="daylight"] {
-  --bg: #f3f5fb;
+/* DAYLIGHT IS THE DEFAULT and therefore lives on :root.
+   It used to be the other way around — :root held the dark palette while
+   common.js defaults the theme to "daylight" — and because common.js is the
+   LAST element in <body>, every cold page load painted dark and then snapped
+   to light. Putting the default palette on :root fixes that with no inline
+   <head> script on nine separate pages, and it covers login.html for free. */
+:root {
+  --font-display: "Sora", "Inter", "Segoe UI", sans-serif;
+  --bg: #f5f7fc;
   --bg-2: #ffffff;
   --card: #ffffff;
-  --card-2: #eef1f8;
-  --border: #dde3ee;
-  --text: #1a2233;
-  --muted: #5d6b82;
-  --accent: #6366f1;
-  --accent-2: #4f46e5;
-  --green: #1f9d57;
-  --amber: #c98a12;
-  --red: #e0483f;
-  --shadow: 0 12px 30px rgba(30, 41, 82, 0.1);
-  --bg-glow: radial-gradient(1200px 600px at 80% -10%, #e5eaff 0%, var(--bg) 55%);
-  --nav-bg: rgba(255, 255, 255, 0.9);
+  --card-2: #f1f4fb;
+  --border: #e4e9f3;
+  --border-soft: #eef1f8;
+  --text: #121a2b;
+  --muted: #5a6a86;
+  --accent: #5b5bf0;
+  --accent-2: #7c3aed;
+  --accent-3: #0ea5e9;
+  --accent-ink: #4f46e5;
+  --green: #109d5b;
+  --amber: #b9770f;
+  --red: #d8433a;
+  /* Alias: several pages were written against --danger, which never existed,
+     so they silently fell back to a hardcoded hex that ignored the theme. */
+  --danger: var(--red);
+  --shadow: 0 1px 2px rgba(20, 30, 60, 0.06), 0 18px 44px -18px rgba(30, 41, 90, 0.18);
+  --shadow-sm: 0 1px 2px rgba(20, 30, 60, 0.05), 0 8px 22px -12px rgba(30, 41, 90, 0.14);
+  --ring: 0 0 0 3px rgba(91, 91, 240, 0.18);
+  --radius: 16px;
+  --radius-sm: 10px;
+  --bg-glow: radial-gradient(1100px 640px at 88% -12%, rgba(124, 111, 255, 0.12), transparent 60%),
+    radial-gradient(760px 520px at -5% 0%, rgba(16, 157, 91, 0.05), transparent 55%), var(--bg);
+  --nav-bg: rgba(255, 255, 255, 0.78);
+}
+
+[data-theme="midnight"] {
+  --bg: #0b0f1a;
+  --bg-2: #121829;
+  --card: #141b2d;
+  --card-2: #1b2438;
+  --border: #26314a;
+  --border-soft: #1e2740;
+  --text: #eef2fb;
+  --muted: #93a1bd;
+  --accent: #818cf8;
+  --accent-2: #a78bfa;
+  --accent-3: #38bdf8;
+  --accent-ink: #6366f1;
+  --green: #34d399;
+  --amber: #fbbf24;
+  --red: #f87171;
+  --danger: var(--red);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 14px 34px -12px rgba(0, 0, 0, 0.6);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25), 0 6px 16px -8px rgba(0, 0, 0, 0.5);
+  --ring: 0 0 0 3px rgba(129, 140, 248, 0.35);
+  --bg-glow: radial-gradient(1100px 640px at 88% -12%, rgba(124, 111, 255, 0.2), transparent 60%),
+    radial-gradient(760px 520px at -5% 0%, rgba(52, 211, 153, 0.07), transparent 55%), var(--bg);
+  --nav-bg: rgba(11, 15, 26, 0.72);
 }
 
 * {
   box-sizing: border-box;
 }
 
+/* The UA stylesheet's [hidden] rule is a bare attribute selector, so ANY class
+   that sets `display` beats it and the element stays visible. Every use of the
+   hidden attribute in this project depends on this rule. */
+[hidden] {
+  display: none !important;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   margin: 0;
-  font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  /* Type scale "A · Refined": ~12% down from the old 16px-base scale. */
+  font-size: 15px;
   background: var(--bg-glow);
+  background-attachment: fixed;
   color: var(--text);
   min-height: 100vh;
-  line-height: 1.5;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  overflow-x: hidden;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+  line-height: 1.15;
 }
 
 a {
   color: var(--accent);
   text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+a:hover {
+  color: var(--accent-2);
+}
+
+::selection {
+  background: rgba(129, 140, 248, 0.3);
 }
 
 /* ---------- Nav ---------- */
+/* Desktop: the bar scrolls away with the page, exactly as it always has.
+   Only MOBILE pins the holder (see the 720px block) so the bar can melt
+   into a floating menu button while you scroll. */
+
+/* N4 · minimal hairline: flat ground, one thin border, no glass, no glow. */
 .nav {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 14px 24px;
-  background: var(--nav-bg);
-  backdrop-filter: blur(10px);
+  padding: 14px 28px;
+  background: var(--bg);
   border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
-  z-index: 10;
+  z-index: 20;
   flex-wrap: wrap;
 }
 
 .brand {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 17px;
   font-weight: 700;
-  font-size: 18px;
+  font-size: 16px;
+  letter-spacing: -0.01em;
   color: var(--text);
   margin-right: auto;
 }
 
 .brand .logo {
-  width: 38px;
-  height: 38px;
+  width: 46px;
+  height: 46px;
   border-radius: 10px;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  border: 0;
+  padding: 0;
+  position: relative;
+  cursor: pointer;
+  /* the official mark: the A with the two figures, on its white tile */
+  background: #fff;
+  border: 1px solid var(--border);
   display: grid;
   place-items: center;
-  font-weight: 800;
-  color: #fff;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px -4px rgba(20, 30, 60, 0.25);
+  transition: transform 0.18s ease;
+}
+
+/* The full lockup fills the tile (contain — never cropped); the tile's own
+   radius is applied to the image directly so the corner moon badge can
+   still hang outside un-clipped. */
+.brand .logo .logo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: inherit;
+  display: block;
+}
+
+/* The logo IS the theme toggle. The pulsing badge, the hover wiggle and the
+   tooltip all hint at it; a tap spins it a full turn while the theme flips. */
+.brand .logo:hover {
+  transform: rotate(-10deg) scale(1.07);
+}
+
+.brand .logo:active {
+  transform: scale(0.93);
+}
+
+.brand .logo .theme-hint {
+  /* corner, not centre — a centred badge sits exactly on top of the AA
+     triangle mark and hides it */
+  position: absolute;
+  left: -4px;
+  bottom: -4px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--card);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  font-size: 8px;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  animation: theme-hint-pulse 4.5s ease-in-out infinite;
+}
+
+@keyframes theme-hint-pulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 transparent; }
+  50% { transform: scale(1.1); box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--accent) 16%, transparent); }
+}
+
+.brand .logo.theme-flip {
+  animation: theme-flip 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes theme-flip {
+  0% { transform: rotate(0) scale(1); }
+  50% { transform: rotate(180deg) scale(0.8); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand .logo .theme-hint,
+  .brand .logo.theme-flip {
+    animation: none;
+  }
+  .nav-overlay,
+  .nav-overlay a.link {
+    transition-duration: 0.01s;
+  }
+  .nav-overlay.open a.link {
+    transition-delay: 0s;
+  }
+  .profile-menu.open {
+    animation: none;
+  }
 }
 
 .brand small {
   display: block;
   font-weight: 500;
-  font-size: 11px;
+  font-size: 10.5px;
   color: var(--muted);
-  letter-spacing: 0.5px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+
+/* The name is a plain link to Home; the logo beside it flips the theme. */
+.brand-name,
+.brand-name:hover {
+  color: var(--text);
+  min-width: 0;
+}
+
+/* K6 wordmark: B·I·A·A·C with accent interpuncts. */
+.wordmark {
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: 1px;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.wordmark i {
+  font-style: normal;
+  color: var(--accent);
+  font-weight: 900;
+  padding: 0 2.5px;
+}
+
+.brand-name b {
+  color: var(--text);
+  font-weight: 800;
+  letter-spacing: -0.01em;
 }
 
 .nav a.link {
-  padding: 8px 14px;
-  border-radius: 10px;
+  padding: 8px 11px;
   color: var(--muted);
-  font-weight: 600;
-  font-size: 14px;
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  transition: color 0.15s ease;
 }
 
 .nav a.link:hover {
   color: var(--text);
-  background: var(--card);
+  background: none;
 }
 
 .nav a.link.active {
-  color: var(--text);
-  background: var(--card-2);
-}
-
-.theme-toggle {
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: var(--card);
-  color: var(--text);
-  font-size: 16px;
-  cursor: pointer;
-  display: grid;
-  place-items: center;
-  line-height: 1;
-  transition: background 0.2s ease, transform 0.05s ease;
-}
-
-.theme-toggle:hover {
-  background: var(--card-2);
-  transform: translateY(-1px);
+  color: var(--accent);
+  background: none;
+  box-shadow: none;
 }
 
 .nav-links {
@@ -142,8 +302,129 @@ a {
   order: 2;
 }
 
-.theme-toggle {
-  order: 3;
+/* The frosted mobile menu; desktop never shows it. Its full styling lives in
+   the max-width: 720px block below. */
+.nav-overlay {
+  display: none;
+}
+
+/* ---------- Profile chip (signed in) ---------- */
+/* Sits at the corner, outside the collapsible links, so it stays visible on
+   phones without opening the hamburger. */
+.nav-profile {
+  position: relative;
+  order: 4;
+}
+
+.avatar-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: linear-gradient(140deg, var(--accent-3), var(--accent) 55%, var(--accent-2));
+  color: #fff;
+  font: inherit;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: transform 0.06s ease, box-shadow 0.2s ease;
+}
+
+.avatar-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+/* P1 identity drop card: a mini ID card tumbles from the avatar — gradient
+   band, overlapping avatar, the email, a small quiet role line, icon rows. */
+.profile-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 10px);
+  width: 244px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 14px 34px -10px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  display: none;
+  z-index: 30;
+  transform-origin: top right;
+}
+
+.profile-menu.open {
+  display: block;
+  animation: profile-tumble 0.45s cubic-bezier(0.34, 1.45, 0.64, 1);
+}
+
+@keyframes profile-tumble {
+  from { opacity: 0; transform: translateY(-10px) rotate(3deg) scale(0.85); }
+  to { opacity: 1; transform: none; }
+}
+
+.profile-band {
+  height: 40px;
+  background: linear-gradient(140deg, var(--accent-3), var(--accent) 55%, var(--accent-2));
+}
+
+.profile-ava {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 3px solid var(--card);
+  margin: -24px 0 0 14px;
+  background: linear-gradient(140deg, var(--accent-3), var(--accent) 55%, var(--accent-2));
+  color: #fff;
+  font-weight: 800;
+  font-size: 17px;
+  display: grid;
+  place-items: center;
+}
+
+.profile-email {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 6px 16px 0;
+  overflow-wrap: anywhere;
+}
+
+/* small and simple, on purpose — just a quiet word, no chip */
+.profile-role {
+  display: block;
+  font-size: 11.5px;
+  color: var(--muted);
+  padding: 1px 16px 11px;
+}
+
+.profile-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  text-align: left;
+  padding: 10px 16px;
+  border: 0;
+  border-top: 1px solid var(--border-soft);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.profile-item:hover {
+  background: var(--card-2);
+  color: var(--text);
+}
+
+.profile-item.danger,
+.profile-item.danger:hover {
+  color: var(--danger);
 }
 
 .nav-toggle {
@@ -153,12 +434,13 @@ a {
   justify-content: center;
   align-items: center;
   gap: 4px;
-  width: 42px;
-  height: 38px;
+  width: 44px;
+  height: 44px;
   padding: 0;
-  border: 1px solid var(--border);
+  /* N4 mobile: just the three lines — no box around the hamburger. */
+  border: 0;
   border-radius: 10px;
-  background: var(--card);
+  background: transparent;
   cursor: pointer;
 }
 
@@ -191,54 +473,391 @@ a {
 }
 
 .page-title {
-  font-size: 26px;
+  font-size: 24px;
   margin: 6px 0 4px;
+  font-weight: 800;
 }
 
 .page-sub {
   color: var(--muted);
   margin: 0 0 24px;
+  font-size: 14px;
 }
 
 /* ---------- Hero ---------- */
 .hero {
   text-align: center;
-  padding: 60px 20px 30px;
+  padding: 92px 20px 40px;
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* (The two big blurred colour blobs that floated here since the old hero
+   are gone — the BIAAC monument sits on clean ground now; the drifting
+   waves at the hero floor are the only colour accents.) */
+
+/* faint dotted grid behind hero */
+.hero-grid {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image: radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--text) 12%, transparent) 1px, transparent 0);
+  background-size: 26px 26px;
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 30%, transparent 72%);
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 30%, transparent 72%);
+  opacity: 0.6;
 }
 
 .hero .eyebrow {
-  color: var(--accent);
-  font-weight: 700;
-  letter-spacing: 2px;
-  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: none;
   font-size: 13px;
+  padding: 7px 8px 7px 14px;
+  border-radius: 100px;
+  background: color-mix(in srgb, var(--card) 70%, transparent);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+}
+
+.hero .eyebrow::after {
+  content: "New";
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  padding: 3px 9px;
+  border-radius: 100px;
 }
 
 .hero h1 {
-  font-size: 44px;
-  margin: 12px 0;
-  line-height: 1.1;
+  font-size: clamp(32px, 5.5vw, 52px);
+  margin: 22px 0 14px;
+  line-height: 1.02;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+}
+
+/* H4d+H4f hero: five letter tiles fall from the sky with gravity, squash as
+   they land (each at its own tilt via --r/--dy) and then the letters keep
+   gently bobbing inside their tiles forever. The name drops down into its
+   seat once the dust settles. */
+.biaac-tiles {
+  display: flex;
+  justify-content: center;
+  gap: clamp(7px, 1.6vw, 14px);
+}
+
+.biaac-tiles i {
+  font-style: normal;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(34px, 6.5vw, 62px);
+  line-height: 1;
+  padding: clamp(9px, 1.9vw, 19px) clamp(10px, 2.1vw, 21px);
+  border-radius: clamp(12px, 1.9vw, 20px);
+  background: var(--card);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  animation: tile-fall 0.72s cubic-bezier(0.34, 1.3, 0.55, 1) forwards;
+}
+
+.biaac-tiles i:nth-child(1) { animation-delay: 0.1s; }
+.biaac-tiles i:nth-child(2) { animation-delay: 0.21s; }
+.biaac-tiles i:nth-child(3) { animation-delay: 0.32s; }
+.biaac-tiles i:nth-child(4) { animation-delay: 0.43s; }
+.biaac-tiles i:nth-child(5) { animation-delay: 0.54s; }
+
+@keyframes tile-fall {
+  0% { opacity: 0; transform: translateY(-140px) rotate(calc(var(--r, 0deg) * -2)); }
+  55% { opacity: 1; transform: translateY(2px) rotate(var(--r, 0deg)); }
+  68% { transform: translateY(0) rotate(var(--r, 0deg)) scale(1.07, 0.9); }
+  84% { transform: translateY(var(--dy, 0px)) rotate(var(--r, 0deg)) scale(0.98, 1.03); }
+  100% { opacity: 1; transform: translateY(var(--dy, 0px)) rotate(var(--r, 0deg)); }
+}
+
+.biaac-tiles i b {
+  font-weight: 800;
+  background: linear-gradient(140deg, var(--accent-3), var(--accent) 52%, var(--accent-2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  display: inline-block;
+  animation: tile-bob 3.2s ease-in-out infinite alternate;
+}
+
+.biaac-tiles i:nth-child(1) b { animation-delay: 1.3s; animation-duration: 3s; }
+.biaac-tiles i:nth-child(2) b { animation-delay: 1.8s; animation-duration: 3.6s; }
+.biaac-tiles i:nth-child(3) b { animation-delay: 1.5s; animation-duration: 3.3s; }
+.biaac-tiles i:nth-child(4) b { animation-delay: 2.1s; animation-duration: 3.1s; }
+.biaac-tiles i:nth-child(5) b { animation-delay: 1.7s; animation-duration: 3.8s; }
+
+@keyframes tile-bob {
+  from { transform: translateY(2.5px); }
+  to { transform: translateY(-3.5px); }
+}
+
+/* The two A's in plain ink — black in daylight, and --text keeps them
+   legible when midnight flips the ground dark. */
+.biaac-tiles i.aa b {
+  background: none;
+  -webkit-text-fill-color: var(--text);
+}
+
+.biaac-name {
+  display: block;
+  font-size: clamp(15px, 2vw, 19px);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  margin-top: 20px;
+  line-height: 1.3;
+  /* the name COMES DOWN once the last tile has landed */
+  opacity: 0;
+  animation: name-drop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) 1.35s forwards;
+}
+
+@keyframes name-drop {
+  from { opacity: 0; transform: translateY(-30px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* "AA Convention" in plain ink, same as the rest of the name — no gradient.
+   Needs to outrank the .hero h1 .grad shimmer rule. */
+.hero h1 .biaac-name .grad {
+  background: none;
+  color: currentColor;
+  -webkit-text-fill-color: currentColor;
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .biaac-tiles i, .biaac-tiles i b, .biaac-name {
+    animation: none;
+    opacity: 1;
+  }
+  .biaac-tiles i { transform: rotate(var(--r, 0deg)); }
+}
+
+/* B5: two accent waves drifting along the hero floor, opposite directions. */
+.hero-waves {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -2px;
+  height: 130px;
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.hero-waves svg {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 200%;
+  height: 100%;
+  animation: hero-wave-drift 16s linear infinite;
+}
+
+.hero-waves svg.w2 {
+  bottom: -16px;
+  opacity: 0.6;
+  animation-duration: 23s;
+  animation-direction: reverse;
+}
+
+@keyframes hero-wave-drift {
+  to { transform: translateX(-50%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-waves svg { animation: none; }
+}
+
+.hero h1 .grad {
+  background: linear-gradient(120deg, var(--accent-3), var(--accent), var(--accent-2));
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 6s linear infinite;
 }
 
 .hero p {
   color: var(--muted);
-  max-width: 640px;
-  margin: 0 auto 26px;
-  font-size: 17px;
+  max-width: 600px;
+  margin: 0 auto 30px;
+  font-size: 15.5px;
 }
 
 .hero-meta {
   display: flex;
-  gap: 26px;
+  gap: 12px;
   justify-content: center;
   flex-wrap: wrap;
   color: var(--muted);
-  font-size: 14px;
-  margin-bottom: 28px;
+  font-size: 13.5px;
+  margin-bottom: 30px;
+}
+
+.hero-meta > div {
+  padding: 9px 16px;
+  border-radius: 100px;
+  background: color-mix(in srgb, var(--card) 75%, transparent);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
 }
 
 .hero-meta b {
   color: var(--text);
+}
+
+/* ---------- Countdown ---------- */
+.countdown {
+  display: inline-flex;
+  gap: 10px;
+  margin: 4px auto 30px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.count-box {
+  min-width: 74px;
+  padding: 14px 10px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--card) 80%, transparent);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+}
+
+.count-box .num {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  background: linear-gradient(180deg, var(--text), color-mix(in srgb, var(--text) 55%, var(--accent)));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.count-box .cap {
+  display: block;
+  margin-top: 7px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* ---------- Feature tiles ---------- */
+.feature-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 13px;
+  display: grid;
+  place-items: center;
+  font-size: 22px;
+  margin-bottom: 14px;
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 20%, transparent);
+}
+
+.feature-card {
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.feature-card:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  box-shadow: var(--shadow);
+}
+
+.feature-card h3 {
+  margin: 0 0 6px;
+  font-size: 16px;
+}
+
+@keyframes floatA {
+  0%, 100% { transform: translateX(-60%) translateY(0); }
+  50% { transform: translateX(-55%) translateY(26px); }
+}
+
+@keyframes floatB {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(30px); }
+}
+
+@keyframes shimmer {
+  to { background-position: 200% center; }
+}
+
+/* Subtle ambient colour drift. A soft tint layer sits behind all content and
+   slowly cycles blue -> near-black -> amber -> red and back. Minimal on purpose
+   so only the mood of the page shifts, never the layout or readable colours. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(1200px 720px at 82% -12%, rgba(56, 120, 255, 0.22), transparent 60%),
+    radial-gradient(900px 620px at 0% 105%, rgba(56, 120, 255, 0.10), transparent 55%);
+  animation: ambientShift 48s ease-in-out infinite;
+}
+
+@keyframes ambientShift {
+  0%, 100% {
+    background:
+      radial-gradient(1200px 720px at 82% -12%, rgba(56, 120, 255, 0.22), transparent 60%),
+      radial-gradient(900px 620px at 0% 105%, rgba(56, 120, 255, 0.10), transparent 55%);
+  }
+  25% { /* near-black, dim */
+    background:
+      radial-gradient(1200px 720px at 82% -12%, rgba(18, 24, 44, 0.30), transparent 60%),
+      radial-gradient(900px 620px at 0% 105%, rgba(18, 24, 44, 0.14), transparent 55%);
+  }
+  50% { /* warm amber */
+    background:
+      radial-gradient(1200px 720px at 82% -12%, rgba(250, 190, 60, 0.20), transparent 60%),
+      radial-gradient(900px 620px at 0% 105%, rgba(250, 190, 60, 0.09), transparent 55%);
+  }
+  75% { /* soft red */
+    background:
+      radial-gradient(1200px 720px at 82% -12%, rgba(240, 92, 72, 0.20), transparent 60%),
+      radial-gradient(900px 620px at 0% 105%, rgba(240, 92, 72, 0.09), transparent 55%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body::before { animation: none; }
+}
+
+/* The hero's old fadeUp entrance is gone: hero children are revealed by the
+   site-wide tilt-tumble (mountReveals), and a both-filled animation here
+   would override the .rv classes and split the motion language in two. */
+
+@media (prefers-reduced-motion: reduce) {
+  .hero h1 .grad { animation: none; }
 }
 
 /* ---------- Buttons ---------- */
@@ -246,42 +865,68 @@ a {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 11px 20px;
-  border-radius: 10px;
+  padding: 12px 22px;
+  border-radius: 11px;
   border: 1px solid transparent;
   font-weight: 700;
   font-size: 14px;
   cursor: pointer;
-  transition: transform 0.05s ease, background 0.2s ease;
+  transition: transform 0.06s ease, background 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
   background: var(--card-2);
   color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--border);
 }
 
 .btn:hover {
   transform: translateY(-1px);
+  box-shadow: inset 0 0 0 1px var(--border), var(--shadow-sm);
+}
+
+.btn:active {
+  transform: translateY(0);
+}
+
+.btn:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
 }
 
 .btn.primary {
   background: linear-gradient(135deg, var(--accent), var(--accent-2));
   color: #fff;
+  box-shadow: 0 8px 20px -8px rgba(124, 111, 255, 0.6);
+}
+
+.btn.primary:hover {
+  box-shadow: 0 12px 26px -8px rgba(124, 111, 255, 0.7);
 }
 
 .btn.ghost {
   background: transparent;
   border-color: var(--border);
   color: var(--text);
+  box-shadow: none;
+}
+
+.btn.ghost:hover {
+  background: var(--card-2);
 }
 
 .btn.danger {
   background: transparent;
-  border-color: var(--red);
+  border-color: color-mix(in srgb, var(--red) 45%, transparent);
   color: var(--red);
   padding: 6px 12px;
   font-size: 13px;
+  box-shadow: none;
+}
+
+.btn.danger:hover {
+  background: color-mix(in srgb, var(--red) 12%, transparent);
 }
 
 .btn.small {
-  padding: 6px 12px;
+  padding: 7px 13px;
   font-size: 13px;
 }
 
@@ -299,11 +944,15 @@ a {
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
 }
 
+.reg-layout {
+  grid-template-columns: 1.6fr 1fr;
+}
+
 .card {
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 20px;
+  padding: 22px;
   box-shadow: var(--shadow);
 }
 
@@ -312,47 +961,71 @@ a {
   position: relative;
   display: flex;
   flex-direction: column;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.price-card:hover {
+  transform: translateY(-4px);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  box-shadow: var(--shadow), 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent);
 }
 
 .price-card h3 {
   margin: 0 0 6px;
-  font-size: 18px;
+  font-size: 16.5px;
 }
 
 .price-card .desc {
   color: var(--muted);
-  font-size: 14px;
+  font-size: 13.5px;
   min-height: 40px;
 }
 
 .price-card .amount {
-  font-size: 34px;
+  font-size: 30px;
   font-weight: 800;
+  letter-spacing: -0.03em;
   margin: 14px 0 4px;
 }
 
 .price-card .amount span {
-  font-size: 14px;
+  font-size: 13px;
   color: var(--muted);
   font-weight: 600;
+  letter-spacing: 0;
 }
 
 .price-card.featured {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent), var(--shadow);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow: 0 0 0 1px var(--accent), var(--shadow),
+    0 24px 50px -24px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+
+.price-card.featured::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius);
+  padding: 1px;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--accent) 50%, transparent), transparent 45%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
 }
 
 .badge {
   position: absolute;
   top: -11px;
   right: 16px;
-  background: var(--accent);
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
   color: #fff;
   font-size: 11px;
   font-weight: 800;
-  padding: 4px 10px;
+  padding: 5px 12px;
   border-radius: 20px;
   letter-spacing: 0.5px;
+  box-shadow: 0 6px 14px -4px rgba(124, 111, 255, 0.6);
 }
 
 /* ---------- Stat cards ---------- */
@@ -360,19 +1033,22 @@ a {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  position: relative;
+  overflow: hidden;
 }
 
 .stat .label {
   color: var(--muted);
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.6px;
+  letter-spacing: 0.7px;
 }
 
 .stat .value {
-  font-size: 28px;
+  font-size: 26px;
   font-weight: 800;
+  letter-spacing: -0.03em;
 }
 
 .stat .value.green {
@@ -399,6 +1075,14 @@ a {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-width: 0;
+}
+
+.field input,
+.field select,
+.field textarea {
+  width: 100%;
+  max-width: 100%;
 }
 
 .field.full {
@@ -417,10 +1101,16 @@ textarea {
   background: var(--bg-2);
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 11px 12px;
+  padding: 12px 13px;
   color: var(--text);
   font-size: 14px;
   font-family: inherit;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: color-mix(in srgb, var(--muted) 75%, transparent);
 }
 
 input:focus,
@@ -428,6 +1118,7 @@ select:focus,
 textarea:focus {
   outline: none;
   border-color: var(--accent);
+  box-shadow: var(--ring);
 }
 
 textarea {
@@ -459,28 +1150,45 @@ textarea {
   overflow-x: auto;
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  background: var(--card);
 }
 
 table {
   width: 100%;
   border-collapse: collapse;
   font-size: 14px;
-  min-width: 640px;
+  /* Wide tables scroll inside .table-wrap rather than squeezing columns to
+     illegibility. The floor drops further on phones — see the 720px block. */
+  min-width: 560px;
 }
 
 th,
 td {
   text-align: left;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--border);
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+tbody tr:last-child td {
+  border-bottom: none;
 }
 
 th {
   background: var(--bg-2);
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11.5px;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.6px;
+}
+/* `position: sticky` was set on th but did nothing: .table-wrap has no height
+   constraint, so there is no vertical scroll container for it to stick
+   within, and it had no z-index against the sticky nav above it. Removed
+   rather than propped up — a sticky header buys little at 360px wide. */
+
+tbody tr {
+  transition: background 0.12s ease;
 }
 
 tbody tr:hover {
@@ -488,20 +1196,30 @@ tbody tr:hover {
 }
 
 .pill {
-  display: inline-block;
-  padding: 3px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
   border-radius: 20px;
   font-size: 12px;
   font-weight: 700;
 }
 
+.pill::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
 .pill.paid {
-  background: rgba(63, 208, 127, 0.15);
+  background: color-mix(in srgb, var(--green) 15%, transparent);
   color: var(--green);
 }
 
 .pill.pending {
-  background: rgba(246, 196, 83, 0.15);
+  background: color-mix(in srgb, var(--amber) 16%, transparent);
   color: var(--amber);
 }
 
@@ -520,12 +1238,14 @@ tbody tr:hover {
   border-radius: 20px;
   height: 12px;
   overflow: hidden;
+  box-shadow: inset 0 0 0 1px var(--border-soft);
 }
 
 .bar-fill {
   height: 100%;
   background: linear-gradient(90deg, var(--accent), var(--accent-2));
   border-radius: 20px;
+  transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .bar-fill.green {
@@ -536,52 +1256,29 @@ tbody tr:hover {
   background: linear-gradient(90deg, var(--amber), #d99e28);
 }
 
-/* ---------- Toast ---------- */
-.toast {
-  position: fixed;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%) translateY(20px);
-  background: var(--card-2);
-  border: 1px solid var(--border);
-  padding: 12px 20px;
-  border-radius: 12px;
-  box-shadow: var(--shadow);
-  opacity: 0;
-  transition: all 0.25s ease;
-  pointer-events: none;
-  z-index: 50;
-  font-weight: 600;
-}
-
-.toast.show {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0);
-}
-
-.toast.error {
-  border-color: var(--red);
-  color: var(--red);
-}
-
-.toast.success {
-  border-color: var(--green);
-  color: var(--green);
-}
+/* ---------- Toast ----------
+   The pill toast was replaced by the spotlight card (.toastcard, in the
+   mascot section near the end of this file): the page dims and the corner
+   mascot rides the announcement in at eye level. ---------- */
 
 /* ---------- Misc ---------- */
 .section-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin: 30px 0 14px;
+  margin: 38px 0 16px;
   gap: 12px;
   flex-wrap: wrap;
 }
 
 .section-head h2 {
   margin: 0;
-  font-size: 20px;
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.card h3 {
+  letter-spacing: -0.01em;
 }
 
 .empty {
@@ -611,37 +1308,697 @@ tbody tr:hover {
   text-align: center;
   color: var(--muted);
   font-size: 13px;
-  padding: 30px;
+  padding: 40px 30px;
   border-top: 1px solid var(--border);
+  margin-top: 40px;
+}
+
+/* ---------- Chat assistant ---------- */
+.chat-widget {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 60;
+}
+
+/* While the chat panel is OPEN it must outrank the nav bar (the mobile nav
+   sits at 66 so the menu frost passes under it). Scoped to chat-open so the
+   resting mascot still gets frosted over by the menu overlay (64). */
+body.chat-open .chat-widget {
+  z-index: 70;
+}
+
+.chat-fab {
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: #fff;
+  font-size: 24px;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 12px 28px -8px rgba(124, 111, 255, 0.6);
+  transition: transform 0.15s ease, box-shadow 0.2s ease, opacity 0.3s ease;
+}
+
+/* While the mascot is off riding the announcement card, its button parks. */
+.chat-fab.away {
+  opacity: 0.25;
+  pointer-events: none;
+}
+
+.chat-fab:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 34px -10px rgba(124, 111, 255, 0.7);
+}
+
+.chat-fab.open {
+  transform: scale(0.94);
+}
+
+.chat-panel {
+  position: absolute;
+  right: 0;
+  bottom: 72px;
+  width: 340px;
+  max-width: calc(100vw - 32px);
+  height: 460px;
+  max-height: calc(100vh - 120px);
+  display: flex;
+  flex-direction: column;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  /* Same motion family as the nav: the panel tumbles out of the mascot's
+     corner every time the chat opens. */
+  transform-origin: bottom right;
+  animation: chat-tumble 0.4s cubic-bezier(0.34, 1.45, 0.64, 1);
+}
+
+@keyframes chat-tumble {
+  0% { opacity: 0; transform: translate(24px, 24px) rotate(4deg) scale(0.5); }
+  100% { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-panel { animation: none; }
+}
+
+.chat-panel[hidden] {
+  display: none;
+}
+
+/* H3: calm card header with a thin gradient accent line instead of the
+   loud blue-purple gradient block. */
+.chat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 16px;
+  background: var(--card);
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  position: relative;
+}
+
+.chat-head::after {
+  content: "";
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--accent-3), var(--accent), var(--accent-2));
+}
+
+.chat-head small {
+  color: var(--muted);
+}
+
+.chat-head strong {
+  font-family: var(--font-display);
+  font-size: 15px;
+}
+
+.chat-head small {
+  display: block;
+  font-size: 11.5px;
+  opacity: 0.85;
+  margin-top: 2px;
+}
+
+.chat-close {
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  background: var(--card-2);
+  color: var(--text);
+  /* Was 28px — the smallest tap target on the site, and the one people reach
+     for fastest when they want the chat panel gone. */
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.chat-close:hover {
+  background: var(--border);
+}
+
+.chat-log {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--bg-2);
+}
+
+/* ---- Voice / talk mode ---- */
+.chat-mic {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--card-2);
+  color: var(--text);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform 0.12s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.chat-mic:hover {
+  background: var(--card);
+}
+
+.chat-mic.active {
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: #fff;
+  border-color: transparent;
+}
+
+.chat-mic.listening {
+  animation: micPulse 1.3s ease-in-out infinite;
+}
+
+.chat-mic.speaking {
+  box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.35);
+}
+
+@keyframes micPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(129, 140, 248, 0.5); }
+  50% { box-shadow: 0 0 0 7px rgba(129, 140, 248, 0); }
+}
+
+.chat-voice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+  font-size: 12.5px;
+  color: var(--muted);
+  background: var(--bg-2);
+  border-top: 1px solid var(--border-soft);
+  position: relative;
+  overflow: hidden;
+}
+
+.chat-voice[hidden] {
+  display: none;
+}
+
+/* Soft breathing orb behind the bars — the "presence" of the assistant. */
+.voice-orb {
+  position: absolute;
+  left: 2px;
+  top: 50%;
+  width: 44px;
+  height: 44px;
+  margin-top: -22px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(129, 140, 248, 0.35), rgba(129, 140, 248, 0) 70%);
+  opacity: 0.5;
+  pointer-events: none;
+  animation: orbBreathe 3s ease-in-out infinite;
+}
+
+.chat-voice.is-listening .voice-orb {
+  background: radial-gradient(circle, rgba(52, 211, 153, 0.4), rgba(52, 211, 153, 0) 70%);
+  animation-duration: 1.6s;
+}
+
+.chat-voice.is-speaking .voice-orb {
+  background: radial-gradient(circle, rgba(129, 140, 248, 0.55), rgba(167, 139, 250, 0) 70%);
+  animation-duration: 1.1s;
+}
+
+@keyframes orbBreathe {
+  0%, 100% { transform: scale(0.85); opacity: 0.4; }
+  50% { transform: scale(1.15); opacity: 0.8; }
+}
+
+/* Gemini-style reactive bars. JS drives their height from real audio levels
+   (mic while listening, TTS clip while speaking) and adds .live; without a
+   live analyser the state keyframes below take over. */
+.voice-viz {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 28px;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.voice-viz i {
+  display: block;
+  width: 4px;
+  height: 5px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, var(--accent), var(--accent-2));
+  transition: height 0.06s linear;
+}
+
+.chat-voice.is-listening .voice-viz i {
+  background: linear-gradient(180deg, var(--green), var(--accent));
+}
+
+/* Synthetic fallback: bars dance on keyframes when no analyser is live. */
+.chat-voice.is-listening .voice-viz:not(.live) i,
+.chat-voice.is-speaking .voice-viz:not(.live) i {
+  animation: vizBounce 0.9s ease-in-out infinite;
+}
+
+.voice-viz i:nth-child(1) { animation-delay: 0.15s; }
+.voice-viz i:nth-child(2) { animation-delay: 0.3s; }
+.voice-viz i:nth-child(3) { animation-delay: 0s; }
+.voice-viz i:nth-child(4) { animation-delay: 0.45s; }
+.voice-viz i:nth-child(5) { animation-delay: 0.6s; }
+
+@keyframes vizBounce {
+  0%, 100% { height: 6px; }
+  50% { height: 22px; }
+}
+
+/* Thinking: a slow, low shimmer — clearly different from talking. */
+.chat-voice.is-thinking .voice-viz i {
+  animation: vizThink 1.3s ease-in-out infinite;
+}
+
+@keyframes vizThink {
+  0%, 100% { height: 5px; opacity: 0.45; }
+  50% { height: 13px; opacity: 1; }
+}
+
+/* Ambient glow on the whole panel while talk mode is on. */
+.chat-panel.voice-open {
+  box-shadow:
+    0 0 0 1px rgba(129, 140, 248, 0.25),
+    0 0 26px rgba(129, 140, 248, 0.18),
+    0 18px 48px rgba(0, 0, 0, 0.35);
+  transition: box-shadow 0.35s ease;
+}
+
+.chat-panel.voice-speaking {
+  box-shadow:
+    0 0 0 1px rgba(167, 139, 250, 0.45),
+    0 0 34px rgba(129, 140, 248, 0.35),
+    0 18px 48px rgba(0, 0, 0, 0.35);
+}
+
+.chat-voice-stop {
+  margin-left: auto;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 3px 11px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.chat-voice-stop:hover {
+  background: var(--card-2);
+}
+
+.chat-msg.interim {
+  opacity: 0.6;
+  font-style: italic;
+}
+
+.chat-msg {
+  max-width: 82%;
+  padding: 9px 13px;
+  border-radius: 14px;
+  font-size: 14px;
+  line-height: 1.45;
+  word-wrap: break-word;
+}
+
+.chat-msg.user {
+  align-self: flex-end;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+
+.chat-msg.assistant {
+  align-self: flex-start;
+  background: var(--card);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-bottom-left-radius: 4px;
+}
+
+.chat-msg.typing {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  letter-spacing: normal;
+}
+
+.chat-confirm {
+  max-width: 92%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chat-confirm strong {
+  font-size: 13px;
+}
+
+.chat-confirm-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+  padding: 3px 0;
+  border-bottom: 1px dashed var(--border);
+}
+
+.chat-confirm-row:last-of-type {
+  border-bottom: none;
+}
+
+.chat-confirm-row span {
+  color: var(--muted);
+}
+
+.chat-confirm-row b {
+  text-align: right;
+  word-break: break-word;
+}
+
+.chat-confirm-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.chat-confirm-actions .btn {
+  flex: 1;
+}
+
+.chat-confirm-ok {
+  flex: 1.4;
+}
+
+.chat-map {
+  max-width: 94%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chat-map strong {
+  font-size: 13px;
+}
+
+.chat-map-frame {
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  aspect-ratio: 16 / 10;
+  width: 100%;
+  background: var(--card);
+}
+
+.chat-map-frame iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+
+.chat-map-open {
+  align-self: flex-start;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent, #3878ff);
+  text-decoration: none;
+}
+
+.chat-map-open:hover {
+  text-decoration: underline;
+}
+
+/* --- contact-organiser card --- */
+.chat-contact {
+  max-width: 96%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px !important;
+}
+.cc-head {
+  font-weight: 700;
+  font-size: 13.5px;
+  color: var(--text);
+}
+.cc-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.cc-input {
+  width: 100%;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 9px 11px;
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  box-sizing: border-box;
+}
+.cc-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
+.cc-desc {
+  resize: vertical;
+  min-height: 64px;
+}
+.cc-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.cc-status {
+  font-size: 13px;
+  padding: 6px 2px;
+  border-radius: 6px;
+}
+.cc-ok { color: var(--green); }
+.cc-err { color: var(--red); }
+
+.chat-input {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  border-top: 1px solid var(--border);
+  background: var(--card);
+}
+
+.chat-input input {
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: 480px) {
+  .chat-widget {
+    right: 14px;
+    bottom: 14px;
+  }
+  .chat-panel {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    top: 72px;
+    bottom: 84px;
+    width: auto;
+    max-width: none;
+    height: auto;
+    max-height: none;
+  }
 }
 
 @media (max-width: 720px) {
+  /* MOBILE bar: styled exactly like the laptop bar — flat ground, hairline,
+     no rounding. The holder pins it; scrolling down melts the whole brand
+     away and fades the bar chrome, leaving just the menu button (and the
+     avatar when signed in) floating at the top right. Back at the top,
+     everything returns. .shrunk is set by paintNav's scroll listener. */
+  #nav {
+    position: sticky;
+    top: 0;
+    z-index: 66;
+  }
   .nav {
-    padding: 12px 16px;
-    gap: 6px;
+    padding: 10px 16px;
+    gap: 8px;
+    flex-wrap: nowrap;
+    z-index: 66;
+    transition: background 0.3s ease, border-color 0.3s ease;
   }
   .brand {
-    font-size: 16px;
+    /* no overflow:hidden here — it clipped the logo's badge and shadow;
+       the melt clips only the wordmark box and shrinks the logo itself */
+    min-width: 0;
+    gap: 12px;
+  }
+  .brand-name {
+    overflow: hidden;
+    max-width: 150px;
+    transition: max-width 0.35s cubic-bezier(0.34, 1.45, 0.64, 1), opacity 0.25s ease;
+  }
+  .brand .logo {
+    width: 38px;
+    height: 38px;
+    flex-shrink: 0;
+    transition: width 0.35s cubic-bezier(0.34, 1.45, 0.64, 1), opacity 0.2s ease, transform 0.35s ease;
+  }
+  .brand-name .wordmark { font-size: 14px; white-space: nowrap; }
+  .avatar-btn {
+    width: 36px;
+    height: 36px;
+    font-size: 14px;
+    transition: width 0.35s cubic-bezier(0.34, 1.45, 0.64, 1), opacity 0.2s ease, transform 0.35s ease;
+  }
+  /* signed-in avatar melts away with the brand — scrolled state keeps ONLY
+     the floating ☰ */
+  .nav.shrunk .avatar-btn {
+    width: 0;
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  .nav.shrunk .nav-profile {
+    pointer-events: none;
+  }
+  .nav-toggle {
+    width: 38px;
+    height: 38px;
+    transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+  }
+  .nav.shrunk {
+    background: transparent;
+    border-bottom-color: transparent;
+    /* the see-through strip must not swallow taps meant for the page */
+    pointer-events: none;
+  }
+  .nav.shrunk > * { pointer-events: auto; }
+  .nav.shrunk .brand {
+    /* keep the base margin-right:auto — even collapsed it's what pushes
+       the surviving ☰/avatar to the right edge */
+    gap: 0;
+    pointer-events: none;
+  }
+  .nav.shrunk .brand-name {
+    max-width: 0;
+    opacity: 0;
+  }
+  .nav.shrunk .brand .logo {
+    width: 0;
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  /* the surviving controls get their own little glass footing */
+  .nav.shrunk .nav-toggle {
+    background: color-mix(in srgb, var(--card) 85%, transparent);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    box-shadow: var(--shadow-sm);
   }
   .nav-toggle {
     display: flex;
   }
+  /* The old in-flow link list grew the sticky nav and shoved the whole page
+     down; mobile now uses the .nav-overlay "corner burst" menu instead. */
   .nav-links {
-    order: 5;
-    width: 100%;
     display: none;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 4px;
-    margin-top: 8px;
   }
-  .nav-links.open {
+  /* Corner-burst launcher: the page frosts over and every link flies out of
+     the hamburger corner (--fx/--fy are set by paintNav) into a grid of
+     circular icons pinned just below the bar. Nothing in the page moves. */
+  .nav-overlay {
+    display: grid;
+    position: fixed;
+    inset: 0;
+    z-index: 64;
+    grid-template-columns: repeat(3, auto);
+    justify-content: center;
+    align-content: start;
+    padding: 88px 16px 24px;
+    gap: 26px 30px;
+    background: color-mix(in srgb, var(--bg) 86%, transparent);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.25s ease, visibility 0s linear 0.25s;
+  }
+  .nav-overlay.open {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transition: opacity 0.25s ease;
+  }
+  .nav-overlay a.link {
     display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 0;
+    color: var(--text);
+    font-weight: 600;
+    opacity: 0;
+    transform: translate(var(--fx, 120px), var(--fy, -120px)) scale(0.2);
+    transition: transform 0.5s cubic-bezier(0.34, 1.45, 0.64, 1), opacity 0.2s ease;
+    transition-delay: 0ms;
   }
-  .nav a.link {
-    display: block;
-    padding: 10px 12px;
-    font-size: 14px;
+  .nav-overlay.open a.link {
+    opacity: 1;
+    transform: none;
+    transition-delay: calc(var(--i, 0) * 45ms);
+  }
+  .nav-overlay .link-ico {
+    width: 54px;
+    height: 54px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    font-size: 22px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-sm);
+  }
+  .nav-overlay .link-label {
+    font-size: 11px;
+  }
+  .nav-overlay a.link.active .link-ico {
+    background: linear-gradient(140deg, var(--accent-3), var(--accent) 55%, var(--accent-2));
+    border-color: transparent;
+    color: #fff;
+  }
+  .nav-overlay a.link.active .link-label {
+    color: var(--accent);
   }
   .container {
     padding: 22px 16px 48px;
@@ -649,49 +2006,119 @@ tbody tr:hover {
   .form-grid {
     grid-template-columns: 1fr;
   }
+  .reg-layout {
+    grid-template-columns: 1fr;
+  }
   .hero {
-    padding: 40px 16px 20px;
+    /* The E1 breathing room shrank back when the spotlight card left the
+       hero — a small cushion keeps the CTA buttons clear of the mascot. */
+    padding: 44px 16px 32px;
   }
   .hero h1 {
-    font-size: 32px;
+    font-size: 28px;
   }
   .hero p {
-    font-size: 15px;
+    font-size: 14px;
+    margin-bottom: 24px;
   }
   .hero-meta {
-    gap: 16px;
+    gap: 8px;
+    font-size: 12.5px;
+  }
+  .hero-meta > div {
+    padding: 8px 13px;
+  }
+  /* Bigger, thumb-friendly hero actions */
+  .hero-cta {
+    flex-direction: column;
+    align-items: stretch;
+    max-width: 340px;
+    margin: 0 auto;
+  }
+  .hero-cta .btn {
+    width: 100%;
+    justify-content: center;
+  }
+  .btn {
+    padding: 13px 20px;
+    min-height: 46px;
+  }
+  /* .btn.small and .btn.danger used to opt OUT of the 46px minimum here,
+     which meant every row action on every admin screen — Mark Paid, Delete,
+     Copy, Generate card, Send broadcast — landed at roughly 30px. Those are
+     the most-tapped controls on the site and the easiest to mis-hit. */
+  .btn.small,
+  .btn.danger {
+    /* Same 46px floor as every other button — a 44px floor left danger
+       buttons visibly shorter than their siblings in the same row. */
+    min-height: 46px;
+    padding: 10px 16px;
+  }
+  /* Countdown fills the row evenly instead of overflowing */
+  .countdown {
+    display: flex;
+    gap: 8px;
+    width: 100%;
+    max-width: 360px;
+  }
+  .count-box {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 12px 4px;
+  }
+  .count-box .num {
+    font-size: 23px;
+  }
+  /* Prevent iOS auto-zoom on focus */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+  .grid {
+    gap: 14px;
   }
   .price-card .amount {
-    font-size: 30px;
+    font-size: 27px;
   }
   .stat .value {
-    font-size: 24px;
+    font-size: 22px;
   }
   .bar-row {
     grid-template-columns: 96px 1fr auto;
     font-size: 13px;
   }
+  .section-head {
+    gap: 10px;
+  }
   .section-head h2 {
-    font-size: 18px;
+    font-size: 17px;
   }
 }
 
 @media (max-width: 460px) {
-  .brand small {
-    display: none;
-  }
   .nav {
-    gap: 4px;
-  }
-  .nav a.link {
-    padding: 6px 8px;
-    font-size: 12px;
+    gap: 6px;
   }
   .hero h1 {
-    font-size: 27px;
+    font-size: 25px;
+  }
+  .hero .eyebrow {
+    font-size: 12px;
+    padding: 6px 7px 6px 12px;
   }
   .page-title {
-    font-size: 22px;
+    font-size: 20px;
+  }
+  .count-box {
+    padding: 11px 3px;
+  }
+  .count-box .num {
+    font-size: 21px;
+  }
+  .count-box .cap {
+    font-size: 10px;
+    letter-spacing: 0.5px;
   }
   .form-footer {
     flex-direction: column;
@@ -706,3 +2133,3861 @@ tbody tr:hover {
     flex: 1 1 140px;
   }
 }
+
+/* ============================================================
+   Attention mascot + AI-button pulse + professional polish
+   ============================================================ */
+
+/* A soft, expanding ring behind the chat button draws the eye to the AI.
+   It calms down once the chat is opened. */
+.chat-fab {
+  position: relative;
+}
+.chat-fab::before {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 55%, transparent), transparent 70%);
+  z-index: -1;
+  animation: fabPulse 2.6s ease-out infinite;
+}
+.chat-fab.open::before {
+  animation: none;
+  opacity: 0;
+}
+@keyframes fabPulse {
+  0% { transform: scale(0.85); opacity: 0.7; }
+  70% { transform: scale(1.55); opacity: 0; }
+  100% { transform: scale(1.55); opacity: 0; }
+}
+
+/* ============================================================
+   ONE mascot that lives on the chat button. It rests in the corner as the
+   chat bubble, morphs into a little robot, waves, rolls, jumps, sometimes
+   swells into a huge demon with an evil laugh, then takes off (helicopter
+   rotor) and flies a loop around the screen before landing back home.
+   Clicking it always opens the chat.
+   ============================================================ */
+
+/* --- crossfade between the chat-bubble face and the robot --- */
+.fab-box,
+.fab-mascot {
+  grid-area: 1 / 1;
+  transition: opacity 0.5s ease, transform 0.5s ease;
+}
+.fab-box {
+  font-size: 24px;
+  line-height: 1;
+}
+.fab-mascot {
+  position: relative;
+  width: 44px;
+  height: 50px;
+  opacity: 0;
+  transform: scale(0.4) rotate(-10deg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* The button's robot IS the site-wide full robot (mascotHTML) — one
+   character, one implementation. Scaled a touch to sit inside the pod. */
+.fab-mascot .ebot { zoom: 0.88; }
+.chat-fab.as-box .fab-box { opacity: 1; transform: scale(1); }
+.chat-fab.as-box .fab-mascot { opacity: 0; transform: scale(0.4); }
+.chat-fab.as-bot .fab-box { opacity: 0; transform: scale(0.4); }
+.chat-fab.as-bot .fab-mascot { opacity: 1; transform: scale(1) rotate(0deg); }
+
+/* In robot form the coloured pod + attention ring fade so the bot shows bare. */
+.chat-fab.as-bot {
+  background: transparent;
+  box-shadow: none;
+}
+.chat-fab.as-bot::before { opacity: 0; animation: none; }
+
+/* --- the robot itself ---
+   The button's body parts (old fm-head/eye/antenna/body/arm/legs) are gone:
+   the robot inside the button is the shared .ebot component now. Only the
+   blink/dangle keyframes (used by .ebot too), the wave hook and the rotor
+   remain here. --- */
+@keyframes mascotBlink {
+  0%, 92%, 100% { transform: scaleY(1); }
+  95% { transform: scaleY(0.1); }
+}
+.chat-fab.waving .eb-arm.r { animation: fmWave 0.4s ease-in-out infinite; }
+@keyframes fmWave {
+  0%, 100% { transform: rotate(-8deg); }
+  50% { transform: rotate(-52deg); }
+}
+@keyframes mascotDangle {
+  0%, 100% { transform: rotate(-10deg); }
+  50% { transform: rotate(10deg); }
+}
+
+/* Helicopter rotor: only spins while flying. */
+.fm-rotor {
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  width: 50px;
+  height: 6px;
+  transform: translateX(-50%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.fm-rotor::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--accent-ink) 85%, transparent), transparent 75%);
+  animation: rotorBlur 0.1s linear infinite;
+}
+.fm-rotor::after {
+  content: "";
+  position: absolute;
+  top: 5px;
+  left: 50%;
+  width: 2px;
+  height: 6px;
+  transform: translateX(-50%);
+  background: var(--accent-ink);
+}
+@keyframes rotorBlur {
+  0%, 100% { transform: scaleX(1); opacity: 0.85; }
+  50% { transform: scaleX(0.22); opacity: 0.5; }
+}
+.chat-fab.flying .fm-rotor { opacity: 1; }
+
+/* --- motion states (only one runs at a time, driven by JS) --- */
+.chat-fab.flying {
+  animation: fabFly 13s ease-in-out;
+  z-index: 65;
+  /* For thirteen seconds this circle sweeps most of the viewport above the
+     page. Left clickable it swallows taps meant for links, the nav or the
+     register button — a mis-tap trap that appears at random. The stand-in
+     button in the corner is what stays hittable during a flight. */
+  pointer-events: none;
+}
+@keyframes fabFly {
+  0%   { transform: translate(0, 0) rotate(0deg); }
+  7%   { transform: translate(-8vw, -34vh) rotate(-14deg); }
+  22%  { transform: translate(-55vw, -62vh) rotate(10deg); }
+  38%  { transform: translate(-82vw, -30vh) rotate(-10deg); }
+  54%  { transform: translate(-48vw, -66vh) rotate(12deg); }
+  70%  { transform: translate(-18vw, -40vh) rotate(-8deg); }
+  85%  { transform: translate(-6vw, -14vh) rotate(6deg); }
+  100% { transform: translate(0, 0) rotate(0deg); }
+}
+
+.chat-fab.rolling { animation: fabRoll 1.2s ease-in-out; }
+@keyframes fabRoll {
+  0%   { transform: translateX(0) rotate(0deg); }
+  50%  { transform: translateX(-120px) rotate(-360deg); }
+  100% { transform: translateX(0) rotate(0deg); }
+}
+
+.chat-fab.jumping { animation: fabJump 0.7s ease-out; }
+@keyframes fabJump {
+  0%, 100% { transform: translateY(0); }
+  45% { transform: translateY(-42px); }
+  60% { transform: translateY(-42px); }
+}
+
+.chat-fab.huge {
+  animation: fabHuge 5s cubic-bezier(0.25, 0.6, 0.3, 1);
+  transform-origin: 100% 100%;
+  z-index: 70;
+  /* Deliberately still clickable, unlike .flying. The enlarged button stays in
+     its own corner and it IS the chat button — a tap on it opens the chat,
+     which is what anyone aiming at it wants. .flying can afford to be inert
+     because takeOff() leaves the stand-in button behind; grow() does not, so
+     switching this off would strand the chat for five seconds. */
+}
+@keyframes fabHuge {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(2.5); }
+  80%  { transform: scale(2.5); }
+  100% { transform: scale(1); }
+}
+
+/* --- speech bubble: only pops up now and then, short lines --- */
+.fab-bubble {
+  position: absolute;
+  bottom: 66px;
+  right: 0;
+  width: max-content;
+  max-width: 180px;
+  text-align: center;
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  padding: 7px 12px;
+  border-radius: 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  opacity: 0;
+  transform: translateY(6px) scale(0.85);
+  transform-origin: bottom right;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  pointer-events: none;
+}
+.fab-bubble::after {
+  content: "";
+  position: absolute;
+  bottom: -6px;
+  right: 18px;
+  transform: rotate(45deg);
+  width: 12px;
+  height: 12px;
+  background: var(--card);
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.fab-bubble.show {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+/* Never show a floating message while the mascot is rolling or huge, even if
+   a bubble timer from the previous scene is still running. */
+.chat-fab.rolling .fab-bubble,
+.chat-fab.huge .fab-bubble {
+  opacity: 0 !important;
+  transform: translateY(6px) scale(0.85) !important;
+}
+
+/* --- waving stand-in chat button, left in the corner while the mascot flies --- */
+.fab-ghost {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 58px;
+  height: 58px;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: #fff;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 12px 28px -8px rgba(124, 111, 255, 0.6);
+  opacity: 0;
+  transform: scale(0.2);
+  transform-origin: bottom right;
+  transition: opacity 0.35s ease, transform 0.35s ease;
+  pointer-events: none;
+  z-index: 1;
+}
+.fab-ghost.show {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+}
+.fg-icon {
+  grid-area: 1 / 1;
+  font-size: 24px;
+  line-height: 1;
+}
+.fg-hand {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  font-size: 20px;
+  transform-origin: 60% 90%;
+  animation: ghostWave 0.6s ease-in-out infinite;
+}
+@keyframes ghostWave {
+  0%, 100% { transform: rotate(-12deg); }
+  50% { transform: rotate(18deg); }
+}
+
+/* --- mini mascot avatar used in the chat header + typing indicator --- */
+.chat-head-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.mini-bot {
+  position: relative;
+  display: inline-block;
+  width: 30px;
+  height: 26px;
+  border-radius: 9px;
+  background: linear-gradient(160deg, #eef2ff, #c7d2fe);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, #fff);
+  box-shadow: inset 0 -2px 5px rgba(99, 102, 241, 0.25);
+  flex: 0 0 auto;
+}
+.mini-bot .mb-eye {
+  position: absolute;
+  top: 9px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent-ink);
+  animation: mascotBlink 3.4s infinite;
+}
+.mini-bot .mb-eye:first-of-type { left: 8px; }
+.mini-bot .mb-eye:last-of-type { right: 8px; }
+.mini-bot .mb-mouth {
+  position: absolute;
+  bottom: 5px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 10px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent-ink);
+}
+.mini-bot.talking .mb-mouth { animation: mbTalk 0.28s ease-in-out infinite; }
+@keyframes mbTalk {
+  0%, 100% { height: 2px; }
+  50% { height: 7px; border-radius: 4px; }
+}
+.mini-bot.thinking { animation: mbBob 1s ease-in-out infinite; }
+@keyframes mbBob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+.chat-avatar { margin-right: 2px; }
+.chat-avatar.talking {
+  box-shadow: inset 0 -2px 5px rgba(99, 102, 241, 0.25),
+    0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+/* typing indicator: the mascot 'types' with bouncing dots */
+.chat-msg.typing .typing-dots { display: inline-flex; gap: 4px; }
+.typing-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.5;
+  animation: typingDot 1s ease-in-out infinite;
+}
+.typing-dots i:nth-child(2) { animation-delay: 0.15s; }
+.typing-dots i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes typingDot {
+  0%, 100% { transform: translateY(0); opacity: 0.4; }
+  50% { transform: translateY(-4px); opacity: 1; }
+}
+
+/* writing caret: the mascot 'writes' the reply out on the board */
+.type-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 1px;
+  vertical-align: -2px;
+  background: var(--accent);
+  animation: caretBlink 0.7s steps(1) infinite;
+}
+@keyframes caretBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* --- assistant reply where the mascot itself writes / speaks the message --- */
+.chat-msg.assistant.bot-row {
+  background: transparent;
+  border: none;
+  padding: 0;
+  max-width: 90%;
+  display: flex;
+  align-items: flex-end;
+  gap: 9px;
+}
+.bot-row .msg-bot {
+  flex: 0 0 auto;
+  margin-bottom: 2px;
+}
+.bot-row .msg-text {
+  display: block;
+  background: var(--card);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 9px 13px;
+  border-radius: 14px;
+  border-bottom-left-radius: 4px;
+  line-height: 1.45;
+  word-wrap: break-word;
+  min-height: 1.2em;
+}
+/* while writing, the mascot leans in and scribbles a pencil */
+.msg-bot.writing { animation: mbBob 0.7s ease-in-out infinite; }
+.mb-pen {
+  position: absolute;
+  right: -9px;
+  bottom: -5px;
+  font-size: 14px;
+  opacity: 0;
+  transform-origin: bottom left;
+}
+.msg-bot.writing .mb-pen {
+  opacity: 1;
+  animation: penScribble 0.4s ease-in-out infinite;
+}
+@keyframes penScribble {
+  0%, 100% { transform: translateY(0) rotate(-10deg); }
+  50% { transform: translateY(-2px) rotate(8deg); }
+}
+/* while speaking, the mouth moves and little sound bars bounce */
+.msg-bot.speaking .mb-mouth { animation: mbTalk 0.28s ease-in-out infinite; }
+.mb-waves {
+  position: absolute;
+  right: -14px;
+  bottom: 3px;
+  display: none;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+}
+.msg-bot.speaking .mb-waves { display: flex; }
+.mb-waves i {
+  width: 3px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+  animation: eqBar 0.5s ease-in-out infinite;
+}
+.mb-waves i:nth-child(2) { animation-delay: 0.15s; }
+.mb-waves i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes eqBar {
+  0%, 100% { height: 3px; }
+  50% { height: 12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fab-mascot,
+  .fab-ghost,
+  .fab-bubble { display: none; }
+  .chat-fab::before { animation: none; opacity: 0; }
+}
+
+/* Phone: keep everything, just tighten the flight loop so the little bot
+   doesn't skim off the edges. */
+@media (max-width: 560px) {
+  @keyframes fabFly {
+    0%   { transform: translate(0, 0) rotate(0deg); }
+    8%   { transform: translate(-10vw, -26vh) rotate(-12deg); }
+    25%  { transform: translate(-58vw, -52vh) rotate(10deg); }
+    45%  { transform: translate(-70vw, -24vh) rotate(-10deg); }
+    62%  { transform: translate(-40vw, -56vh) rotate(12deg); }
+    80%  { transform: translate(-14vw, -30vh) rotate(-8deg); }
+    100% { transform: translate(0, 0) rotate(0deg); }
+  }
+}
+
+/* ==========================================================================
+   AUTH  —  login.html, 403.html, and the server-rendered interstitials
+   (magic-link confirm, invite accept) which reuse .auth-card.
+   ========================================================================== */
+
+/* Kept tight on the vertical axis on purpose: the whole sign-in card — nav,
+   Google, tabs and form — must fit a laptop viewport WITHOUT scrolling. */
+.auth-card {
+  max-width: 430px;
+  margin: 18px auto;
+  padding: 22px 24px 20px;
+}
+
+/* The login page itself: trim the container's tall default bottom padding so
+   the page height stays inside the viewport. */
+.container:has(> .auth-card) {
+  padding-top: 16px;
+  padding-bottom: 24px;
+}
+
+.auth-title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  margin: 0 0 4px;
+  letter-spacing: -0.02em;
+}
+
+.auth-sub {
+  margin: 0 0 14px;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+/* Feedback lines. --red is the palette token; --danger has never existed. */
+.auth-error,
+.auth-notice {
+  margin: 0 0 12px;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  line-height: 1.5;
+  border: 1px solid transparent;
+}
+.auth-error {
+  color: var(--red);
+  background: color-mix(in srgb, var(--red) 10%, transparent);
+  border-color: color-mix(in srgb, var(--red) 32%, transparent);
+}
+.auth-notice {
+  color: var(--green);
+  background: color-mix(in srgb, var(--green) 10%, transparent);
+  border-color: color-mix(in srgb, var(--green) 32%, transparent);
+}
+
+/* Google button: deliberately NOT a third-party widget — it's an <a> to our
+   own /api/auth/google/start, so the login page loads no external script. */
+.google-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: var(--card-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-weight: 600;
+  min-height: 44px;
+}
+.google-btn:hover {
+  background: var(--card);
+  border-color: var(--border-soft);
+}
+.google-btn svg {
+  flex: 0 0 auto;
+}
+
+.auth-sep {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 14px 0;
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.auth-sep::before,
+.auth-sep::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.auth-submit {
+  width: 100%;
+  min-height: 44px;
+}
+
+.auth-hint {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+/* An email address inside auth copy gets its own line: a 30+ character
+   address inline in a sentence either overflows a phone-width card or gets
+   broken mid-word with a couple of characters orphaned on the next line. */
+.auth-email {
+  display: block;
+  margin: 3px 0;
+  overflow-wrap: anywhere;
+}
+
+/* Belt and braces for everything else in the card (long names, error text
+   from the server): break rather than overflow. */
+.auth-card {
+  overflow-wrap: break-word;
+}
+
+/* Waiting for the emailed link to be approved: the login page polls the
+   server and signs itself in, so all this state has to do is look alive. */
+.auth-wait {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+  padding: 10px 0 4px;
+}
+.auth-wait-title {
+  font-weight: 700;
+  font-size: 17px;
+  margin: 0;
+}
+.auth-wait .muted {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.auth-wait .btn {
+  margin-top: 6px;
+}
+.auth-spinner {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  animation: authSpin 0.9s linear infinite;
+}
+@keyframes authSpin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .auth-spinner { animation: none; }
+}
+
+/* -------- Professional polish -------- */
+/* Crisper primary buttons with a subtle top sheen. */
+.btn.primary {
+  background-image: linear-gradient(135deg, var(--accent), var(--accent-2));
+  position: relative;
+}
+.btn.primary::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.22), transparent 45%);
+  pointer-events: none;
+}
+/* (The old gradient underline on the active nav link left with the N4
+   minimal bar — the accent colour alone marks the active page now.) */
+/* Cards lift gently and their border warms on hover for an interactive feel. */
+.card {
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+.container .grid .card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+  box-shadow: var(--shadow);
+}
+
+/* ===========================================================================
+   MOBILE LAYOUT
+   The existing media queries only covered the nav, the chat widget and the
+   mascot — there was no breakpoint for page content at all. On a phone that
+   left .form-grid and .reg-layout forcing two columns into ~310px, and long
+   words (emails, URLs, pasted reflection text) spilling out of their cards.
+   =========================================================================== */
+
+/* Break long unbroken strings instead of letting them run past the card edge.
+   break-word only kicks in when a word genuinely cannot fit, so normal text
+   wraps exactly as before. */
+p,
+li,
+td,
+h1,
+h2,
+h3,
+.page-sub,
+.empty,
+.card {
+  overflow-wrap: break-word;
+}
+
+/* Anything that can't shrink below its content width blows out a grid cell. */
+.grid > *,
+.form-grid > *,
+.field {
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  .container {
+    padding: 20px 14px 48px;
+  }
+
+  /* One column — this is the main offender on phones. */
+  .form-grid,
+  .reg-layout,
+  .grid.cols-3,
+  .grid.cols-4 {
+    grid-template-columns: 1fr;
+  }
+
+  .card {
+    padding: 16px;
+  }
+
+  .page-title {
+    font-size: 23px;
+  }
+
+  .section-head {
+    margin: 26px 0 12px;
+  }
+
+  .section-head h2 {
+    font-size: 18px;
+  }
+
+  .empty {
+    padding: 26px 14px;
+  }
+
+  /* Full-width buttons stack cleanly and give a bigger tap target. */
+  .card > form button.btn,
+  .card > form .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* Action rows (Copy / Generate / Send / Delete) wrap instead of overflowing. */
+  .refl-actions .btn {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+
+  /* Tables SCROLL sideways inside .table-wrap; they are not squeezed and not
+     switched to display:block (that destroys the table formatting context).
+     `table-layout: fixed` used to be set here, which combined with the 640px
+     min-width to give every column an identical slice — 80px each across the
+     8-column registrations table, with the action buttons clipped. Auto
+     layout lets columns size to their content and the wrapper scrolls. */
+  table {
+    min-width: 460px;
+  }
+
+  td,
+  th {
+    overflow-wrap: anywhere;
+    padding: 11px 12px;
+  }
+
+  /* Keep the row actions on one line and sized for a thumb. */
+  td.col-actions,
+  th.col-actions {
+    white-space: nowrap;
+  }
+  td.col-actions .btn {
+    margin-right: 6px;
+  }
+
+  /* Sideways scroll is easy to miss, so hint at it. */
+  .table-wrap {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .footer {
+    padding: 28px 16px;
+  }
+}
+
+/* ---------- Entrance reveals (site-wide "tilt tumble") ----------
+   The mobile menu's corner-burst spring, applied to page content: blocks
+   tumble in from the top-right with a small rotation, staggered, as they
+   enter the viewport. .rv/.rv-in are added ONLY by mountReveals() in
+   common.js and stripped again when each entrance finishes (so the card
+   :hover lifts keep working); with scripts off the classes never exist and
+   nothing stays hidden. */
+.rv {
+  opacity: 0;
+  transform: translate(46px, -46px) rotate(6deg) scale(0.6);
+}
+
+.rv.rv-in {
+  opacity: 1;
+  transform: none;
+  transition: transform 0.55s cubic-bezier(0.34, 1.45, 0.64, 1), opacity 0.3s ease;
+  transition-delay: calc(var(--rvi, 0) * 60ms);
+}
+
+/* The profile dropdown joins the same motion family: it tumbles out of the
+   avatar's corner each time it opens. (display toggles with .open, so a
+   keyframe animation replays on every open.) */
+.profile-menu.open {
+  transform-origin: top right;
+  animation: menu-tumble 0.4s cubic-bezier(0.34, 1.45, 0.64, 1);
+}
+
+@keyframes menu-tumble {
+  0% { opacity: 0; transform: translate(14px, -14px) rotate(5deg) scale(0.5); }
+  100% { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rv {
+    opacity: 1;
+    transform: none;
+  }
+  .rv.rv-in {
+    transition: none;
+  }
+  .profile-menu.open {
+    animation: none;
+  }
+}
+
+/* ---------- Price spotlight (home hero) ----------
+   The registration-category cards left the home page; one compact card
+   auto-cycles through the categories instead, each arriving with the tumble.
+   Tapping it opens register.html with that category preselected. */
+.price-spot {
+  margin-top: 26px;
+}
+
+.spot-card {
+  max-width: 370px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 13px 18px;
+  box-shadow: var(--shadow-sm);
+  color: var(--text);
+  text-align: left;
+}
+
+.spot-card:hover {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+}
+
+.spot-card.anim {
+  animation: spot-tumble 0.5s cubic-bezier(0.34, 1.45, 0.64, 1);
+}
+
+@keyframes spot-tumble {
+  0% { opacity: 0; transform: translate(30px, -30px) rotate(6deg) scale(0.5); }
+  100% { opacity: 1; transform: none; }
+}
+
+.spot-ico { font-size: 24px; flex-shrink: 0; }
+
+.spot-txt { min-width: 0; }
+
+.spot-txt b { display: block; font-size: 15px; }
+
+.spot-txt small {
+  display: block;
+  color: var(--muted);
+  font-size: 11.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.spot-price {
+  margin-left: auto;
+  font-weight: 800;
+  font-size: 19px;
+  white-space: nowrap;
+}
+
+/* Slogan flavour of the spotlight: centred one-liner, no price column. */
+.slogan-card {
+  justify-content: center;
+  gap: 11px;
+  max-width: 330px;
+  cursor: default;
+}
+
+.slogan-text {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.spot-dots { display: flex; gap: 6px; justify-content: center; margin-top: 10px; }
+
+.spot-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--border);
+  transition: background 0.2s ease;
+}
+
+.spot-dots i.on { background: var(--accent); }
+
+
+/* ---------- Animated dropdowns ----------
+   Native <select> menus can't be animated, so mountDropdowns() in common.js
+   gives every select (outside the chat widget) a styled twin that opens with
+   the nav's tumble and staggers its rows. The native control stays in the
+   DOM — hidden but holding name/value — so forms and change listeners keep
+   working untouched. */
+select.dd-native {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  border: 0 !important;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.dd { position: relative; }
+
+.field .dd { width: 100%; }
+
+.toolbar .dd { min-width: 180px; }
+
+@media (max-width: 460px) {
+  .toolbar .dd {
+    min-width: 0;
+    flex: 1 1 140px;
+  }
+}
+
+.dd-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 13px;
+  color: var(--text);
+  font-size: 14px;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.dd-btn:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
+
+.dd-btn .dd-val {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dd-btn .dd-val.ph {
+  color: color-mix(in srgb, var(--muted) 75%, transparent);
+}
+
+.dd-btn .dd-chev {
+  color: var(--muted);
+  transition: transform 0.22s ease;
+  flex-shrink: 0;
+}
+
+.dd.open .dd-btn { border-color: var(--accent); }
+
+.dd.open .dd-btn .dd-chev { transform: rotate(180deg); }
+
+.dd-menu {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 8px);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 18px 40px -12px rgba(0, 0, 0, 0.35);
+  padding: 6px;
+  display: none;
+  z-index: 40;
+  max-height: 280px;
+  overflow-y: auto;
+  transform-origin: top left;
+}
+
+.dd.open .dd-menu {
+  display: block;
+  animation: dd-tumble 0.35s cubic-bezier(0.34, 1.45, 0.64, 1);
+}
+
+@keyframes dd-tumble {
+  0% { opacity: 0; transform: translate(-12px, -12px) rotate(-4deg) scale(0.6); }
+  100% { opacity: 1; transform: none; }
+}
+
+.dd-opt {
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+  opacity: 0;
+  animation: dd-row-in 0.3s ease both;
+  animation-delay: calc(70ms + var(--i, 0) * 40ms);
+}
+
+@keyframes dd-row-in {
+  0% { opacity: 0; transform: translateY(-7px) scale(0.95); }
+  100% { opacity: 1; transform: none; }
+}
+
+.dd-opt:hover,
+.dd-opt.hi { background: var(--card-2); }
+
+.dd-opt.sel { color: var(--accent); font-weight: 700; }
+
+@media (prefers-reduced-motion: reduce) {
+  .spot-card.anim { animation: none; }
+  .dd.open .dd-menu { animation: none; }
+  .dd-opt { animation: none; opacity: 1; }
+}
+
+/* ---------- Talk-mode horizon glow (W4, dialed a notch lighter) ----------
+   Only exists while voice mode is on (.voice-open, set by setVoiceStatus):
+   aurora blobs rest on the panel floor and a glowing horizon line blooms
+   upward, both driven by --amp (real TTS loudness from vizFrame). Typed
+   chat never shows any of it. */
+.chat-panel {
+  --amp: 0;
+}
+
+.chat-fx {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  overflow: hidden;
+  display: none;
+}
+
+/* Glow while talk mode is on, AND whenever the bot is audibly speaking —
+   the greeting included (A1). It vanishes the moment the audio ends. */
+.chat-panel.voice-open .chat-fx,
+.chat-panel.bot-speaking .chat-fx {
+  display: block;
+}
+
+/* Everything else in the panel paints above the glow. */
+.chat-panel > :not(.chat-fx) {
+  position: relative;
+  z-index: 1;
+}
+
+.chat-fx i {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(40px);
+  opacity: calc(0.09 + var(--amp) * 0.32);
+  transform: translateY(calc(26px - var(--amp) * 40px)) scale(calc(0.9 + var(--amp) * 0.4));
+  transition: opacity 0.12s linear, transform 0.12s linear;
+}
+
+.chat-fx i:nth-child(1) { width: 240px; height: 240px; left: -70px; bottom: -110px; background: var(--accent); }
+.chat-fx i:nth-child(2) { width: 220px; height: 220px; left: 80px; bottom: -130px; background: var(--accent-2); animation: chat-fx-drift1 9s ease-in-out infinite; }
+.chat-fx i:nth-child(3) { width: 210px; height: 210px; right: -60px; bottom: -100px; background: var(--accent-3); animation: chat-fx-drift2 11s ease-in-out infinite; }
+
+@keyframes chat-fx-drift1 {
+  0%, 100% { translate: 0 0; }
+  50% { translate: -26px 0; }
+}
+
+@keyframes chat-fx-drift2 {
+  0%, 100% { translate: 0 0; }
+  50% { translate: 24px 0; }
+}
+
+.chat-fx b {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(to top, color-mix(in srgb, var(--accent) 55%, transparent), transparent calc(4px + var(--amp) * 5px)),
+    linear-gradient(to top, color-mix(in srgb, var(--accent-2) 26%, transparent), transparent calc(10% + var(--amp) * 28%));
+  opacity: calc(0.2 + var(--amp) * 0.4);
+  transition: opacity 0.1s linear;
+}
+
+/* Mic tapped → the typing row leaves; Stop → it comes back. */
+.chat-panel.voice-open .chat-input {
+  display: none;
+}
+
+/* The log and the voice bar normally paint opaque --bg-2, which sat right on
+   top of the glow and hid it completely. In talk mode they go glassy so the
+   aurora shows through. */
+.chat-panel.voice-open .chat-log,
+.chat-panel.bot-speaking .chat-log {
+  background: transparent;
+}
+
+.chat-panel.voice-open .chat-voice {
+  background: color-mix(in srgb, var(--bg-2) 55%, transparent);
+}
+
+/* ---------- Blur history (voice AND typed chat) ----------
+   The bubbles are the normal chat bubbles in both modes. The newest message
+   stays sharp; the previous one is lightly blurred and everything older
+   deeply blurred. Scrolling up (.browsing, set by the log's scroll handler)
+   sharpens the whole history for reading; returning to the bottom re-blurs
+   it. The glow behind the bubbles remains talk-mode only — typed chat gets
+   the blur but zero background animation. */
+.chat-msg {
+  transition: filter 0.45s ease, opacity 0.45s ease;
+}
+
+/* Thin blur — recessed but still readable without scrolling back.
+   TALK MODE ONLY: typed chat keeps a completely normal, unblurred log. */
+.chat-panel.voice-open .chat-log:not(.browsing) > :nth-last-child(2) {
+  filter: blur(0.8px);
+  opacity: 0.78;
+}
+
+.chat-panel.voice-open .chat-log:not(.browsing) > :nth-last-child(n + 3) {
+  filter: blur(1.4px);
+  opacity: 0.6;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-msg { transition: none; }
+}
+
+/* ---------- Live text (assistant replies, both modes) ----------
+   T-b: each word soft-fades in on a steady beat. No blur, no movement —
+   the cleanest read while still feeling alive. */
+.chat-log .lw {
+  opacity: 0;
+  transition: opacity 0.22s ease;
+}
+
+.chat-log .lw.in {
+  opacity: 1;
+}
+
+/* ---------- Memories: the living photo wall (home page) ---------- */
+.mem-wall {
+  columns: 3 220px;
+  column-gap: 14px;
+  perspective: 1000px;
+}
+
+.mem-tile {
+  width: 100%;
+  margin-bottom: 14px;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  background: none;
+  cursor: pointer;
+  break-inside: avoid;
+  display: block;
+  position: relative;
+  opacity: 0;
+}
+
+.mem-inner {
+  display: block;
+  position: relative;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  transform-style: preserve-3d;
+  transition: transform 0.65s cubic-bezier(0.34, 1.45, 0.64, 1);
+}
+
+.mem-tile.flip .mem-inner {
+  transform: rotateY(180deg);
+}
+
+.mem-front {
+  display: block;
+  backface-visibility: hidden;
+  position: relative;
+}
+
+.mem-ph {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  font-size: 36px;
+  background: var(--ph, linear-gradient(140deg, var(--accent-3), var(--accent)));
+  color: rgba(255, 255, 255, 0.95);
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+}
+
+.mem-front img {
+  display: block;
+  width: 100%;
+}
+
+.mem-cap {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 20px 12px 9px;
+  background: linear-gradient(transparent, rgba(10, 14, 28, 0.72));
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.mem-back {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  transform: rotateY(180deg);
+  background: linear-gradient(140deg, var(--accent-3), var(--accent) 55%, var(--accent-2));
+  color: #fff;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  padding: 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  border-radius: 14px;
+}
+
+.mem-back small {
+  opacity: 0.8;
+  font-size: 10.5px;
+  display: block;
+  margin-top: 6px;
+}
+
+/* Pop in when scrolled into view, then keep breathing gently. */
+.mem-wall.pop .mem-tile {
+  animation:
+    mem-tum 0.5s cubic-bezier(0.34, 1.45, 0.64, 1) both,
+    mem-breathe 5.5s ease-in-out infinite;
+  animation-delay: calc(var(--i, 0) * 60ms), calc(1s + var(--i, 0) * 0.5s);
+}
+
+@keyframes mem-tum {
+  0% { opacity: 0; transform: translate(34px, -34px) rotate(7deg) scale(0.5); }
+  100% { opacity: 1; transform: none; }
+}
+
+@keyframes mem-breathe {
+  0%, 100% { translate: 0 0; }
+  50% { translate: 0 -5px; }
+}
+
+.mem-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 74;
+  background: color-mix(in srgb, var(--bg) 80%, transparent);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.25s ease, visibility 0s linear 0.25s;
+  display: grid;
+  place-items: center;
+}
+
+.mem-lightbox.open {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition: opacity 0.25s ease;
+}
+
+.mem-lightbox .mem-x {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  font-size: 17px;
+  cursor: pointer;
+}
+
+.mem-fig {
+  margin: 0;
+  width: min(560px, 92vw);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 30px 70px -20px rgba(0, 0, 0, 0.5);
+  transform: translate(30px, -30px) rotate(6deg) scale(0.5);
+  opacity: 0;
+  transition: transform 0.45s cubic-bezier(0.34, 1.45, 0.64, 1), opacity 0.2s ease;
+}
+
+.mem-lightbox.open .mem-fig {
+  transform: none;
+  opacity: 1;
+}
+
+.mem-fig .mem-ph {
+  height: min(340px, 48vh);
+  font-size: 74px;
+}
+
+.mem-fig img {
+  display: block;
+  width: 100%;
+  max-height: min(340px, 48vh);
+  object-fit: cover;
+}
+
+.mem-fig figcaption {
+  padding: 13px 18px;
+}
+
+.mem-fig figcaption b {
+  display: block;
+  font-size: 15px;
+}
+
+.mem-fig figcaption small {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+/* ---------- "View Pricing" burst (P2d: spring pop + pointer tilt) ---------- */
+.pburst {
+  position: fixed;
+  inset: 0;
+  z-index: 74;
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.25s ease, visibility 0s linear 0.25s;
+  display: grid;
+  place-items: center;
+}
+
+.pburst.open {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition: opacity 0.25s ease;
+}
+
+.pburst .pburst-x {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  font-size: 17px;
+  cursor: pointer;
+}
+
+.pburst-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(150px, 215px));
+  gap: 16px;
+  padding: 64px 14px;
+  transition: transform 0.15s ease-out;
+  /* More categories than fit one screen (7 now, was 4) need their own
+     scroll region — the overlay itself uses place-items:center, and a
+     centered flex/grid item clips unreachable overflow at both ends
+     instead of scrolling to it. Capping and scrolling this inner box
+     keeps the close button (absolute on .pburst, outside this box)
+     fixed in place while the cards underneath scroll. */
+  max-height: min(82vh, 680px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  /* Scrolls the same either way — just without the browser's scrollbar
+     chrome cutting into this centered overlay. */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.pburst-grid::-webkit-scrollbar {
+  display: none;
+}
+
+.pb-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: 0 18px 40px -14px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+  color: var(--text);
+  display: block;
+  opacity: 0;
+  transform: translate(var(--fx, 0px), var(--fy, -150px)) rotate(12deg) scale(0.2);
+  /* the P2d spring: a big, playful overshoot on arrival */
+  transition: transform 0.7s cubic-bezier(0.2, 1.9, 0.4, 1), opacity 0.2s ease;
+  transition-delay: 0ms;
+}
+
+.pburst.open .pb-card {
+  opacity: 1;
+  transform: none;
+  transition-delay: calc(var(--i, 0) * 70ms);
+}
+
+/* ---------- Convention brochure reader ---------- */
+/* Same frosted full-screen stage as the pricing burst. The document owns the
+   scroll area, leaving the download action visible at the top. */
+body.brochure-open { overflow: hidden; }
+
+.brochure-dialog {
+  position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 18px;
+  background: color-mix(in srgb, var(--bg) 80%, transparent);
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity .24s ease, visibility 0s linear .24s;
+}
+.brochure-dialog.open { opacity: 1; visibility: visible; pointer-events: auto; transition: opacity .24s ease; }
+.brochure-sheet {
+  width: min(1120px, 100%); height: min(860px, calc(100vh - 36px)); display: flex; flex-direction: column;
+  overflow: hidden; border: 1px solid var(--border); border-radius: 18px; background: var(--card);
+  box-shadow: 0 28px 80px -22px rgba(0, 0, 0, .48);
+  transform: translate(var(--brochure-x, 0), var(--brochure-y, -40px)) rotate(-7deg) scale(.08); opacity: 0;
+  transition: transform .7s cubic-bezier(.2, 1.55, .4, 1), opacity .18s ease;
+}
+.brochure-dialog.open .brochure-sheet { transform: none; opacity: 1; }
+.brochure-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px; flex: 0 0 auto;
+  padding: 12px 14px 12px 18px; border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--card) 92%, var(--accent) 8%);
+}
+.brochure-kicker { display: block; color: var(--accent); font-size: 10px; font-weight: 800; letter-spacing: 1.35px; text-transform: uppercase; }
+.brochure-bar h2 { margin: 1px 0 0; font-size: 17px; }
+.brochure-actions { display: flex; align-items: center; gap: 9px; }
+.brochure-download, .brochure-close { min-height: 38px; border: 1px solid var(--border); border-radius: 9px; font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; }
+.brochure-download { display: inline-flex; align-items: center; gap: 7px; padding: 0 12px; background: var(--accent); border-color: var(--accent); color: #fff; }
+.brochure-download:hover { color: #fff; filter: brightness(1.06); }
+.brochure-close { width: 38px; padding: 0; background: var(--card); color: var(--text); font-size: 24px; line-height: 1; }
+.brochure-reader { min-height: 0; flex: 1; background: #52565d; }
+.brochure-reader iframe { display: block; width: 100%; height: 100%; border: 0; }
+.brochure-mobile-pages { display: none; }
+
+@media (max-width: 560px) {
+  .brochure-dialog { padding: 0; }
+  .brochure-sheet { width: 100%; height: 100%; border: 0; border-radius: 0; }
+  .brochure-bar { padding-left: 13px; gap: 8px; }
+  .brochure-download { padding: 0 9px; }
+  /* iOS Safari and several Android in-app browsers do not support PDF
+     plugins in iframes. These lightweight page images keep the brochure
+     scrollable inside the popup rather than sending the visitor away. */
+  .brochure-reader iframe { display: none; }
+  .brochure-mobile-pages {
+    display: flex;
+    height: 100%;
+    flex-direction: column;
+    gap: 10px;
+    overflow-y: auto;
+    padding: 10px;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+  .brochure-mobile-pages img {
+    display: block;
+    width: 100%;
+    height: auto;
+    background: #fff;
+    box-shadow: 0 3px 14px rgba(0, 0, 0, .25);
+  }
+}
+
+.pb-card:hover {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+
+.pb-ph {
+  height: 100px;
+  display: grid;
+  place-items: center;
+  font-size: 36px;
+  background: var(--ph, linear-gradient(140deg, var(--accent-3), var(--accent)));
+  color: rgba(255, 255, 255, 0.95);
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+}
+
+.pb-body {
+  display: block;
+  padding: 10px 14px 13px;
+}
+
+.pb-body b {
+  display: block;
+  font-size: 14.5px;
+}
+
+.pb-body small {
+  color: var(--muted);
+  font-size: 11.5px;
+  display: block;
+  min-height: 30px;
+}
+
+.pb-price {
+  display: block;
+  font-weight: 800;
+  font-size: 18px;
+  margin-top: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-fx i, .chat-fx b { transition: none; }
+  .chat-log .lw { transition: opacity 0.15s ease; filter: none; }
+  .mem-wall.pop .mem-tile { animation: none; opacity: 1; }
+  .mem-inner, .mem-fig, .pb-card { transition: none; }
+  .pburst.open .pb-card { opacity: 1; transform: none; }
+  .brochure-sheet { transition: none; }
+}
+
+/* N4: the Sign in button in the bar is a quiet outlined chip, not a filled
+   gradient pill. Lives at the end of the file so it wins over .btn.primary
+   and its sheen overlay. */
+.nav-links .auth-btn {
+  background: none;
+  background-image: none;
+  color: var(--text);
+  border: 1.5px solid var(--text);
+  border-radius: 4px;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 1px;
+  font-weight: 700;
+  padding: 8px 14px;
+  box-shadow: none;
+}
+
+.nav-links .auth-btn::after {
+  display: none;
+}
+
+.nav-links .auth-btn:hover {
+  background: var(--text);
+  color: var(--bg);
+  transform: none;
+  box-shadow: none;
+}
+
+/* ================= Register: the Ticket Wizard =================
+   R1+R2 combo: three guided steps, and a live ticket that every step
+   stamps — category art + price, then the name as it's typed, then the
+   final step IS the ticket with Confirm & Pay. */
+.reg-wizard {
+  display: grid;
+  grid-template-columns: 1.25fr 1fr;
+  gap: 18px;
+  align-items: start;
+}
+
+.reg-wizard > .wiz-col { grid-column: 1; grid-row: 1; }
+.reg-wizard > .ticket-col { grid-column: 2; grid-row: 1; }
+
+.reg-steps {
+  display: flex; align-items: center; gap: 8px;
+  margin: 0 0 14px;
+  font-size: 12px; font-weight: 800;
+}
+.reg-stp { display: flex; align-items: center; gap: 7px; color: var(--muted); white-space: nowrap; }
+.reg-stp i {
+  width: 24px; height: 24px; border-radius: 50%; font-style: normal;
+  display: grid; place-items: center; font-size: 11px;
+  background: var(--card); border: 1.5px solid var(--border);
+}
+.reg-stp.on { color: var(--text); }
+.reg-stp.on i,
+.reg-stp.done i {
+  background: linear-gradient(140deg, var(--accent-3), var(--accent) 55%, var(--accent-2));
+  color: #fff; border-color: transparent;
+}
+.reg-steps .reg-ln { flex: 1; height: 2px; background: var(--border); border-radius: 2px; min-width: 10px; }
+
+.wiz-stage > * { animation: wiz-tum 0.45s cubic-bezier(0.34, 1.45, 0.64, 1); }
+@keyframes wiz-tum {
+  0% { opacity: 0; transform: translate(24px, -20px) rotate(4deg) scale(0.65); }
+  100% { opacity: 1; transform: none; }
+}
+
+.cat-choice { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.catcard {
+  border: 1.5px solid var(--border); border-radius: 14px; overflow: hidden; cursor: pointer;
+  background: var(--card); font: inherit; color: var(--text); text-align: left; padding: 0;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+.catcard:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--accent) 50%, var(--border)); }
+.catcard.sel { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent); }
+.catcard .cat-ph { height: 96px; display: grid; place-items: center; font-size: 24px; color: #fff; text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); }
+.catcard .cat-nm { display: block; padding: 8px 11px 2px; font-size: 12.5px; font-weight: 700; }
+.catcard .cat-pr { display: block; padding: 0 11px 9px; font-size: 14.5px; font-weight: 800; }
+
+.wiz-nav { display: flex; justify-content: space-between; gap: 10px; margin-top: 16px; }
+.rev-row { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 13.5px; }
+.rev-row:last-of-type { border-bottom: 0; }
+
+/* The final wizard step becomes an inline bank-transfer journey. The account
+   itself stays on the page; only the WhatsApp handoff uses a dialog. */
+.payment-prep-note, .payment-proof-hint { display: flex; align-items: flex-start; gap: 11px; margin-top: 15px; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border)); border-radius: 13px; background: color-mix(in srgb, var(--accent) 5%, var(--card)); }
+.payment-prep-note > span, .proof-hint-icon { display: grid; flex: 0 0 28px; width: 28px; height: 28px; place-items: center; border-radius: 9px; color: #fff; background: linear-gradient(145deg, var(--accent-3), var(--accent), var(--accent-2)); font-weight: 900; }
+.payment-prep-note b, .payment-proof-hint strong { display: block; color: var(--text); font-size: 12px; }
+.payment-prep-note small { display: block; margin-top: 2px; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.payment-flow { display: grid; gap: 13px; }
+.payment-summary { padding: 2px 2px 0; }
+.payment-summary h2 { margin: 0; color: var(--text); font-size: clamp(26px, 3vw, 32px); font-weight: 850; letter-spacing: -.045em; line-height: 1.05; }
+.payment-amount-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 16px; border: 1px solid rgba(255,255,255,.16); border-radius: 15px; color: #fff; background: linear-gradient(115deg, #252c50, #5147c4 72%, #793be4); box-shadow: 0 9px 20px rgba(83,70,202,.18); }
+.payment-amount-banner > div { display: grid; gap: 3px; min-width: 0; }
+.payment-amount-banner span { color: #d8d9ff; font-size: 9px; font-weight: 850; letter-spacing: .11em; }
+.payment-amount-banner small { color: #d3d4f6; font-size: 10px; line-height: 1.35; }
+.payment-amount-banner strong { flex: 0 0 auto; color: #fff; font-size: clamp(23px, 2.8vw, 29px); font-weight: 900; letter-spacing: -.045em; white-space: nowrap; }
+.payment-route { display: flex; align-items: center; gap: 7px; padding: 2px 5px; }
+.route-stop { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 10px; font-weight: 700; white-space: nowrap; }
+.route-stop i { display: grid; width: 21px; height: 21px; place-items: center; border: 1px solid var(--border); border-radius: 50%; color: var(--muted); background: var(--card); font-size: 9px; font-style: normal; }
+.route-stop.current { color: var(--accent-ink); }
+.route-stop.current i { border-color: transparent; color: #fff; background: linear-gradient(140deg,var(--accent-3),var(--accent),var(--accent-2)); box-shadow: 0 4px 10px color-mix(in srgb, var(--accent) 25%, transparent); }
+.route-line { flex: 1; min-width: 10px; height: 1px; border-top: 1px dashed var(--border); }
+.transfer-card { padding: 15px; border: 1px solid var(--border); border-radius: 17px; background: var(--card); box-shadow: var(--shadow-sm); }
+.transfer-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.transfer-card-kicker, .transfer-account-name > span, .transfer-row > span { color: var(--muted); font-size: 9px; font-weight: 850; letter-spacing: .1em; }
+.transfer-card-head h3 { margin: 3px 0 0; color: var(--text); font-size: 18px; letter-spacing: -.035em; }
+.transfer-bank-mark { display: grid; width: 39px; height: 39px; place-items: center; border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border)); border-radius: 12px; color: #fff; background: linear-gradient(145deg,#1670ca,#3c48a8 55%,#7b46cc); font-family: var(--font-display); font-size: 13px; font-weight: 900; box-shadow: 0 7px 16px rgba(57,67,171,.22); }
+.transfer-branch { margin: 3px 0 12px; color: var(--muted); font-size: 11px; }
+.transfer-branch span { padding: 0 4px; color: var(--accent); }
+.transfer-account-name { display: grid; gap: 4px; padding: 10px 11px; border: 1px solid var(--border-soft); border-radius: 11px; background: var(--card-2); }
+.transfer-account-name strong { color: var(--text); font-size: 11px; letter-spacing: .01em; line-height: 1.35; }
+.transfer-details-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+.transfer-row { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 5px; min-width: 0; padding: 9px 10px; border: 1px solid var(--border-soft); border-radius: 11px; background: var(--card); }
+.transfer-row > span { grid-column: 1 / -1; }
+.transfer-row > strong { min-width: 0; overflow-wrap: anywhere; color: var(--text); font-size: 14px; letter-spacing: .045em; }
+.transfer-row.ifsc-code > strong { font-size: 13px; }
+.transfer-copy { padding: 5px 7px; border: 1px solid var(--border); border-radius: 7px; color: var(--accent-ink); background: var(--card-2); font-size: 9px; font-weight: 800; cursor: pointer; }
+.transfer-copy:hover, .transfer-copy.copied { border-color: color-mix(in srgb, var(--green) 40%, var(--border)); color: var(--green); }
+.payment-proof-hint { align-items: center; margin: 0; }
+.payment-proof-hint p { margin: 2px 0 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
+.payment-flow-actions { display: grid; gap: 7px; }
+.payment-confirm-btn { display: flex; width: 100%; align-items: center; justify-content: space-between; padding: 12px 15px; border-radius: 12px; box-shadow: 0 9px 20px color-mix(in srgb, var(--accent) 19%, transparent); }
+.payment-confirm-btn i { display: grid; width: 23px; height: 23px; place-items: center; border: 1px solid rgba(255,255,255,.35); border-radius: 50%; font-size: 13px; font-style: normal; transition: transform .18s ease; }
+.payment-confirm-btn:hover i { transform: translateX(3px); }
+.payment-flow-actions > small { color: var(--muted); font-size: 9.5px; text-align: center; }
+
+.ticket {
+  border-radius: 18px; overflow: hidden;
+  border: 1px solid var(--border); background: var(--card);
+  box-shadow: 0 20px 42px -16px rgba(15, 20, 45, 0.4);
+  position: sticky; top: 84px;
+}
+.ticket.retum { animation: wiz-tum 0.5s cubic-bezier(0.34, 1.45, 0.64, 1); }
+.tk-band { height: 84px; display: grid; place-items: center; font-size: 32px; color: #fff; text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3); transition: background 0.3s ease; }
+.tk-body { padding: 13px 16px 9px; }
+.tk-kicker { font-size: 9.5px; letter-spacing: 1.6px; text-transform: uppercase; color: var(--muted); font-weight: 800; }
+.tk-name { font-size: 17px; font-weight: 800; letter-spacing: -0.01em; min-height: 24px; overflow-wrap: anywhere; }
+.tk-name .tk-phname { color: color-mix(in srgb, var(--muted) 60%, transparent); font-weight: 600; }
+.tk-meta { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-top: 5px; font-size: 12px; color: var(--muted); }
+.tk-meta b { font-size: 18px; color: var(--text); font-weight: 800; white-space: nowrap; }
+.tk-perf { border-top: 2px dashed var(--border); margin-top: 9px; position: relative; }
+.tk-perf::before,
+.tk-perf::after {
+  content: ""; position: absolute; top: -8px; width: 16px; height: 16px; border-radius: 50%;
+  background: var(--bg);
+}
+.tk-perf::before { left: -9px; }
+.tk-perf::after { right: -9px; }
+.tk-stub { display: flex; justify-content: space-between; align-items: center; padding: 9px 16px 13px; }
+.tk-code { font-size: 10.5px; font-weight: 800; letter-spacing: 1px; color: var(--muted); }
+.tk-bars { display: flex; gap: 2px; align-items: flex-end; }
+.tk-bars i { width: 2.5px; background: var(--text); opacity: 0.8; }
+.tk-hint { font-size: 11.5px; color: var(--muted); text-align: center; margin: 10px 0 0; }
+
+/* Mobile: a compact mini-ticket rides at the top of the flow until the
+   final step, where the full ticket takes over above the pay controls.
+   It scrolls WITH the page — sticky made it float over the steps rail. */
+.mini-ticket {
+  display: none;
+  align-items: center; gap: 10px;
+  background: var(--card); border: 1px solid var(--border); border-radius: 13px;
+  padding: 9px 12px; margin-bottom: 12px;
+  box-shadow: var(--shadow-sm);
+}
+.mini-ticket.retum { animation: wiz-tum 0.45s cubic-bezier(0.34, 1.45, 0.64, 1); }
+.mt-ico { width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; font-size: 17px; color: #fff; flex-shrink: 0; transition: background 0.3s ease; }
+.mt-txt { min-width: 0; }
+.mt-name { font-size: 12.5px; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mt-cat { font-size: 10px; color: var(--muted); font-weight: 600; }
+.mt-amt { margin-left: auto; font-size: 14px; font-weight: 800; white-space: nowrap; }
+
+@media (max-width: 700px) {
+  .reg-wizard { grid-template-columns: 1fr; }
+  .reg-wizard > .wiz-col,
+  .reg-wizard > .ticket-col { grid-column: auto; grid-row: auto; }
+  .reg-wizard .ticket-col { display: none; }
+  .reg-wizard.at-ticket .ticket-col { display: block; }
+  .reg-wizard .ticket { position: static; }
+  .reg-wizard .mini-ticket { display: flex; }
+  .reg-wizard.at-ticket .mini-ticket { display: none; }
+}
+
+/* Narrow phones: compress the steps rail so "Ticket & pay" isn't flush
+   against the screen edge. */
+@media (max-width: 460px) {
+  .reg-steps { gap: 6px; font-size: 11px; }
+  .reg-stp { gap: 5px; }
+  .reg-stp i { width: 20px; height: 20px; font-size: 10px; }
+  .reg-steps .reg-ln { min-width: 6px; }
+}
+
+/* ================= Sign in: L2 popup over the blurred site =================
+   The login page fakes "the site behind a modal": a blurred non-interactive
+   home-page mock + the voice-mode aurora breathing behind a frosted card. */
+.login-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.login-bg-page {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: start center;
+  padding-top: 64px;
+  /* Far enough back that nothing reads through the card as a smear. */
+  filter: blur(14px) saturate(1.05);
+  transform: scale(1.03);
+  opacity: 0.5;
+}
+
+.lbp-hero { text-align: center; }
+
+.lbp-hero h2 {
+  font-size: 42px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  margin: 0 0 10px;
+  color: var(--text);
+}
+
+.lbp-hero h2 span {
+  background: linear-gradient(120deg, var(--accent-3), var(--accent), var(--accent-2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.lbp-hero p { color: var(--muted); margin: 0 0 22px; }
+
+.lbp-count { display: flex; gap: 10px; justify-content: center; margin-bottom: 20px; }
+.lbp-count i {
+  width: 64px; height: 58px; border-radius: 13px;
+  background: var(--card); border: 1px solid var(--border);
+}
+
+.lbp-btns { display: flex; gap: 10px; justify-content: center; }
+.lbp-btns i {
+  width: 132px; height: 42px; border-radius: 12px;
+  background: var(--card); border: 1px solid var(--border);
+}
+.lbp-btns i:first-child {
+  background: linear-gradient(140deg, var(--accent-3), var(--accent) 55%, var(--accent-2));
+  border: 0;
+}
+
+.login-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(46px);
+  animation: login-breathe 6s ease-in-out infinite;
+}
+.login-blob:nth-of-type(1) { width: 320px; height: 320px; left: -80px; bottom: -140px; background: var(--accent); opacity: 0.3; }
+.login-blob:nth-of-type(2) { width: 280px; height: 280px; left: 38%; bottom: -160px; background: var(--accent-2); opacity: 0.27; animation-delay: 1.2s; }
+.login-blob:nth-of-type(3) { width: 260px; height: 260px; right: -70px; bottom: -120px; background: var(--accent-3); opacity: 0.29; animation-delay: 2.4s; }
+
+@keyframes login-breathe {
+  0%, 100% { transform: translateY(6px) scale(1); }
+  50% { transform: translateY(-16px) scale(1.07); }
+}
+
+.login-main { position: relative; z-index: 1; }
+
+.login-main .auth-card {
+  /* Mostly opaque: frosted at the edges, clean to read in the middle —
+     62% let the mock's gradients smear through the card. */
+  background: color-mix(in srgb, var(--card) 90%, transparent);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  border-color: color-mix(in srgb, var(--border) 70%, transparent);
+  box-shadow: 0 24px 54px -20px rgba(15, 20, 45, 0.45);
+  animation: wiz-tum 0.5s cubic-bezier(0.34, 1.45, 0.64, 1);
+}
+
+/* Fields cascade in with the tumble, one after another. */
+.login-main .auth-card > * {
+  animation: login-cascade 0.45s cubic-bezier(0.34, 1.45, 0.64, 1) both;
+}
+.login-main .auth-card > :nth-child(1) { animation-delay: 60ms; }
+.login-main .auth-card > :nth-child(2) { animation-delay: 110ms; }
+.login-main .auth-card > :nth-child(3) { animation-delay: 160ms; }
+.login-main .auth-card > :nth-child(4) { animation-delay: 210ms; }
+.login-main .auth-card > :nth-child(5) { animation-delay: 260ms; }
+.login-main .auth-card > :nth-child(6) { animation-delay: 310ms; }
+.login-main .auth-card > :nth-child(7) { animation-delay: 360ms; }
+.login-main .auth-card > :nth-child(8) { animation-delay: 410ms; }
+
+@keyframes login-cascade {
+  0% { opacity: 0; transform: translate(14px, -10px) scale(0.9); }
+  100% { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-blob { animation: none; }
+  .login-main .auth-card,
+  .login-main .auth-card > * { animation: none; }
+}
+
+/* ================= Expenses: EX1 quick-add ledger ================= */
+.exp-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 12px;
+  margin: 0 0 14px;
+}
+
+.exp-total {
+  font-size: 27px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--red);
+}
+
+.exp-substats { font-size: 12.5px; text-align: right; }
+
+.exp-qadd {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  padding: 8px;
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 14px;
+}
+
+.exp-qadd input,
+.exp-qadd select {
+  border-radius: 999px;
+  padding: 10px 14px;
+}
+
+.exp-qadd .q-title { flex: 1 1 180px; min-width: 0; }
+.exp-qadd .q-amt { width: 110px; }
+.exp-qadd .dd { flex: 0 1 190px; min-width: 150px; }
+.exp-qadd .dd-btn { border-radius: 999px; padding: 10px 14px; }
+.exp-qadd .btn.primary.small { border-radius: 999px; }
+
+.q-more {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--card-2);
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.q-more.on { color: var(--accent); border-color: var(--accent); }
+
+.q-extra {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex-basis: 100%;
+  padding: 2px 4px 4px;
+}
+
+.q-extra #notes { flex: 1 1 200px; min-width: 0; }
+
+.exp-ledger {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.exp-ledger.pop .exp-row {
+  animation: wiz-tum 0.4s cubic-bezier(0.34, 1.45, 0.64, 1) both;
+  animation-delay: calc(var(--i, 0) * 35ms);
+}
+
+.exp-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  grid-template-areas: "main meta amt";
+  gap: 12px;
+  align-items: center;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  padding: 11px 14px;
+  box-shadow: var(--shadow-sm);
+}
+
+.exp-main { grid-area: main; min-width: 0; }
+.exp-main b { font-size: 14px; }
+.exp-main small { display: block; color: var(--muted); font-size: 11.5px; }
+
+.exp-meta { grid-area: meta; display: flex; align-items: center; gap: 10px; }
+
+.cat-chip {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--card-2);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.exp-amt {
+  grid-area: amt;
+  font-weight: 800;
+  color: var(--red);
+  white-space: nowrap;
+  font-size: 15px;
+}
+
+.exp-date { font-size: 12px; white-space: nowrap; }
+
+/* Desktop: Delete stays out of the way until the row is hovered. */
+.exp-del { opacity: 0; transition: opacity 0.15s ease; }
+.exp-row:hover .exp-del { opacity: 1; }
+
+@media (max-width: 700px) {
+  .exp-row {
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "main amt"
+      "meta meta";
+    row-gap: 9px;
+  }
+  .exp-meta { width: 100%; }
+  .exp-meta .exp-del { margin-left: auto; opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .exp-ledger.pop .exp-row { animation: none; }
+}
+
+/* ================= Dashboard: DB1 bento board ================= */
+.bento {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  align-items: stretch;
+}
+
+.bento > .dash-hero { grid-column: span 2; grid-row: span 2; display: flex; flex-direction: column; }
+.bento > .b-wide { grid-column: span 2; }
+
+.dash-hero .big {
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--green);
+}
+
+.goal-line { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+.goal-track {
+  height: 8px; border-radius: 4px;
+  background: var(--card-2);
+  overflow: hidden;
+  margin: 10px 0 4px;
+}
+
+.goal-track i {
+  display: block; height: 100%; border-radius: 4px;
+  background: linear-gradient(90deg, var(--accent-3), var(--accent));
+}
+
+.dash-spark { margin-top: auto; padding-top: 10px; }
+
+.b-sub { font-size: 12px; font-weight: 700; margin-top: 2px; }
+.b-sub.green { color: var(--green); }
+.b-sub.amber { color: var(--amber); }
+.b-sub.mut { color: var(--muted); font-weight: 600; }
+
+.feed-row {
+  display: flex; gap: 9px; align-items: center;
+  font-size: 12.5px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border);
+}
+.feed-row:last-child { border-bottom: 0; }
+.feed-ic {
+  width: 26px; height: 26px; border-radius: 8px;
+  display: grid; place-items: center; font-size: 13px;
+  background: var(--card-2); flex-shrink: 0;
+}
+.feed-amt { margin-left: auto; font-weight: 800; white-space: nowrap; }
+
+@media (max-width: 760px) {
+  .bento { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .bento > .dash-hero { grid-column: span 2; grid-row: auto; }
+  .bento > .b-wide { grid-column: span 2; }
+  .dash-hero .big { font-size: 27px; }
+}
+
+/* ================= Registrations: RG3 master–detail ================= */
+.reg-md {
+  display: grid;
+  grid-template-columns: 1fr 1.15fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.reg-list {
+  padding: 8px;
+  max-height: 72vh;
+  overflow-y: auto;
+}
+
+.mrow {
+  display: flex; align-items: center; gap: 9px;
+  width: 100%;
+  padding: 9px 11px;
+  border: 0; border-radius: 11px;
+  background: none; color: var(--text);
+  font: inherit; text-align: left; cursor: pointer;
+  transition: background 0.12s ease;
+}
+.mrow:hover { background: var(--card-2); }
+.mrow.on { background: color-mix(in srgb, var(--accent) 11%, transparent); }
+.mrow .m-nm { font-size: 13.5px; font-weight: 700; }
+.mrow .m-sub { font-size: 11px; color: var(--muted); }
+.mrow .m-chip { margin-left: auto; }
+
+.reg-avat {
+  width: 30px; height: 30px; border-radius: 50%;
+  display: inline-grid; place-items: center;
+  color: #fff; font-size: 12px; font-weight: 800;
+  background: linear-gradient(140deg, var(--accent-3), var(--accent) 55%, var(--accent-2));
+  flex-shrink: 0;
+}
+
+.reg-detail { position: sticky; top: 84px; }
+.reg-detail.retum { animation: wiz-tum 0.4s cubic-bezier(0.34, 1.45, 0.64, 1); }
+
+.reg-drow {
+  display: flex; justify-content: space-between; gap: 14px;
+  font-size: 13px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.reg-drow:last-of-type { border-bottom: 0; }
+.reg-drow > span:last-child { text-align: right; overflow-wrap: anywhere; }
+
+/* Payment confirmation and deletion are explicit admin actions. Keep them
+   grouped in a clear footer, with the destructive action visually distinct. */
+.reg-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-soft);
+}
+
+/* The copy control is an icon in the corner rather than a button in the action
+   row: it is a convenience, not a decision, and it should not sit at the same
+   weight as Delete. */
+.reg-detail-copy {
+  position: absolute; top: 14px; right: 14px;
+  width: 38px; height: 38px; border-radius: 11px;
+  display: grid; place-items: center;
+  border: 1px solid var(--border); background: var(--card); color: var(--muted);
+  font-size: 17px; line-height: 1; cursor: pointer; z-index: 2;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.reg-detail-copy:hover { color: var(--accent); border-color: var(--accent); }
+.reg-detail-copy:focus-visible { outline: none; box-shadow: var(--ring); }
+
+.reg-detail-x {
+  display: none;
+  position: absolute; top: 14px; right: 14px;
+  width: 38px; height: 38px; border-radius: 11px;
+  border: 1px solid var(--border); background: var(--card); color: var(--text);
+  font-size: 16px; cursor: pointer; z-index: 2;
+}
+
+/* Mobile: the detail opens as a frosted popup — same frost language as the
+   nav menu — blurring the whole page behind it. */
+@media (max-width: 700px) {
+  .reg-md { grid-template-columns: 1fr; }
+  .reg-list { max-height: none; }
+  .reg-detail-wrap {
+    position: fixed; inset: 0; z-index: 74;
+    background: color-mix(in srgb, var(--bg) 80%, transparent);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    display: grid; place-items: center;
+    padding: 18px;
+    opacity: 0; visibility: hidden; pointer-events: none;
+    transition: opacity 0.25s ease, visibility 0s linear 0.25s;
+  }
+  .reg-detail-wrap.open {
+    opacity: 1; visibility: visible; pointer-events: auto;
+    transition: opacity 0.25s ease;
+  }
+  .reg-detail {
+    position: static;
+    width: min(430px, 100%);
+    max-height: 80vh;
+    overflow-y: auto;
+  }
+  .reg-detail-x { display: grid; place-items: center; }
+  /* Mobile shows the close button in that corner, so the copy icon steps aside. */
+  .reg-detail-copy { right: 60px; }
+  /* Actions: the pair shares the first row, Delete takes a full row —
+     no half-width button hanging off the left edge. */
+  .reg-actions .btn {
+    flex: 1 1 auto;
+    min-width: calc(50% - 4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reg-detail.retum { animation: none; }
+}
+
+/* Mobile home: "What's Included" collapses into one cycling spotlight card
+   (like the hero's category card) instead of three stacked cards. */
+.inc-spot { display: none; }
+
+@media (max-width: 640px) {
+  .inc-grid { display: none; }
+  .inc-spot { display: block; margin: 0 0 8px; }
+  .inc-card {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+    padding: 12px 15px; box-shadow: var(--shadow-sm);
+  }
+  .inc-card.anim { animation: wiz-tum 0.5s cubic-bezier(0.34, 1.45, 0.64, 1); }
+  .inc-card .inc-ic { font-size: 23px; flex-shrink: 0; }
+  .inc-card b { display: block; font-size: 13.5px; }
+  .inc-card small { color: var(--muted); font-size: 11.5px; line-height: 1.45; display: block; }
+  .inc-dots { display: flex; gap: 6px; justify-content: center; margin-top: 9px; }
+  .inc-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--border); transition: background 0.2s ease; }
+  .inc-dots i.on { background: var(--accent); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wiz-stage > *, .ticket.retum, .mini-ticket.retum, .inc-card.anim { animation: none; }
+}
+
+/* G-a: on phones the wall becomes a tight two-column masonry instead of a
+   single plain stack (three 220px columns never fit a phone). Lives after
+   the base .mem-wall rule so the shorthand doesn't override it. */
+@media (max-width: 640px) {
+  .mem-wall {
+    columns: 2;
+    column-gap: 8px;
+  }
+  .mem-tile {
+    margin-bottom: 8px;
+  }
+  .mem-cap {
+    font-size: 10px;
+    padding: 14px 8px 7px;
+  }
+}
+
+/* ==========================================================================
+   THE MASCOT, EVERYWHERE — the full chat-button robot (antenna, blinking
+   eyes, gradient body, arms, dangling legs) reused across toasts, confirm
+   dialogs, the celebration card and the server-rendered auth pages.
+   Moods: happy, dance, sad, worried, wave. Scenes: scene-jump.
+   Markup comes from mascotHTML() in common.js (and the worker's copy).
+   ========================================================================== */
+
+.ebot {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 56px;
+  flex: 0 0 auto;
+}
+
+.eb-antenna {
+  position: absolute;
+  top: 1px;
+  left: 50%;
+  width: 2px;
+  height: 9px;
+  margin-left: -1px;
+  background: color-mix(in srgb, var(--accent) 60%, #fff);
+  transform-origin: bottom center;
+}
+
+.eb-antenna::after {
+  content: "";
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-2);
+  box-shadow: 0 0 8px 1px color-mix(in srgb, var(--accent-2) 70%, transparent);
+  animation: mascotBlink 2s infinite;
+}
+
+.eb-head {
+  position: absolute;
+  top: 9px;
+  left: 4px;
+  width: 36px;
+  height: 26px;
+  border-radius: 10px;
+  background: linear-gradient(160deg, #eef2ff, #c7d2fe);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, #fff);
+  box-shadow: inset 0 -3px 6px rgba(99, 102, 241, 0.25), 0 3px 8px -3px rgba(30, 30, 60, 0.4);
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  padding-top: 7px;
+}
+
+.eb-eye {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-ink);
+  animation: mascotBlink 3.4s infinite;
+}
+
+.eb-mouth {
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 10px;
+  height: 2.5px;
+  border-radius: 3px;
+  background: var(--accent-ink);
+}
+
+.eb-body {
+  position: absolute;
+  top: 37px;
+  left: 7px;
+  width: 30px;
+  height: 15px;
+  border-radius: 8px 8px 6px 6px;
+  background: linear-gradient(160deg, var(--accent), var(--accent-2));
+  box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.3), 0 4px 10px -4px rgba(99, 102, 241, 0.6);
+}
+
+.eb-arm {
+  position: absolute;
+  top: 38px;
+  width: 11px;
+  height: 3px;
+  border-radius: 2px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+.eb-arm.l { left: -3px; transform-origin: right center; transform: rotate(8deg); }
+.eb-arm.r { right: -3px; transform-origin: left center; transform: rotate(-8deg); }
+
+.eb-legs {
+  position: absolute;
+  top: 51px;
+  left: 12px;
+  width: 20px;
+  height: 8px;
+}
+
+.eb-legs i {
+  position: absolute;
+  top: 0;
+  width: 5px;
+  height: 8px;
+  border-radius: 3px;
+  background: var(--accent-ink);
+}
+
+.eb-legs i:first-child { left: 0; animation: mascotDangle 1.4s ease-in-out infinite; }
+.eb-legs i:last-child { right: 0; animation: mascotDangle 1.4s ease-in-out infinite reverse; }
+
+.eb-tear {
+  position: absolute;
+  top: 22px;
+  width: 4.5px;
+  height: 7px;
+  border-radius: 50% 50% 60% 60%;
+  background: var(--accent-3);
+  opacity: 0;
+}
+
+.eb-tear.l { left: 10px; }
+.eb-tear.r { right: 10px; }
+
+.eb-sweat {
+  position: absolute;
+  top: 6px;
+  right: 0;
+  width: 4.5px;
+  height: 7px;
+  border-radius: 50% 50% 60% 60%;
+  background: var(--accent-3);
+  opacity: 0;
+}
+
+/* ---- HAPPY: light bounce, smile, relaxed arm sway ---- */
+.ebot.happy .eb-mouth { height: 5px; border-radius: 0 0 6px 6px; }
+.ebot.happy { animation: ebBob 1.3s ease-in-out infinite; }
+.ebot.happy .eb-arm.l { animation: ebSwayL 1.3s ease-in-out infinite; }
+.ebot.happy .eb-arm.r { animation: ebSwayR 1.3s ease-in-out infinite; }
+
+@keyframes ebBob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+
+@keyframes ebSwayL { 0%, 100% { transform: rotate(8deg); } 50% { transform: rotate(24deg); } }
+@keyframes ebSwayR { 0%, 100% { transform: rotate(-8deg); } 50% { transform: rotate(-24deg); } }
+
+/* ---- DANCE: groove bounce+tilt, arms swinging, legs kicking, antenna
+        strobing ---- */
+.ebot.dance .eb-mouth { height: 5px; border-radius: 0 0 6px 6px; }
+.ebot.dance { animation: ebGroove 0.62s ease-in-out infinite; }
+.ebot.dance .eb-arm.l { animation: ebDanceArmL 0.62s ease-in-out infinite; }
+.ebot.dance .eb-arm.r { animation: ebDanceArmR 0.62s ease-in-out infinite; }
+.ebot.dance .eb-legs i:first-child { animation: ebKick 0.62s ease-in-out infinite; }
+.ebot.dance .eb-legs i:last-child { animation: ebKick 0.62s ease-in-out infinite reverse; }
+.ebot.dance .eb-antenna::after { animation: ebFlash 0.31s linear infinite; }
+
+@keyframes ebGroove {
+  0%, 100% { transform: translateY(0) rotate(-5deg) scale(1.04, 0.94); }
+  25% { transform: translateY(-5px) rotate(0deg) scale(0.97, 1.05); }
+  50% { transform: translateY(0) rotate(5deg) scale(1.04, 0.94); }
+  75% { transform: translateY(-5px) rotate(0deg) scale(0.97, 1.05); }
+}
+
+@keyframes ebDanceArmL {
+  0%, 100% { transform: rotate(42deg); }
+  50% { transform: rotate(78deg) translateY(-2px); }
+}
+
+@keyframes ebDanceArmR {
+  0%, 100% { transform: rotate(-78deg) translateY(-2px); }
+  50% { transform: rotate(-42deg); }
+}
+
+@keyframes ebKick {
+  0%, 100% { transform: rotate(-24deg) translateY(0); }
+  50% { transform: rotate(20deg) translateY(-2px); }
+}
+
+@keyframes ebFlash {
+  0%, 100% { transform: translateX(-50%) scale(1); opacity: 1; }
+  50% { transform: translateX(-50%) scale(1.5); opacity: 0.6; }
+}
+
+/* ---- SAD: body droop, drooped antenna, heavy eyelids, frown, tears,
+        arms hanging limp ---- */
+.ebot.sad { animation: ebDroop 2.4s ease-in-out infinite; }
+.ebot.sad .eb-antenna { transform: rotate(-34deg); }
+.ebot.sad .eb-antenna::after { animation: none; opacity: 0.55; box-shadow: none; }
+.ebot.sad .eb-eye { height: 4px; margin-top: 3px; border-radius: 0 0 7px 7px; animation: none; }
+.ebot.sad .eb-mouth { height: 5px; border-radius: 6px 6px 0 0; }
+.ebot.sad .eb-arm.l { transform: rotate(64deg); }
+.ebot.sad .eb-arm.r { transform: rotate(-64deg); }
+.ebot.sad .eb-legs i { animation: none; }
+.ebot.sad .eb-tear { animation: ebTear 1.4s ease-in infinite; }
+.ebot.sad .eb-tear.r { animation-delay: 0.55s; }
+
+@keyframes ebDroop {
+  0%, 100% { transform: translateY(1px) rotate(-2deg); }
+  20% { transform: translateY(3px) rotate(-3deg); }
+  50% { transform: translateY(1px) rotate(1deg); }
+  70% { transform: translateY(3px) rotate(0deg); }
+}
+
+@keyframes ebTear {
+  0% { opacity: 0; transform: translateY(0) scale(0.7); }
+  18% { opacity: 1; transform: translateY(2px) scale(1); }
+  75% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(13px) scale(0.9); }
+}
+
+/* ---- WORRIED: shiver, darting eyes, o-mouth, sweat, jittery arms ---- */
+.ebot.worried { animation: ebShiver 1.1s ease-in-out infinite; }
+.ebot.worried .eb-eye { animation: ebDart 1.6s ease-in-out infinite; }
+.ebot.worried .eb-mouth { width: 6px; height: 6px; border-radius: 50%; }
+.ebot.worried .eb-arm.l { animation: ebJitterL 0.5s ease-in-out infinite; }
+.ebot.worried .eb-arm.r { animation: ebJitterR 0.5s ease-in-out infinite; }
+.ebot.worried .eb-sweat { animation: ebSweatDrop 1.8s ease-in-out infinite; }
+.ebot.worried .eb-antenna { animation: ebTwitch 1.1s ease-in-out infinite; }
+
+@keyframes ebShiver {
+  0%, 100% { transform: rotate(0) translateX(0); }
+  12% { transform: rotate(-2.5deg) translateX(-1px); }
+  25% { transform: rotate(2deg) translateX(1px); }
+  37% { transform: rotate(-1.8deg) translateX(-1px); }
+  50% { transform: rotate(1.4deg) translateX(1px); }
+  62% { transform: rotate(0) translateX(0); }
+}
+
+@keyframes ebDart {
+  0%, 26%, 100% { transform: translateX(0); }
+  33%, 46% { transform: translateX(-2.5px); }
+  58%, 74% { transform: translateX(2.5px); }
+}
+
+@keyframes ebJitterL { 0%, 100% { transform: rotate(-26deg); } 50% { transform: rotate(-38deg); } }
+@keyframes ebJitterR { 0%, 100% { transform: rotate(26deg); } 50% { transform: rotate(38deg); } }
+
+@keyframes ebSweatDrop {
+  0%, 100% { opacity: 0; transform: translateY(0); }
+  30%, 70% { opacity: 1; transform: translateY(3px); }
+}
+
+@keyframes ebTwitch {
+  0%, 100% { transform: rotate(0); }
+  30% { transform: rotate(9deg); }
+  60% { transform: rotate(-7deg); }
+}
+
+/* ---- WAVE: the corner bot's own big arm wave + happy bounce ---- */
+.ebot.wave .eb-mouth { height: 5px; border-radius: 0 0 6px 6px; }
+.ebot.wave { animation: ebBob 1.3s ease-in-out infinite; }
+.ebot.wave .eb-arm.r { animation: ebBigWave 0.42s ease-in-out infinite; }
+
+@keyframes ebBigWave {
+  0%, 100% { transform: rotate(-8deg); }
+  50% { transform: rotate(-58deg); }
+}
+
+/* ---- SCENE: victory jumps (paid registrations, big wins) ---- */
+.ebot.scene-jump { animation: ebJumpLoop 1s ease-in-out infinite; }
+.ebot.scene-jump .eb-mouth { height: 5px; border-radius: 0 0 6px 6px; }
+.ebot.scene-jump .eb-arm.l { animation: ebDanceArmL 1s ease-in-out infinite; }
+.ebot.scene-jump .eb-arm.r { animation: ebDanceArmR 1s ease-in-out infinite; }
+
+@keyframes ebJumpLoop {
+  0%, 100% { transform: translateY(0) scale(1.06, 0.9); }
+  35% { transform: translateY(-24px) scale(0.95, 1.07); }
+  55% { transform: translateY(-24px) scale(0.98, 1.02) rotate(6deg); }
+  80% { transform: translateY(0) scale(1.1, 0.86); }
+  90% { transform: translateY(-4px) scale(0.99, 1.02); }
+}
+
+/* ---- Centred pedestal used by dialogs, cards and auth pages ---- */
+.mascot-stage {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 96px;
+  position: relative;
+}
+
+.mascot-scale {
+  display: inline-block;
+}
+
+.mascot-scale .ebot { zoom: 1.3; }
+
+/* Confetti floating beside a dancing mascot. */
+.mascot-stage.party::before,
+.mascot-stage.party::after {
+  position: absolute;
+  top: 8px;
+  font-size: 18px;
+  animation: mbConfetti 1.2s ease-in-out infinite;
+}
+
+.mascot-stage.party::before { content: "🎉"; left: calc(50% - 66px); }
+.mascot-stage.party::after { content: "✨"; right: calc(50% - 66px); animation-delay: 0.4s; }
+
+@keyframes mbConfetti {
+  0%, 100% { transform: translateY(0) rotate(-8deg); opacity: 0.85; }
+  50% { transform: translateY(-7px) rotate(8deg); opacity: 1; }
+}
+
+/* ---- Confetti rain inside a celebration card ---- */
+.confetti-box { position: relative; overflow: hidden; }
+
+.confetti-box i {
+  position: absolute;
+  top: -12px;
+  width: 7px;
+  height: 11px;
+  border-radius: 2px;
+  opacity: 0;
+  animation: confettiFall 2.6s linear infinite;
+}
+
+@keyframes confettiFall {
+  0% { opacity: 0; transform: translateY(-10px) rotate(0); }
+  8% { opacity: 1; }
+  100% { opacity: 0.15; transform: translateY(320px) rotate(560deg); }
+}
+
+/* ==========================================================================
+   TOAST — the spotlight card. The page dims, the corner mascot leaves its
+   button and rides the announcement in at eye level. Outcome-coloured:
+   green = it worked, red = it didn't, amber = careful. Built by toast()
+   in common.js; a new message fast-forwards the current one (never-wait).
+   ========================================================================== */
+
+.toast-dim {
+  position: fixed;
+  inset: 0;
+  z-index: 118;
+  background: rgba(8, 10, 24, 0.45);
+  opacity: 0;
+  transition: opacity 0.32s ease;
+  pointer-events: none;
+}
+
+.toast-dim.on { opacity: 1; }
+
+.toastcard {
+  position: fixed;
+  right: 18px;
+  bottom: 118px;
+  z-index: 119;
+  width: 400px;
+  max-width: calc(100vw - 32px);
+  background: var(--card);
+  border: 2px solid var(--border);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  padding: 16px 18px 13px;
+  cursor: pointer;
+  transform: translateX(calc(100% + 44px));
+  transition: transform 0.55s cubic-bezier(0.3, 1.08, 0.4, 1), opacity 0.22s ease;
+}
+
+.toastcard.in { transform: none; }
+.toastcard.out { opacity: 0; }
+
+/* Chat panel open: stay out of its way — quiet card bottom-left, no rider. */
+.toastcard.quiet {
+  right: auto;
+  left: 18px;
+  bottom: 18px;
+  transform: translateX(calc(-100% - 44px));
+}
+.toastcard.quiet.in { transform: none; }
+
+/* Mobile keyboard open: the bottom is behind the keyboard, so the card drops
+   in from the top of the VISIBLE viewport instead (top set inline by
+   toast(), tracked as the keyboard moves). */
+.toastcard.top {
+  bottom: auto;
+  transform: translateY(calc(-100% - 70px));
+}
+.toastcard.top.in { transform: none; }
+
+.toastcard .rider {
+  position: absolute;
+  top: -47px;
+  left: 22px;
+}
+
+.toastcard .rider .ebot { zoom: 0.95; }
+
+.toastcard .ct-title {
+  display: block;
+  font-weight: 800;
+  font-size: 15px;
+  margin-bottom: 2px;
+}
+
+.toastcard .amsg {
+  font-size: 14px;
+  line-height: 1.55;
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+}
+
+.toastcard .chip {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  margin-top: 1px;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 800;
+  color: #fff;
+}
+
+.toastcard .life {
+  height: 3px;
+  border-radius: 3px;
+  margin-top: 12px;
+  transform-origin: left;
+}
+
+.toastcard.in .life { animation: tcLife 4.6s linear forwards; }
+
+@keyframes tcLife {
+  0% { transform: scaleX(1); }
+  100% { transform: scaleX(0); }
+}
+
+.toastcard .burst {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.toastcard .burst i {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 6px;
+  height: 9px;
+  border-radius: 2px;
+  opacity: 0;
+  animation: ctBurst 0.9s cubic-bezier(0.16, 0.8, 0.4, 1) forwards;
+}
+
+@keyframes ctBurst {
+  0% { opacity: 0; transform: translate(0, 0) rotate(0); }
+  12% { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--bx), var(--by)) rotate(var(--br)); }
+}
+
+/* GREEN — success & party */
+.toastcard.good {
+  border-color: color-mix(in srgb, var(--green) 55%, var(--border));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--green) 9%, var(--card)), var(--card) 60%);
+}
+.toastcard.good .chip { background: var(--green); }
+.toastcard.good .life { background: linear-gradient(90deg, var(--green), #2ba75f); }
+.toastcard.good .ct-title {
+  background: linear-gradient(90deg, var(--green), var(--accent), var(--accent-2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* RED — errors */
+.toastcard.bad {
+  border-color: color-mix(in srgb, var(--red) 55%, var(--border));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--red) 9%, var(--card)), var(--card) 60%);
+}
+.toastcard.bad .chip { background: var(--red); }
+.toastcard.bad .life { background: linear-gradient(90deg, var(--red), #b3362e); }
+.toastcard.bad .ct-title { color: var(--red); }
+
+/* AMBER — warnings (toast type "info") */
+.toastcard.warn {
+  border-color: color-mix(in srgb, var(--amber) 60%, var(--border));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--amber) 10%, var(--card)), var(--card) 60%);
+}
+.toastcard.warn .chip { background: var(--amber); color: #3b2f04; }
+.toastcard.warn .life { background: linear-gradient(90deg, var(--amber), #d99e28); }
+.toastcard.warn .ct-title { color: var(--amber); }
+
+@media (max-width: 720px) {
+  .toastcard { right: 12px; bottom: 106px; }
+  .toastcard.quiet { left: 12px; bottom: 12px; }
+}
+
+/* ==========================================================================
+   CONFIRM DIALOG — mascot card. The robot ROLLS IN when the dialog opens,
+   and on a confirmed destructive action it turns sad and walks off before
+   the dialog closes (both handled by mascotConfirm in common.js).
+   ========================================================================== */
+
+.mconfirm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(9, 12, 26, 0.55);
+  backdrop-filter: blur(3px);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.mconfirm-backdrop.show { opacity: 1; }
+
+.mconfirm {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+  padding: 20px 24px 20px;
+  width: 100%;
+  max-width: 390px;
+  text-align: center;
+  transform: translateY(16px) scale(0.96);
+  transition: transform 0.22s ease;
+}
+
+.mconfirm-backdrop.show .mconfirm { transform: none; }
+
+/* Entrance: the robot rolls in from the left, stops, hops once. */
+.mconfirm .mascot-scale { animation: ebRollInOnce 0.9s cubic-bezier(0.22, 0.9, 0.35, 1) both; }
+
+@keyframes ebRollInOnce {
+  0% { transform: translateX(-100px) rotate(-480deg); opacity: 0; }
+  45% { opacity: 1; }
+  62% { transform: translateX(0) rotate(0); }
+  78% { transform: translateY(-7px); }
+  100% { transform: none; opacity: 1; }
+}
+
+/* Exit after a confirmed delete: it turns away and walks off, heartbroken. */
+.mconfirm .mascot-scale.bye { animation: ebByeOnce 0.85s ease-in both; }
+
+@keyframes ebByeOnce {
+  0% { transform: none; opacity: 1; }
+  100% { transform: translateX(80px) rotate(-6deg); opacity: 0; }
+}
+
+.mconfirm h3 {
+  margin: 2px 0 8px;
+  font-size: 18px;
+}
+
+.mconfirm p {
+  margin: 0 0 18px;
+  color: var(--muted);
+  font-size: 14.5px;
+  line-height: 1.55;
+  overflow-wrap: break-word;
+}
+
+.mconfirm-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.payment-proof-dialog { position: relative; max-width: 430px; padding: 25px; overflow: hidden; text-align: center; }
+.payment-proof-dialog h3 { margin: 6px 22px 8px; color: var(--text); font-size: 22px; letter-spacing: -.045em; }
+.payment-proof-dialog > p { margin: 0 auto 16px; max-width: 340px; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.payment-proof-close { position: absolute; top: 11px; right: 13px; z-index: 2; width: 30px; height: 30px; border: 1px solid var(--border); border-radius: 50%; color: var(--muted); background: var(--card-2); font-size: 19px; line-height: 1; cursor: pointer; }
+.proof-orbit { position: relative; display: grid; width: 54px; height: 54px; margin: 1px auto 11px; place-items: center; border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--border)); border-radius: 17px; color: #fff; background: radial-gradient(circle at 30% 20%,#51d7d0,#5b5bf0 58%,#8b43e7); box-shadow: 0 9px 22px rgba(91,91,240,.28); transform: rotate(-7deg); }
+.proof-orbit span { font-size: 27px; font-weight: 800; transform: rotate(7deg); }
+.proof-kicker { color: var(--accent-ink); font-size: 9px; font-weight: 900; letter-spacing: .16em; }
+.proof-reference { display: grid; grid-template-columns: 1fr auto; gap: 3px 8px; margin: 15px 0; padding: 11px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--card-2); text-align: left; }
+.proof-reference span { color: var(--muted); font-size: 8px; font-weight: 850; letter-spacing: .1em; }
+.proof-reference b { grid-column: 2; grid-row: 1 / span 2; align-self: center; color: var(--text); font-size: 13px; letter-spacing: .07em; }
+.proof-reference small { color: var(--muted); font-size: 9px; }
+.proof-send { display: flex; width: 100%; align-items: center; justify-content: center; gap: 7px; padding: 12px 12px; border-radius: 12px; white-space: nowrap; }
+.proof-send > span { flex: 0 0 auto; font-size: 15px; }
+.proof-send-label, .proof-send-number { flex: 0 0 auto; }
+.proof-send-number { font-size: .94em; }
+.proof-later { margin-top: 8px; border-color: transparent; color: var(--muted); background: transparent; font-size: 11px; }
+.proof-later:hover { color: var(--text); background: var(--card-2); }
+
+@media (max-width: 520px) {
+  .payment-summary h2 { font-size: 23px; }
+  .payment-amount-banner { gap: 8px; padding: 12px 13px; }
+  .payment-amount-banner span { font-size: 8px; }
+  .payment-amount-banner small { font-size: 9px; }
+  .payment-amount-banner strong { font-size: 23px; }
+  .payment-route { gap: 4px; }
+  .route-stop { gap: 4px; font-size: 9px; }
+  .transfer-details-grid { grid-template-columns: 1fr; }
+  .payment-proof-dialog { padding: 22px 18px 18px; }
+  .proof-send { gap: 6px; padding: 11px 9px; font-size: 12px; }
+}
+
+@media (max-width: 360px) {
+  .payment-summary h2 { font-size: 19px; }
+  .payment-amount-banner { padding: 11px 10px; }
+  .payment-amount-banner strong { font-size: 21px; }
+  .payment-proof-dialog { padding-right: 12px; padding-left: 12px; }
+  .proof-send { gap: 5px; padding-right: 7px; padding-left: 7px; font-size: 11px; }
+}
+
+/* An equal-width, equal-height pair — always centered as a unit. */
+.mconfirm-actions .btn {
+  flex: 1 1 0;
+  min-width: 118px;
+  min-height: 46px;
+}
+
+/* ---------- L2 monogram veil ---------- */
+/* Painted by the tiny head snippet on every page. The stylesheet is
+   render-blocking, so these rules are always ready before first paint —
+   nothing half-composed ever reaches the screen. The lift (html.veil-up)
+   is what cues the page's entrance animations. */
+/* The veil lives on html's own pseudo-elements — body::before is already
+   the ambient drift layer, whose background ANIMATION would trump any
+   cascade override (animations beat declarations). */
+html.veiling::before,
+html.data-wait::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  background: var(--bg);
+}
+
+html.veiling::after,
+html.data-wait::after {
+  content: "B · I · A · A · C";
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 44%;
+  z-index: 9999;
+  text-align: center;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 24px;
+  letter-spacing: 4px;
+  color: var(--text);
+  animation: veil-breathe 1.15s ease-in-out infinite;
+}
+
+html.veil-up::before {
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+html.veil-up::after {
+  opacity: 0;
+  transform: scale(1.05);
+  transition: opacity 0.4s ease, transform 0.4s ease;
+  animation: none;
+}
+
+@keyframes veil-breathe {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+/* The hero's own entrance holds its breath until the cover starts lifting. */
+html.veiling:not(.veil-up) .biaac-tiles i,
+html.veiling:not(.veil-up) .biaac-tiles i b,
+html.veiling:not(.veil-up) .biaac-name,
+html.data-wait:not(.veil-up) .biaac-tiles i,
+html.data-wait:not(.veil-up) .biaac-tiles i b,
+html.data-wait:not(.veil-up) .biaac-name {
+  animation-play-state: paused;
+}
+
+/* ---------- The ONE in-page loading mark ---------- */
+/* Every surface that waits on data shows the same breathing B·I·A·A·C —
+   the pocket version of the veil. .bc-loading centres it in a block
+   (lists, tables, grids); the bare .bc-load-mark sits in text lines. */
+.bc-load-mark {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 12px;
+  letter-spacing: 2.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  animation: veil-breathe 1.15s ease-in-out infinite;
+}
+
+.bc-load-mark i {
+  font-style: normal;
+  color: var(--accent);
+  padding: 0 1px;
+}
+
+.bc-loading {
+  display: grid;
+  place-items: center;
+  padding: 30px 10px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bc-load-mark {
+    animation: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.veiling::after,
+  html.data-wait::after {
+    animation: none;
+  }
+  html.veil-up::before,
+  html.veil-up::after {
+    transition: none;
+  }
+}
+
+/* ---------- A1 account: identity card + bento tiles ---------- */
+/* The gradient-edged ID card up top; password / sessions / access sit in a
+   two-column bento beneath it (access spans the full width). */
+.acct-id {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  position: relative;
+  overflow: hidden;
+  margin: 4px 0 18px;
+}
+
+.acct-id::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  background: linear-gradient(180deg, var(--accent-3), var(--accent), var(--accent-2));
+}
+
+.acct-ava {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: linear-gradient(140deg, var(--accent-3), var(--accent) 55%, var(--accent-2));
+  color: #fff;
+  font-weight: 800;
+  font-size: 20px;
+  display: grid;
+  place-items: center;
+}
+
+.acct-who {
+  min-width: 0;
+}
+
+.acct-who > b {
+  font-size: 15px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.role-chip {
+  display: inline-block;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  padding: 2px 9px;
+  border-radius: 999px;
+  margin-left: 8px;
+  vertical-align: 2px;
+}
+
+.acct-meta {
+  display: block;
+  font-size: 12.5px;
+  color: var(--muted);
+  margin-top: 3px;
+}
+
+.acct-meta .ok {
+  color: var(--green);
+  font-weight: 700;
+}
+
+.acct-meta .warn {
+  color: var(--amber);
+  font-weight: 700;
+}
+
+.acct-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  align-items: start;
+}
+
+.acct-grid > .card {
+  margin: 0;
+  min-width: 0;
+}
+
+#accessCard {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 860px) {
+  .acct-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Sessions as friendly device rows instead of a table. */
+.ses-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 2px;
+  border-top: 1px solid var(--border-soft);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.ses-row:first-child {
+  border-top: 0;
+}
+
+.ses-dev {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--card-2);
+  display: grid;
+  place-items: center;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.ses-main {
+  min-width: 0;
+}
+
+.ses-mini {
+  display: block;
+  font-size: 11.5px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.ses-now {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  padding: 3px 9px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.ses-list .empty {
+  color: var(--muted);
+  font-size: 13px;
+  padding: 6px 0;
+}
+
+/* ---------- Contact the committee: the help-desk ticket ---------- */
+/* Desktop nav shows a drawn envelope alone — clearly bigger than the text
+   links, its label carried by the tooltip and aria-label. */
+.nav-links .contact-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 9px;
+  color: var(--muted);
+}
+
+.nav-links .contact-link:hover {
+  color: var(--accent);
+}
+
+/* The footer human bar — the always-there baseline. */
+.human-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  max-width: 620px;
+  margin: 40px auto -18px;
+  padding: 10px 20px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  box-shadow: var(--shadow-sm);
+}
+
+.human-bar b {
+  font-size: 13px;
+}
+
+.human-btn {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.human-btn:hover {
+  color: var(--accent-2);
+}
+
+.human-bar small {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* The overlay: same frost language as the burst menu, above the chat (70).
+   Deliberately LIGHT — whatever was open stays visible underneath, just
+   blurred, so contact feels like a layer, not a different place. */
+.contact-ov {
+  position: fixed;
+  inset: 0;
+  z-index: 76;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: color-mix(in srgb, var(--bg) 40%, transparent);
+  -webkit-backdrop-filter: blur(9px);
+  backdrop-filter: blur(9px);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.25s ease, visibility 0s linear 0.25s;
+}
+
+.contact-ov.open {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition: opacity 0.25s ease;
+}
+
+.contact-x {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 3;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  font-size: 16px;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+}
+
+/* The ticket itself — main body + perforated stub. It flies in from the
+   top-right corner with the SAME spring as the burst-menu icons, and its
+   innards stagger in behind it exactly like the menu's flying circles. */
+.cticket {
+  display: flex;
+  width: min(560px, 100%);
+  filter: drop-shadow(0 14px 30px rgba(30, 41, 90, 0.2));
+  opacity: 0;
+  transform: translate(32vw, -28vh) rotate(9deg) scale(0.25);
+  transition: transform 0.55s cubic-bezier(0.34, 1.45, 0.64, 1), opacity 0.22s ease;
+}
+
+.contact-ov.open .cticket {
+  opacity: 1;
+  transform: none;
+}
+
+.ct-main > *,
+.ct-stub > * {
+  opacity: 0;
+  transform: translate(26px, -26px) scale(0.55);
+  transition: transform 0.5s cubic-bezier(0.34, 1.45, 0.64, 1), opacity 0.2s ease;
+}
+
+.contact-ov.open .ct-main > *,
+.contact-ov.open .ct-stub > * {
+  opacity: 1;
+  transform: none;
+}
+
+.contact-ov.open .ct-main > *:nth-child(1) { transition-delay: 0.12s; }
+.contact-ov.open .ct-main > *:nth-child(2) { transition-delay: 0.17s; }
+.contact-ov.open .ct-main > *:nth-child(3) { transition-delay: 0.22s; }
+.contact-ov.open .ct-main > *:nth-child(4) { transition-delay: 0.27s; }
+.contact-ov.open .ct-main > *:nth-child(5) { transition-delay: 0.32s; }
+.contact-ov.open .ct-main > *:nth-child(6) { transition-delay: 0.37s; }
+.contact-ov.open .ct-stub > *:nth-child(1) { transition-delay: 0.3s; }
+.contact-ov.open .ct-stub > *:nth-child(2) { transition-delay: 0.36s; }
+.contact-ov.open .ct-stub > *:nth-child(3) { transition-delay: 0.42s; }
+
+.ct-main {
+  flex: 1;
+  min-width: 0;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px 0 0 16px;
+  padding: 18px 20px;
+}
+
+.ct-kick {
+  font-size: 9px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.ct-main h3 {
+  font-family: var(--font-display);
+  font-size: 17px;
+  margin: 4px 0 12px;
+}
+
+.ct-chips {
+  margin-bottom: 6px;
+}
+
+.ct-chip {
+  display: inline-block;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 13px;
+  margin: 0 6px 8px 0;
+  color: var(--muted);
+  background: var(--card);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.ct-chip.on {
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  border-color: transparent;
+  color: var(--accent);
+}
+
+.ct-inp {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 13.5px;
+  padding: 10px 12px;
+  margin: 6px 0;
+  resize: vertical;
+}
+
+.ct-inp:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
+
+.ct-two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.ct-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.ct-err {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--danger);
+}
+
+.ct-stub {
+  width: 118px;
+  flex-shrink: 0;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-left: 1.5px dashed var(--accent);
+  border-radius: 0 16px 16px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 8px;
+  text-align: center;
+}
+
+.ct-ref {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: 0.5px;
+}
+
+.ct-bars {
+  display: flex;
+  gap: 1.5px;
+  align-items: flex-end;
+}
+
+.ct-bars i {
+  width: 2px;
+  background: var(--text);
+  opacity: 0.6;
+}
+
+.ct-stub small {
+  font-size: 9.5px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+/* The send: ticket bows out, the mascot flies the envelope away, the
+   confirmation (with the stub's reference) settles in. */
+.contact-ov.sent .cticket {
+  animation: ct-away 0.4s ease forwards;
+  pointer-events: none;
+}
+
+@keyframes ct-away {
+  to { opacity: 0; transform: translateY(10px) scale(0.92); }
+}
+
+.ct-scene {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: none;
+  pointer-events: none;
+}
+
+.contact-ov.sent .ct-scene {
+  display: block;
+}
+
+/* The REAL mascot does the delivery: rotor spinning, envelope slung on a
+   tether beneath it, and a wobbly helicopter climb-out — the same flying
+   language as the home page's corner mascot. */
+.ct-fly {
+  position: absolute;
+  left: 50%;
+  top: 44%;
+  opacity: 0;
+  transform: translate(-50%, calc(-50% + 14px));
+  /* ONE smooth path, no mid-flight waypoints: rise, then a single
+     accelerating exit curve. The helicopter sway lives on .ct-carry so it
+     never fights the path. */
+  animation: ct-flight 2.5s linear 0.35s forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes ct-flight {
+  0% { opacity: 0; transform: translate(-50%, calc(-50% + 14px)); animation-timing-function: ease-out; }
+  10% { opacity: 1; }
+  30% { transform: translate(-50%, calc(-50% - 52px)); animation-timing-function: cubic-bezier(0.55, 0, 0.85, 0.55); }
+  92% { opacity: 1; }
+  100% { opacity: 0; transform: translate(calc(-50% + 58vw), calc(-50% - 52vh)); }
+}
+
+.ct-carry {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  animation: ct-sway 1.1s ease-in-out 0.35s infinite alternate;
+}
+
+@keyframes ct-sway {
+  from { transform: rotate(-5deg); }
+  to { transform: rotate(5deg); }
+}
+
+.ct-heli {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 56px;
+}
+
+/* the rotor only shows while the FAB flies; here it's always on */
+.ct-fly .fm-rotor {
+  opacity: 1;
+}
+
+/* the envelope hangs from the mascot on a little tether */
+.ct-fly .ct-env {
+  position: relative;
+  margin-top: 9px;
+}
+
+.ct-fly .ct-env::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: -10px;
+  width: 2px;
+  height: 10px;
+  transform: translateX(-50%);
+  background: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.ct-env {
+  width: 104px;
+  height: 66px;
+  background: var(--card);
+  border: 1.5px solid var(--accent);
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  font-size: 20px;
+  box-shadow: var(--shadow-sm);
+  background-image:
+    linear-gradient(to bottom right, transparent 46%, color-mix(in srgb, var(--accent) 26%, transparent) 47%, transparent 55%),
+    linear-gradient(to bottom left, transparent 46%, color-mix(in srgb, var(--accent) 26%, transparent) 47%, transparent 55%);
+}
+
+.ct-done {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(420px, 88vw);
+  text-align: center;
+  pointer-events: auto;
+  opacity: 0;
+  animation: ct-donein 0.45s ease 2.9s forwards;
+}
+
+@keyframes ct-donein {
+  to { opacity: 1; }
+}
+
+.ct-done b {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 20px;
+  color: var(--green);
+  margin-bottom: 8px;
+}
+
+.ct-done span {
+  display: block;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.6;
+  margin-bottom: 14px;
+}
+
+.ct-done span b {
+  display: inline;
+  font-family: inherit;
+  font-size: inherit;
+  color: var(--text);
+}
+
+@media (max-width: 560px) {
+  .cticket {
+    flex-direction: column;
+  }
+  .ct-main {
+    border-radius: 16px 16px 0 0;
+  }
+  .ct-stub {
+    width: 100%;
+    border-left: 1px solid var(--border);
+    border-top: 1.5px dashed var(--accent);
+    border-radius: 0 0 16px 16px;
+    flex-direction: row;
+    justify-content: space-between;
+    padding: 10px 16px;
+  }
+  .ct-stub br {
+    display: none;
+  }
+  .ct-two {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cticket,
+  .ct-main > *,
+  .ct-stub > * {
+    transition: none;
+  }
+  .contact-ov.sent .cticket {
+    animation: none;
+    opacity: 0;
+  }
+  .ct-fly {
+    display: none;
+  }
+  .ct-done {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+/* ==========================================================================
+   CONTENT PAGES — about, terms, refund, privacy
+   Built from the existing tokens only, so the midnight theme comes along for
+   free. Mobile-first in behaviour: every grid uses auto-fit so it reflows on
+   its own, and the two components that cannot (the section rail and the
+   refund timeline) change shape at a breakpoint instead.
+   ========================================================================== */
+
+/* Tinted washes. Declared per-theme rather than hardcoded, because an rgba()
+   mixed for a white page turns to mud on the midnight one. */
+:root {
+  --wash-accent: rgba(91, 91, 240, 0.09);
+  --wash-sky: rgba(14, 165, 233, 0.12);
+  --wash-violet: rgba(124, 58, 237, 0.12);
+  --wash-green: rgba(16, 157, 91, 0.12);
+  --wash-amber: rgba(185, 119, 15, 0.08);
+  --wash-amber-2: rgba(185, 119, 15, 0.16);
+}
+[data-theme="midnight"] {
+  --wash-accent: rgba(129, 140, 248, 0.14);
+  --wash-sky: rgba(56, 189, 248, 0.16);
+  --wash-violet: rgba(167, 139, 250, 0.16);
+  --wash-green: rgba(52, 211, 153, 0.15);
+  --wash-amber: rgba(251, 191, 36, 0.1);
+  --wash-amber-2: rgba(251, 191, 36, 0.2);
+}
+
+/* ---- H2 · page hero ------------------------------------------------------ */
+.phero { padding: 6px 0 4px; }
+.phero .eyebrow {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 11px; font-weight: 800; letter-spacing: 1.6px;
+  color: var(--accent); background: var(--wash-accent);
+  border: 1px solid var(--wash-accent); border-radius: 999px; padding: 6px 14px;
+}
+.phero h1 {
+  font-family: var(--font-display); font-weight: 800;
+  font-size: clamp(28px, 7.5vw, 44px); line-height: 1.08;
+  letter-spacing: -0.9px; margin: 14px 0 10px; text-wrap: balance;
+}
+.ink-grad {
+  background: linear-gradient(96deg, var(--accent), var(--accent-2) 55%, var(--accent-3));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.phero-sub { color: var(--muted); font-size: clamp(14px, 3.6vw, 16px); margin: 0; max-width: 62ch; }
+.phero-wave { display: block; width: 100%; height: clamp(24px, 6vw, 44px); margin: 12px 0 0; }
+
+/* ---- N2 · section rail + coloured sections ------------------------------- */
+.pg-layout { display: grid; grid-template-columns: 186px minmax(0, 1fr); gap: 36px; align-items: start; }
+.pg-rail { position: sticky; top: 82px; }
+.pg-rail a {
+  display: block; padding: 9px 13px; margin-bottom: 2px; border-radius: 10px;
+  border-left: 3px solid transparent; font-size: 14px; font-weight: 600;
+  color: var(--muted); text-decoration: none;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.pg-rail a:hover { color: var(--text); }
+.pg-rail a.on { color: var(--accent); background: var(--wash-accent); border-left-color: var(--accent); }
+
+/* Below the rail's breakpoint it becomes a sticky scrolling chip bar, which is
+   what actually works on a phone. The scroll lives on an inner track, not on
+   .pg-rail itself: overflow would clip the full-bleed background below, and
+   without that background the cards passing underneath show through in the
+   container's side gutters. */
+@media (max-width: 860px) {
+  /* Block, not a one-column grid: a sticky grid item is confined to its own
+     grid area, which here is just the rail's own height — nothing to stick
+     within. As a plain block it sticks against .pg-layout instead. */
+  .pg-layout { display: block; }
+  .pg-rail { top: 59px; z-index: 30; margin: 0 0 18px; }
+  /* Bleed exactly as far as the container's own gutter — no further. An
+     approximate -50vw would paint the same but push the document 195px wider
+     and hand every phone a horizontal scrollbar. */
+  .pg-rail {
+    margin-left: -24px; margin-right: -24px;
+    padding-left: 24px; padding-right: 24px;
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    box-shadow: 0 10px 14px -12px rgba(20, 30, 60, 0.35);
+  }
+  .pg-rail-track {
+    display: flex; gap: 8px; padding: 10px 0; overflow-x: auto;
+    scrollbar-width: none; -webkit-overflow-scrolling: touch;
+  }
+  .pg-rail-track::-webkit-scrollbar { display: none; }
+  .pg-rail a {
+    flex: none; margin: 0; padding: 8px 15px; border-left: 0;
+    border: 1px solid var(--border); border-radius: 999px; white-space: nowrap;
+    background: var(--card);
+  }
+  .pg-rail a.on { border-color: var(--accent); background: var(--wash-accent); }
+}
+
+.sec-block { scroll-margin-top: 96px; }
+.sec-head-row { display: flex; align-items: center; gap: 12px; margin: 44px 0 8px; }
+.sec-block:first-of-type .sec-head-row { margin-top: 6px; }
+.sec-ico {
+  width: 38px; height: 38px; border-radius: 12px; flex: none;
+  display: grid; place-items: center; font-size: 18px;
+}
+.sec-head-row h2 { font-family: var(--font-display); font-size: clamp(19px, 4.6vw, 25px); margin: 0; }
+.sec-rule { height: 3px; width: 52px; border-radius: 3px; margin: 0 0 18px 50px; }
+.s-indigo .sec-ico { background: var(--wash-accent); }
+.s-indigo .sec-rule { background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+.s-sky .sec-ico { background: var(--wash-sky); }
+.s-sky .sec-rule { background: linear-gradient(90deg, var(--accent-3), var(--accent)); }
+.s-violet .sec-ico { background: var(--wash-violet); }
+.s-violet .sec-rule { background: linear-gradient(90deg, var(--accent-2), var(--accent-3)); }
+@media (max-width: 640px) { .sec-rule { margin-left: 0; } }
+
+/* ---- F1 · fact strip ----------------------------------------------------- */
+.fact-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 12px; }
+.fact {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow-sm);
+}
+.fact-l { display: block; font-size: 10.5px; font-weight: 800; letter-spacing: 1.3px; color: var(--muted); margin-bottom: 5px; }
+.fact-v { font-family: var(--font-display); font-weight: 700; font-size: 15px; }
+.fact.pending .fact-v { color: var(--amber); }
+@media (max-width: 460px) { .fact-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* ---- P1 · price cards ---------------------------------------------------- */
+.price-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(178px, 1fr)); gap: 14px; }
+.price-card {
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+  overflow: hidden; box-shadow: var(--shadow-sm);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+.price-card:hover { transform: translateY(-3px); box-shadow: var(--shadow); }
+.price-cap { height: 5px; }
+.price-body { padding: 15px 17px 17px; }
+.price-name { font-size: 12.5px; font-weight: 700; color: var(--muted); }
+.price-amt {
+  font-family: var(--font-display); font-weight: 800;
+  font-size: clamp(23px, 5.5vw, 28px); margin: 7px 0; letter-spacing: -0.5px;
+}
+.price-inc { font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+.cap-sky { background: linear-gradient(90deg, var(--accent-3), var(--accent)); }
+.cap-green { background: linear-gradient(90deg, var(--green), var(--accent-3)); }
+.cap-indigo { background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+.cap-violet { background: linear-gradient(90deg, var(--accent-2), var(--accent-3)); }
+
+/* ---- T1 · travel mode cards ---------------------------------------------- */
+.mode-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(198px, 1fr)); gap: 14px; }
+.mode-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 17px; box-shadow: var(--shadow-sm);
+}
+.mode-ico { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; font-size: 20px; margin-bottom: 11px; }
+.mode-card h3 { font-family: var(--font-display); font-size: 15px; margin: 0 0 6px; }
+.mode-card p { font-size: 13.5px; margin: 0; color: var(--muted); line-height: 1.5; }
+
+/* ---- Q1 · FAQ accordion --------------------------------------------------- */
+.faq {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow);
+}
+.faq details { border-top: 1px solid var(--border-soft); scroll-margin-top: 96px; }
+.faq details:first-of-type { border-top: 0; }
+.faq summary {
+  cursor: pointer; list-style: none; display: flex; align-items: center;
+  justify-content: space-between; gap: 14px; min-height: 54px;
+  padding: 14px 18px; font-weight: 600; font-size: 15px; line-height: 1.4;
+}
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after {
+  content: "+"; flex: none; font-family: var(--font-display);
+  font-size: 21px; font-weight: 700; line-height: 1; color: var(--accent);
+}
+.faq details[open] summary { color: var(--accent); }
+.faq details[open] summary::after { content: "\2212"; }
+.faq summary:hover { background: var(--card-2); }
+.faq summary:focus-visible { outline: none; box-shadow: var(--ring); }
+.faq details:target > summary { background: var(--wash-accent); }
+.faq-a { padding: 0 18px 17px; color: var(--muted); font-size: 14px; line-height: 1.6; }
+.faq-a p { margin: 0 0 10px; }
+.faq-a p:last-child { margin: 0; }
+
+/* ---- R1 · refund timeline -------------------------------------------------- */
+.tl-bar { display: flex; height: 10px; border-radius: 999px; overflow: hidden; }
+.tl-bar i { display: block; }
+.tl-marks { display: grid; grid-template-columns: 3fr 2fr 1.2fr; gap: 12px; margin-top: 14px; }
+.tl-marks > div { text-align: center; font-size: 12.5px; color: var(--muted); border-left: 0 solid transparent; }
+.tl-marks b { display: block; font-family: var(--font-display); font-size: 15px; color: var(--text); margin-bottom: 3px; }
+.m-green { --m: var(--green); }
+.m-amber { --m: var(--amber); }
+.m-red { --m: var(--red); }
+/* On a phone the three bands stack as rows, each carrying its own colour —
+   a 1.2fr column of text is unreadable at 360px. */
+@media (max-width: 560px) {
+  .tl-bar { display: none; }
+  .tl-marks { grid-template-columns: 1fr; gap: 0; margin-top: 4px; }
+  .tl-marks > div {
+    text-align: left; border-left-width: 4px; border-left-color: var(--m);
+    padding: 11px 0 11px 13px; margin-bottom: 8px; border-radius: 0 8px 8px 0;
+    background: var(--card-2);
+  }
+}
+
+/* ---- Policy link strip in the footer -------------------------------------- */
+.legal-strip {
+  margin-top: 10px; display: flex; flex-wrap: wrap; justify-content: center;
+  align-items: center; gap: 8px; font-size: 0.85rem; opacity: 0.85;
+}
+.legal-strip a { color: inherit; text-decoration: none; border-bottom: 1px solid currentColor; }
+.legal-strip a:hover, .legal-strip a:focus-visible { opacity: 1; }
+.legal-dot { opacity: 0.5; }
+
+@media (prefers-reduced-motion: reduce) {
+  .price-card, .pg-rail a { transition: none; }
+  .price-card:hover { transform: none; }
+}
+
+/* The rail's bleed must track .container's padding exactly at every width. */
+@media (max-width: 720px) {
+  .pg-rail { margin-left: -16px; margin-right: -16px; padding-left: 16px; padding-right: 16px; }
+}
+@media (max-width: 640px) {
+  .pg-rail { margin-left: -14px; margin-right: -14px; padding-left: 14px; padding-right: 14px; }
+}
+
+/* ---- Check-in screen ------------------------------------------------------
+   Built for a phone held at a door: big result, high contrast, and a typed
+   fallback that works when the camera or the browser will not. */
+.ci-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+@media (max-width: 860px) { .ci-grid { grid-template-columns: 1fr; } }
+
+.ci-scanwrap {
+  position: relative; aspect-ratio: 4 / 3; border-radius: var(--radius);
+  overflow: hidden; background: #0b0f1a; margin-bottom: 14px;
+}
+.ci-scanwrap video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ci-reticle {
+  position: absolute; inset: 18%; border: 3px solid rgba(255, 255, 255, 0.85);
+  border-radius: 14px; pointer-events: none;
+}
+.ci-camoff {
+  position: absolute; inset: 0; display: grid; place-items: center; gap: 10px;
+  align-content: center; color: #fff; text-align: center; padding: 18px;
+}
+.ci-camoff p { margin: 0; opacity: 0.75; }
+.ci-camoff small { max-width: 34ch; color: rgba(255, 255, 255, 0.7); }
+
+.ci-manual label { display: block; font-size: 12.5px; margin-bottom: 6px; }
+.ci-row { display: flex; gap: 8px; }
+.ci-row .input {
+  flex: 1; font-family: ui-monospace, Consolas, monospace;
+  font-size: 18px; letter-spacing: 2px; text-transform: uppercase;
+  /* Without this the input holds its ~20-character intrinsic width, the row
+     cannot shrink, and the card carries that floor all the way up to the grid
+     — which is what pushed the page sideways on a 360px phone. */
+  min-width: 0;
+}
+/* The button keeps its own width and its own line; the input gives way first.
+   This row is deliberately side-by-side, so it has to opt out of the
+   small-screen "buttons in a card form go full width" rule above — that one
+   suits stacked forms, and here it was what made "Check in" wrap onto two
+   lines. Three classes, to outrank `.card > form .btn`. */
+.ci-manual .ci-row .btn {
+  flex: none;
+  width: auto;
+  white-space: nowrap;
+}
+
+/* A grid item's implicit min-width is min-content, so a wide child stops the
+   whole column from narrowing. Both cards opt out of that. */
+.ci-grid > * { min-width: 0; }
+
+/* Names and codes are other people's data: never let one long token push the
+   layout wider than the screen. */
+.ci-name, .ci-cat, .ci-detail, .ci-code, .ci-recent { overflow-wrap: anywhere; }
+
+.ci-result {
+  border-radius: var(--radius); padding: 26px 20px; text-align: center;
+  border: 1px solid var(--border); background: var(--card-2);
+}
+.ci-result .ci-icon { font-size: 40px; line-height: 1; }
+.ci-headline { font-family: var(--font-display); font-size: 21px; font-weight: 700; margin-top: 8px; }
+.ci-name { font-size: 20px; font-weight: 700; margin-top: 10px; }
+.ci-cat { color: var(--muted); font-size: 13.5px; }
+.ci-detail { margin-top: 10px; font-size: 14px; color: var(--muted); }
+.ci-code {
+  margin-top: 12px; display: inline-block; font-family: ui-monospace, Consolas, monospace;
+  letter-spacing: 2px; font-size: 13px; padding: 5px 12px; border-radius: 8px;
+  background: var(--card); border: 1px solid var(--border); color: var(--muted);
+}
+/* Colour carries the verdict, but never alone — the icon and the headline say
+   the same thing, because a door is exactly where someone is colour-blind and
+   in a hurry. */
+.ci-result.good { border-color: var(--green); background: var(--wash-green); }
+.ci-result.warn { border-color: var(--amber); background: var(--wash-amber-2); }
+.ci-result.bad  { border-color: var(--red); background: rgba(216, 67, 58, 0.1); }
+.ci-result.good .ci-headline { color: var(--green); }
+.ci-result.warn .ci-headline { color: var(--amber); }
+.ci-result.bad .ci-headline  { color: var(--red); }
+
+/* ---- Who has come through ---- */
+.ci-arrived-h {
+  display: flex; align-items: baseline; gap: 8px;
+  margin: 18px 0 8px; padding-top: 14px; border-top: 1px solid var(--border-soft);
+  font-size: 13.5px;
+}
+.ci-arrived-h .muted { margin-left: auto; font-size: 12px; }
+.ci-arrived { max-height: 260px; overflow-y: auto; }
+.ci-arr {
+  display: flex; align-items: center; gap: 9px; padding: 7px 0;
+  border-top: 1px solid var(--border-soft); font-size: 14px;
+}
+.ci-arr:first-child { border-top: 0; }
+.ci-arr-n { min-width: 0; overflow-wrap: anywhere; }
+.ci-arr small { margin-left: auto; color: var(--muted); white-space: nowrap; }
+
+/* The checked-in pill, on both the door list and the registrations page. */
+.pill.in {
+  background: color-mix(in srgb, var(--green) 16%, transparent);
+  color: var(--green);
+  border: 1px solid color-mix(in srgb, var(--green) 40%, transparent);
+}
+
+.ci-recent-h { font-size: 11px; font-weight: 700; letter-spacing: 1.3px; text-transform: uppercase; margin: 18px 0 6px; }
+.ci-recent { display: flex; align-items: center; gap: 9px; padding: 7px 0; border-top: 1px solid var(--border-soft); font-size: 14px; }
+.ci-recent small { margin-left: auto; color: var(--muted); }
+.ci-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--muted); }
+.ci-dot.good { background: var(--green); }
+.ci-dot.warn { background: var(--amber); }
+.ci-dot.bad { background: var(--red); }
+
+/* ---- Ticket QR on the confirmation screen -------------------------------- */
+.tk-qr { text-align: center; margin: 18px 0 4px; }
+.tk-qr img {
+  width: 180px; height: 180px; border-radius: 12px;
+  border: 1px solid var(--border); background: #fff; padding: 8px;
+}
+.tk-qr-code {
+  font-family: ui-monospace, Consolas, monospace; font-weight: 700;
+  font-size: 17px; letter-spacing: 3px; margin-top: 10px;
+}
+.tk-qr-note { font-size: 12.5px; margin: 6px auto 0; max-width: 42ch; }

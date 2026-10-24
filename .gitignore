@@ -1,0 +1,9 @@
+.wrangler
+.dev.vars
+node_modules/
+*.log
+.screenshots/
+docs/
+*.pdf
+!public/docs/
+!public/docs/BIAAC_2027_High_Resolution_GSO.pdf

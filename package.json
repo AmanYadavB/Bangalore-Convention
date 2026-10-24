@@ -1,14 +1,13 @@
 {
   "name": "bangalore-convention",
   "version": "1.0.0",
-  "description": "Bangalore Convention registration and funds management website",
-  "main": "server.js",
+  "description": "Bangalore Convention registration and funds management site (Cloudflare Worker + static frontend)",
+  "main": "worker.js",
   "type": "commonjs",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
-  },
-  "dependencies": {
-    "express": "^4.19.2"
+    "start": "node dev-server.js",
+    "dev": "node dev-server.js",
+    "dev:worker": "wrangler dev",
+    "deploy": "wrangler deploy"
   }
 }

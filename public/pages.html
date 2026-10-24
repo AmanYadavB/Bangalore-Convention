@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f5f7fc" />
+    <title>Feed AI · Bangalore Convention</title>
+    <link rel="stylesheet" href="css/style.css" />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  </head>
+  <body>
+    <div id="nav"></div>
+
+    <div class="container">
+      <h1 class="page-title">Feed AI</h1>
+      <p class="page-sub">
+        Developer workspace. Add notes, facts or documents here and the chat
+        assistant will use them when answering everyone.
+      </p>
+
+      <div id="dev-gate"></div>
+      <div id="dev-body" hidden>
+        <div class="card" style="margin-bottom: 18px">
+          <h2 style="margin-top: 0">Add knowledge</h2>
+          <p class="muted">
+            Type anything (schedule, venue details, FAQs&hellip;) or upload a text
+            file. It is fed straight to the assistant.
+          </p>
+          <div class="field">
+            <label for="feedTitle">Title <span class="muted">(optional)</span></label>
+            <input id="feedTitle" type="text" autocomplete="off" placeholder="e.g. Venue &amp; directions" />
+          </div>
+          <div class="field">
+            <label for="feedFile">Upload a text file <span class="muted">(optional)</span></label>
+            <input id="feedFile" type="file" accept=".txt,.md,.csv,.json,.log,text/*" />
+          </div>
+          <div class="field">
+            <label for="feedContent">Content</label>
+            <textarea id="feedContent" rows="8" placeholder="Paste or type what the AI should know&hellip;"></textarea>
+          </div>
+          <div class="section-head" style="justify-content: flex-end; gap: 10px">
+            <span class="muted" id="feedErr" style="color: var(--danger, #e5484d); display: none"></span>
+            <button class="btn primary" id="feedSave" type="button">Feed to AI</button>
+          </div>
+        </div>
+
+        <div class="section-head">
+          <h2>What the AI knows</h2>
+          <button class="btn small" id="refreshBtn" type="button">Refresh</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Title</th>
+                <th>Preview</th>
+                <th>Added</th>
+                <th class="col-actions"></th>
+              </tr>
+            </thead>
+            <tbody id="feed-rows">
+              <tr><td colspan="4"><div class="bc-loading" role="status" aria-label="Loading"><span class="bc-load-mark">B<i>·</i>I<i>·</i>A<i>·</i>A<i>·</i>C</span></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <script src="js/common.js"></script>
+    <script>
+      mountNav("pages");
+
+      const gate = document.getElementById("dev-gate");
+      const bodyEl = document.getElementById("dev-body");
+
+      // The developer-key prompt is gone. This page is only served to a
+      // signed-in session with the developer role: everything fed here is injected
+      // into the assistant's system prompt on every conversation, so it is a
+      // privileged surface, not a content-editing one.
+
+      async function loadFeed() {
+        const rows = document.getElementById("feed-rows");
+        try {
+          const list = await api("/api/knowledge");
+          if (!list.length) {
+            rows.innerHTML =
+              '<tr><td colspan="4" class="empty">Nothing fed yet. Add a note above.</td></tr>';
+            return;
+          }
+          rows.innerHTML = list
+            .map(
+              (k) => `<tr>
+                <td><b>${escapeHtml(k.title || "Untitled")}</b></td>
+                <td class="muted">${escapeHtml((k.preview || "").slice(0, 90))}${
+                (k.preview || "").length > 90 ? "\u2026" : ""
+              }</td>
+                <td class="muted">${formatDate(k.created_at)}</td>
+                <td><button class="btn danger small" data-del="${escapeHtml(k.id)}">Delete</button></td>
+              </tr>`
+            )
+            .join("");
+
+          rows.querySelectorAll("[data-del]").forEach((btn) =>
+            btn.addEventListener("click", async () => {
+              const id = btn.getAttribute("data-del");
+              if (!(await mascotConfirm({
+                mood: "worried",
+                danger: true,
+                title: "Make the AI forget this?",
+                message: "It stops using this knowledge the moment you confirm — it can't answer from what it can't remember. No undo on brains.",
+                confirmText: "Make it forget",
+                cancelText: "Let it remember",
+              }))) return;
+              btn.disabled = true;
+              try {
+                await api("/api/knowledge/" + encodeURIComponent(id), { method: "DELETE" });
+                toast("gone — the AI already forgot it ever knew that");
+                loadFeed();
+              } catch (err) {
+                btn.disabled = false;
+                toast(err.message || "Could not remove", "error");
+              }
+            })
+          );
+        } catch (err) {
+          rows.innerHTML = `<tr><td colspan="4" class="empty">${escapeHtml(
+            err.message || "Failed to load"
+          )}</td></tr>`;
+        }
+      }
+
+      function wireForm() {
+        const titleEl = document.getElementById("feedTitle");
+        const fileEl = document.getElementById("feedFile");
+        const contentEl = document.getElementById("feedContent");
+        const errEl = document.getElementById("feedErr");
+        const saveBtn = document.getElementById("feedSave");
+
+        // Load a chosen text file straight into the content box.
+        fileEl.addEventListener("change", () => {
+          const file = fileEl.files && fileEl.files[0];
+          if (!file) return;
+          if (file.size > 500 * 1024) {
+            errEl.textContent = "File is too large (max 500 KB of text).";
+            errEl.style.display = "inline";
+            fileEl.value = "";
+            return;
+          }
+          const reader = new FileReader();
+          reader.onload = () => {
+            errEl.style.display = "none";
+            const existing = contentEl.value.trim();
+            contentEl.value = existing
+              ? existing + "\n\n" + String(reader.result || "")
+              : String(reader.result || "");
+            if (!titleEl.value.trim()) titleEl.value = file.name;
+          };
+          reader.onerror = () => {
+            errEl.textContent = "Couldn't read that file as text.";
+            errEl.style.display = "inline";
+          };
+          reader.readAsText(file);
+        });
+
+        saveBtn.addEventListener("click", async () => {
+          const title = titleEl.value.trim();
+          const content = contentEl.value.trim();
+          errEl.style.display = "none";
+          if (!content) {
+            errEl.textContent = "Add some text or upload a file first.";
+            errEl.style.display = "inline";
+            return;
+          }
+          saveBtn.disabled = true;
+          saveBtn.textContent = "Feeding\u2026";
+          try {
+            const res = await api("/api/knowledge", {
+              method: "POST",
+              body: JSON.stringify({ title, content }),
+            });
+            titleEl.value = "";
+            contentEl.value = "";
+            fileEl.value = "";
+            // The server caps stored content; say so rather than silently
+            // dropping the tail of what was pasted.
+            toast(
+              res && res.truncated
+                ? "fed to the AI — it got full after the first " + res.storedChars.toLocaleString() + " characters, trimmed the rest"
+                : "fed to the AI — it chewed, swallowed, and got a little smarter"
+            );
+            loadFeed();
+          } catch (err) {
+            errEl.textContent = err.message || "Could not save";
+            errEl.style.display = "inline";
+          } finally {
+            saveBtn.disabled = false;
+            saveBtn.textContent = "Feed to AI";
+          }
+        });
+      }
+
+      gate.innerHTML = "";
+      bodyEl.hidden = false;
+      document.getElementById("refreshBtn").addEventListener("click", loadFeed);
+      wireForm();
+      loadFeed();
+    </script>
+  </body>
+</html>

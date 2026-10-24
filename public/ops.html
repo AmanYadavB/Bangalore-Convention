@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f5f7fc" />
+    <title>Ops · Bangalore Convention</title>
+    <link rel="stylesheet" href="css/style.css" />
+    <!-- L2 veil: EVERY page load starts covered from the first paint, so an
+         empty layout is never visible - not on cold entry, not on reload,
+         not when clicking between pages. It lifts when the page is ready
+         (data pages hand it to html.data-wait until their fetches land),
+         with a 350ms minimum so it never blinks and a 900ms cap so the veil
+         itself never becomes the lag. The lift cues the entrance
+         animations (see mountReveals). -->
+    <script>
+      (function () {
+        var d = document.documentElement;
+        d.classList.add("veiling");
+        var lifted = false;
+        var t0 = Date.now();
+        window.__liftVeil = function () {
+          if (lifted) return;
+          lifted = true;
+          var go = function () {
+            // A page still fetching keeps the same cover (html.data-wait);
+            // its pageLoading(false) will do the fade instead.
+            if (d.classList.contains("data-wait") || window.__bcDataWait) {
+              d.classList.remove("veiling");
+              d.classList.add("data-wait");
+              return;
+            }
+            d.classList.add("veil-up");
+            document.dispatchEvent(new CustomEvent("bc:veil-up"));
+            setTimeout(function () { d.classList.remove("veiling", "veil-up"); }, 460);
+          };
+          var hold = 350 - (Date.now() - t0);
+          if (hold > 0) setTimeout(go, hold);
+          else go();
+        };
+        setTimeout(window.__liftVeil, 900);
+      })();
+    </script>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <style>
+      /* Keep long values (emails, notes, JSON) from widening the page — a
+         horizontally-overflowing page clips the fixed chat mascot. */
+      .ops-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+      /* Status rows are a grid of divs, not a <table> — table boxes keep their
+         min-content width when squeezed and overflow phone screens. */
+      .status-row {
+        display: grid;
+        grid-template-columns: minmax(110px, 38%) 1fr;
+        gap: 4px 12px;
+        padding: 6px 0;
+      }
+      .status-row > div {
+        min-width: 0;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+      }
+      #resultBox { overflow-wrap: anywhere; }
+      /* Room at the bottom so the mascot/chat button never sits on the last card. */
+      .container { padding-bottom: 110px; }
+      @media (max-width: 600px) {
+        .ops-actions .btn { flex: 1 1 100%; }
+        #timeInput { flex: 1 1 100%; max-width: none !important; }
+        /* Stack each status row as label-over-value instead of two columns. */
+        .status-row { grid-template-columns: 1fr; padding: 8px 0; }
+        .status-row > div:first-child { font-size: 12px; opacity: 0.75; }
+        .section-head { flex-wrap: wrap; gap: 8px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="nav"></div>
+
+    <div class="container">
+      <h1 class="page-title">Ops Control</h1>
+      <p class="page-sub">
+        Dashboard emails: send, test, schedule and inspect — one click each.
+      </p>
+
+      <div id="dev-gate"></div>
+      <div id="dev-body" hidden>
+        <div class="card" style="margin-bottom: 18px">
+          <h2 style="margin-top: 0">Email actions</h2>
+          <div class="ops-actions">
+            <button class="btn primary" id="btnSend" type="button">📧 Send digest now</button>
+            <button class="btn" id="btnCheck" type="button">🚨 Run critical check</button>
+            <button class="btn" id="btnReset" type="button">♻️ Reset today's sent flag</button>
+            <button class="btn" id="btnPreview" type="button">👁️ Preview digest</button>
+          </div>
+          <p class="muted" style="margin-bottom: 0">
+            <b>Send digest now</b> emails the full dashboard immediately and shows the mail
+            service's verdict below. <b>Reset</b> lets the scheduled digest go out a second
+            time today (after a time change). <b>Preview</b> opens the digest in a new tab
+            without sending anything.
+          </p>
+        </div>
+
+        <div class="card" style="margin-bottom: 18px">
+          <h2 style="margin-top: 0">Daily digest time (IST)</h2>
+          <div class="ops-actions">
+            <input id="timeInput" type="time" style="max-width: 140px" />
+            <button class="btn primary" id="btnSchedule" type="button">Save time</button>
+            <button class="btn" id="btnClearSchedule" type="button">Use wrangler.toml time</button>
+          </div>
+          <p class="muted" style="margin-bottom: 0">
+            Applies within 10 minutes, no redeploy. "Save time" stores an override; the
+            second button removes it so <code>DIGEST_TIME_IST</code> from wrangler.toml
+            applies again.
+          </p>
+        </div>
+
+        <div class="section-head">
+          <h2>Status</h2>
+          <button class="btn small" id="btnStatus" type="button">Refresh</button>
+        </div>
+        <div class="card">
+          <div id="statusSummary" class="muted"><span class="bc-load-mark" role="status" aria-label="Loading">B<i>·</i>I<i>·</i>A<i>·</i>A<i>·</i>C</span></div>
+        </div>
+
+        <div class="section-head"><h2>Last action result</h2></div>
+        <div class="card">
+          <pre id="resultBox" style="margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 12.5px">No action run yet.</pre>
+        </div>
+      </div>
+    </div>
+
+    <script src="js/common.js"></script>
+    <script>
+      mountNav("ops");
+
+      const gate = document.getElementById("dev-gate");
+      const bodyEl = document.getElementById("dev-body");
+      const resultBox = document.getElementById("resultBox");
+
+      // The developer-key prompt is gone. This page is only served to a
+      // signed-in session with the admin role, and the report endpoints check
+      // that session too — the key is no longer a credential anywhere.
+      async function call(path, method, body) {
+        const headers = { "Content-Type": "application/json" };
+        const m = method || "GET";
+        if (m !== "GET") {
+          const token = csrfToken();
+          if (token) headers["X-CSRF-Token"] = token;
+        }
+        const res = await fetch(path, {
+          method: m,
+          credentials: "same-origin",
+          headers,
+          body: body ? JSON.stringify(body) : undefined,
+        });
+        let data;
+        try { data = await res.json(); } catch { data = { error: "Non-JSON response (http " + res.status + ")" }; }
+        return { status: res.status, data };
+      }
+
+      function showResult(label, r) {
+        const d = r.data && typeof r.data === "object" ? r.data : {};
+        const ok = r.status < 400 && !d.error && d.ok !== false;
+        resultBox.textContent =
+          label + " → HTTP " + r.status + (ok ? " ✅" : " ❌") + "\n\n" + JSON.stringify(r.data, null, 2);
+        toast(ok ? label + ": OK" : label + " failed", ok ? undefined : "error");
+      }
+
+      async function refreshStatus() {
+        const box = document.getElementById("statusSummary");
+        const r = await call("/api/report/status");
+        if (r.status >= 400) {
+          box.textContent = "Status failed: HTTP " + r.status;
+          return;
+        }
+        const s = r.data;
+        const last = s.lastDigestAttempt;
+        const lastLine =
+          last && last !== "never"
+            ? (last.ok ? "✅ sent" : "❌ FAILED (" + last.note + ")") + " at " + last.at + " — “" + last.subject + "”"
+            : "never attempted (since this version deployed)";
+        // Plain divs, deliberately not a <table>: table boxes keep their own
+        // min-content sizing even when squeezed, which overflowed the page on
+        // phones. The two-column look is done with grid and collapses to
+        // stacked label-over-value under 600px (see the style block above).
+        const row = (label, value) =>
+          "<div class='status-row'><div class='muted'>" + label + "</div><div>" + value + "</div></div>";
+        box.innerHTML =
+          row("Worker time (IST)", "<b>" + escapeHtml(s.workerTimeIst) + "</b>") +
+          row("Digest time (IST)", "<b>" + escapeHtml(s.digestTimeIst) + "</b> <span class='muted'>(" + escapeHtml(s.digestTimeSource) + ")</span>") +
+          row("Digest already sent today", "<b>" + (s.digestAlreadySentToday ? "yes — use Reset to allow another" : "no") + "</b>") +
+          row("Last digest attempt", escapeHtml(lastLine)) +
+          row("Last critical check", escapeHtml(String(s.lastCriticalCheckAt))) +
+          row("Emails go to", "<b>" + escapeHtml(String(s.dashboardEmail)) + "</b>");
+        if (s.digestTimeIst && /^\d\d:\d\d$/.test(s.digestTimeIst)) {
+          document.getElementById("timeInput").value = s.digestTimeIst;
+        }
+      }
+
+      // Every button disables itself for the duration of its request, so a
+      // double-click cannot race two sends of the same digest.
+      function onClick(id, handler) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener("click", async () => {
+          if (el.disabled) return;
+          el.disabled = true;
+          try {
+            await handler();
+          } finally {
+            el.disabled = false;
+          }
+        });
+      }
+
+      function wire() {
+        onClick("btnSend", async () => {
+          showResult("Send digest", await call("/api/report/send", "POST", {}));
+          await refreshStatus();
+        });
+        onClick("btnCheck", async () => {
+          showResult("Critical check", await call("/api/report/check", "POST", {}));
+          await refreshStatus();
+        });
+        onClick("btnReset", async () => {
+          showResult("Reset sent flag", await call("/api/report/reset", "POST", {}));
+          await refreshStatus();
+        });
+        // Opened as a normal navigation — the session cookie authorises it, so
+        // no secret ever appears in the URL, browser history or access logs.
+        onClick("btnPreview", async () => {
+          window.open("/api/report/preview", "_blank");
+        });
+        onClick("btnSchedule", async () => {
+          const t = document.getElementById("timeInput").value;
+          if (!t) return toast("Pick a time first", "error");
+          showResult("Set digest time", await call("/api/report/schedule", "POST", { time: t }));
+          await refreshStatus();
+        });
+        onClick("btnClearSchedule", async () => {
+          showResult("Clear time override", await call("/api/report/schedule", "POST", { clear: true }));
+          await refreshStatus();
+        });
+        onClick("btnStatus", refreshStatus);
+      }
+
+      gate.innerHTML = "";
+      bodyEl.hidden = false;
+      wire();
+      pageLoading(true);
+      refreshStatus()
+        .catch(() => {})
+        .finally(() => pageLoading(false));
+    </script>
+  </body>
+</html>

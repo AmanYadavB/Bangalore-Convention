@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f5f7fc" />
+    <title>Check-in · Bangalore Convention</title>
+    <link rel="stylesheet" href="css/style.css" />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  </head>
+  <body>
+    <div id="nav"></div>
+
+    <div class="container">
+      <h1 class="page-title">Check-in</h1>
+      <p class="page-sub" id="windowNote">Scan a delegate's ticket, or type the code from it.</p>
+
+      <div class="ci-grid">
+        <div class="card">
+          <h2>Scan</h2>
+          <div class="ci-scanwrap">
+            <video id="cam" playsinline muted></video>
+            <div class="ci-reticle" aria-hidden="true"></div>
+            <div class="ci-camoff" id="camOff">
+              <p>Camera off</p>
+              <button class="btn primary" id="startCam" type="button">Start camera</button>
+              <small id="camNote" class="muted"></small>
+            </div>
+          </div>
+
+          <form id="manualForm" class="ci-manual" autocomplete="off">
+            <label for="codeInput" class="muted">Or type the ten-character code</label>
+            <div class="ci-row">
+              <input id="codeInput" class="input" type="text" inputmode="latin"
+                     maxlength="12" placeholder="e.g. 7QK4M2XR9T" spellcheck="false" />
+              <button class="btn primary" type="submit">Check in</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="card">
+          <h2>Result</h2>
+          <div id="result" class="ci-result idle">
+            <div class="ci-icon" aria-hidden="true">🎫</div>
+            <div class="ci-headline">Ready</div>
+            <div class="ci-detail muted">Nothing scanned yet.</div>
+          </div>
+
+          <div class="ci-arrived-h">
+            <b>Checked in</b>
+            <span class="muted" id="arrivedCount">—</span>
+          </div>
+          <div id="arrived" class="ci-arrived">
+            <p class="muted" style="font-size:13px;margin:0">Loading…</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      Bangalore Convention · A not-for-profit fellowship gathering · All funds go
+      toward hosting the event.
+    </div>
+
+    <script src="js/common.js"></script>
+    <script>
+      mountNav("checkin");
+
+      (async () => {
+        // The API is the real gate; this only avoids showing a door screen to
+        // someone who could never use it.
+        const user = await requireUser();
+        if (!user) return;
+
+        const resultBox = document.getElementById("result");
+        const arrived = document.getElementById("arrived");
+        const arrivedCount = document.getElementById("arrivedCount");
+        const codeInput = document.getElementById("codeInput");
+
+        // Each outcome carries how the panel looks AND how the mascot announces
+        // it. `toastType` maps onto the four card moods common.js already has.
+        const LOOK = {
+          ok:      { cls: "good", icon: "✅", head: "Checked in",           toastType: "success" },
+          already: { cls: "warn", icon: "🔁", head: "Already checked in",   toastType: "info" },
+          early:   { cls: "warn", icon: "🕘", head: "Not yet — valid ticket", toastType: "info" },
+          late:    { cls: "bad",  icon: "🚪", head: "Check-in closed",      toastType: "error" },
+          unpaid:  { cls: "bad",  icon: "💳", head: "Not paid",             toastType: "error" },
+          invalid: { cls: "bad",  icon: "✖",  head: "Not a valid ticket",   toastType: "error" },
+          offline: { cls: "warn", icon: "📡", head: "Couldn't check",       toastType: "error" },
+        };
+
+        const firstName = (n) => String(n || "").trim().split(/\s+/)[0] || "they";
+        const atTime = (iso) =>
+          iso ? new Date(iso).toLocaleTimeString("en-IN", { timeStyle: "short" }) : "";
+
+        // What the mascot actually says. Short, spoken, and specific enough that
+        // a volunteer never has to look back at the panel to know what happened.
+        function announcement(res) {
+          switch (res.status) {
+            case "ok":
+              return firstName(res.name) + " is in — checked in just now";
+            case "already":
+              return firstName(res.name) + " already came through" +
+                (res.at ? " at " + atTime(res.at) : "") + " — this one's a repeat";
+            case "early":
+              return "valid ticket, but check-in hasn't started yet";
+            case "late":
+              return "check-in has closed — send them to the desk";
+            case "unpaid":
+              return "this one isn't paid — send them to the desk";
+            case "offline":
+              return "couldn't reach the server — nothing was recorded, try again";
+            default:
+              return "that code isn't one of ours — check the ticket";
+          }
+        }
+
+        function show(res) {
+          const look = LOOK[res.status] || LOOK.invalid;
+          resultBox.className = "ci-result " + look.cls;
+          const when = res.at ? new Date(res.at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "";
+          resultBox.innerHTML =
+            `<div class="ci-icon" aria-hidden="true">${look.icon}</div>` +
+            `<div class="ci-headline">${look.head}</div>` +
+            (res.name ? `<div class="ci-name">${escapeHtml(res.name)}</div>` : "") +
+            (res.category ? `<div class="ci-cat">${escapeHtml(res.category)}</div>` : "") +
+            `<div class="ci-detail">${escapeHtml(res.message || "")}` +
+            (res.status === "early" && res.opens
+              ? ` Doors open ${escapeHtml(res.opens)}.`
+              : "") +
+            (when ? ` <b>${escapeHtml(when)}</b>` : "") +
+            `</div>` +
+            (res.ticketCode ? `<div class="ci-code">${escapeHtml(res.ticketCode)}</div>` : "");
+        }
+
+        // ---- Who has come through -------------------------------------------
+        // Read from the registrations the server already holds rather than a
+        // list kept in this tab, so it survives a reload and shows arrivals from
+        // every other door too.
+        async function refreshArrived() {
+          try {
+            const all = await api("/api/registrations");
+            const inList = all
+              .filter((r) => r.checkedInAt)
+              .sort((a, b) => new Date(b.checkedInAt) - new Date(a.checkedInAt));
+            arrivedCount.textContent = inList.length + " of " + all.length;
+            arrived.innerHTML = inList.length
+              ? inList
+                  .map(
+                    (r) =>
+                      `<div class="ci-arr"><span class="ci-dot good"></span>` +
+                      `<span class="ci-arr-n">${escapeHtml(r.name)}</span>` +
+                      `<small>${escapeHtml(atTime(r.checkedInAt))}</small></div>`
+                  )
+                  .join("")
+              : '<p class="muted" style="font-size:13px;margin:0">Nobody yet.</p>';
+          } catch (err) {
+            arrivedCount.textContent = "—";
+            arrived.innerHTML =
+              '<p class="muted" style="font-size:13px;margin:0">Couldn\'t load the list.</p>';
+          }
+        }
+
+        // One scan at a time. The door is armed, a scan disarms it, and it only
+        // re-arms once the mascot has finished announcing the verdict — so a
+        // camera firing thirty frames a second cannot scan over the answer to
+        // the last person, and the volunteer always sees what happened.
+        let armed = true;
+        let cooldownUntil = 0;
+        let lastCode = "";
+
+        async function submitCode(code) {
+          code = String(code || "").trim().toUpperCase();
+          if (!code || !armed) return;
+          // After re-arming, the same badge is usually still in front of the
+          // lens. A brief cooldown stops it re-announcing itself in a loop,
+          // while a deliberate re-scan a moment later still goes through and
+          // correctly reports "already checked in".
+          if (code === lastCode && Date.now() < cooldownUntil) return;
+
+          armed = false;
+          lastCode = code;
+          let res;
+          try {
+            res = await api("/api/checkin", { method: "POST", body: JSON.stringify({ code }) });
+          } catch (err) {
+            // A failed request is not a forged ticket. Say what actually
+            // happened, or the screen accuses a delegate of something the
+            // network did.
+            res = {
+              status: "offline",
+              message: (err && err.message) || "Could not reach the server. Nothing was recorded.",
+            };
+          }
+
+          show(res);
+          codeInput.value = "";
+          if (res.status === "ok" || res.status === "already") refreshArrived();
+
+          const look = LOOK[res.status] || LOOK.invalid;
+          toast(announcement(res), look.toastType, () => {
+            cooldownUntil = Date.now() + 1500;
+            armed = true;
+            codeInput.focus({ preventScroll: true });
+          });
+        }
+
+        document.getElementById("manualForm").addEventListener("submit", (e) => {
+          e.preventDefault();
+          submitCode(codeInput.value);
+        });
+
+        refreshArrived();
+
+        // A ticket link opened on this device carries the code in the hash.
+        if (location.hash.length > 1) submitCode(location.hash.slice(1));
+        window.addEventListener("hashchange", () => {
+          if (location.hash.length > 1) submitCode(location.hash.slice(1));
+        });
+
+        // ---- Camera ---------------------------------------------------------
+        // BarcodeDetector is not everywhere (Safari has no support at the time
+        // of writing), so the typed code is the guaranteed path and the camera
+        // is the convenience. The screen never depends on it.
+        const cam = document.getElementById("cam");
+        const camOff = document.getElementById("camOff");
+        const camNote = document.getElementById("camNote");
+        const startBtn = document.getElementById("startCam");
+        // Two separate reasons the camera can be off, and they need different
+        // words: this browser cannot DECODE a QR, or it cannot REACH a camera.
+        // getUserMedia only exists in a secure context, so a phone pointed at
+        // http://<lan-ip>:8787 has no navigator.mediaDevices at all — which
+        // used to surface as a baffling "Cannot read properties of undefined".
+        const canDecode = "BarcodeDetector" in window;
+        const canCapture = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+        if (!canDecode) {
+          camNote.textContent =
+            "This browser can't decode a QR. Type the code instead — Chrome on Android scans.";
+          startBtn.disabled = true;
+        } else if (!canCapture) {
+          camNote.textContent =
+            "The camera needs a secure page. Open this over https (or on localhost) — " +
+            "over a plain http address the browser hides the camera entirely. Typing the code works either way.";
+          startBtn.disabled = true;
+        }
+
+        startBtn.addEventListener("click", async () => {
+          camNote.textContent = "";
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+              video: { facingMode: "environment" },
+            });
+            cam.srcObject = stream;
+            await cam.play();
+            camOff.style.display = "none";
+            const detector = new BarcodeDetector({ formats: ["qr_code"] });
+            const tick = async () => {
+              if (!cam.srcObject) return;
+              try {
+                const codes = await detector.detect(cam);
+                for (const c of codes) {
+                  const raw = String(c.rawValue || "");
+                  const hash = raw.includes("#") ? raw.slice(raw.lastIndexOf("#") + 1) : raw;
+                  if (hash) await submitCode(hash);
+                }
+              } catch (e) {
+                /* a dropped frame is not worth stopping the loop for */
+              }
+              setTimeout(tick, 350);
+            };
+            tick();
+          } catch (err) {
+            // NotAllowedError covers both "the visitor said no" and "the page
+            // was never allowed to ask" (a Permissions-Policy deny), and the
+            // volunteer at the door needs to be told which one to go fix.
+            const name = (err && err.name) || "";
+            camNote.textContent =
+              name === "NotAllowedError"
+                ? "Camera blocked. Allow camera for this site in the browser's address-bar site settings, then try again."
+                : name === "NotFoundError" || name === "OverconstrainedError"
+                ? "No camera found on this device. Type the code instead."
+                : name === "NotReadableError"
+                ? "Another app is holding the camera. Close it and try again."
+                : "Camera unavailable: " + ((err && err.message) || name || "unknown error");
+          }
+        });
+      })();
+    </script>
+  </body>
+</html>

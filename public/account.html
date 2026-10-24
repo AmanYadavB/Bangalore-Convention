@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f5f7fc" />
+    <title>Your account · Bangalore Convention</title>
+    <link rel="stylesheet" href="css/style.css" />
+    <!-- L2 veil: EVERY page load starts covered from the first paint, so an
+         empty layout is never visible - not on cold entry, not on reload,
+         not when clicking between pages. It lifts when the page is ready
+         (data pages hand it to html.data-wait until their fetches land),
+         with a 350ms minimum so it never blinks and a 900ms cap so the veil
+         itself never becomes the lag. The lift cues the entrance
+         animations (see mountReveals). -->
+    <script>
+      (function () {
+        var d = document.documentElement;
+        d.classList.add("veiling");
+        var lifted = false;
+        var t0 = Date.now();
+        window.__liftVeil = function () {
+          if (lifted) return;
+          lifted = true;
+          var go = function () {
+            // A page still fetching keeps the same cover (html.data-wait);
+            // its pageLoading(false) will do the fade instead.
+            if (d.classList.contains("data-wait") || window.__bcDataWait) {
+              d.classList.remove("veiling");
+              d.classList.add("data-wait");
+              return;
+            }
+            d.classList.add("veil-up");
+            document.dispatchEvent(new CustomEvent("bc:veil-up"));
+            setTimeout(function () { d.classList.remove("veiling", "veil-up"); }, 460);
+          };
+          var hold = 350 - (Date.now() - t0);
+          if (hold > 0) setTimeout(go, hold);
+          else go();
+        };
+        setTimeout(window.__liftVeil, 900);
+      })();
+    </script>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  </head>
+  <body>
+    <div id="nav"></div>
+
+    <main class="container">
+      <h1 class="page-title" id="pageTitle">Your account</h1>
+      <!-- Setup mode speaks through this plain line; the normal page uses
+           the ID card below instead. -->
+      <p class="page-sub" id="whoami" hidden><span class="bc-load-mark" role="status" aria-label="Loading">B<i>·</i>I<i>·</i>A<i>·</i>A<i>·</i>C</span></p>
+
+      <section class="acct-id" id="acctId">
+        <span class="acct-ava" id="acctAva" aria-hidden="true">·</span>
+        <div class="acct-who">
+          <b id="acctEmail"><span class="bc-load-mark" role="status" aria-label="Loading">B<i>·</i>I<i>·</i>A<i>·</i>A<i>·</i>C</span></b><span class="role-chip" id="acctRole" hidden></span>
+          <span class="acct-meta" id="acctMeta"></span>
+        </div>
+      </section>
+
+      <div class="acct-grid" id="acctGrid">
+      <div class="card">
+        <div class="section-head" id="pwHead" style="margin: 0 0 14px">
+          <h2 style="margin: 0">🔒 Password</h2>
+        </div>
+        <p class="muted" id="pwIntro" style="margin-top: 0">
+          This is how you sign in: type your email on the sign-in page and
+          it asks for this password. If you ever forget it, choose
+          "email me a sign-in link instead" there. Google sign-in works
+          either way.
+        </p>
+        <form id="pwForm" class="form-grid">
+          <div class="field full" id="currentField" hidden>
+            <label for="currentPassword">Current password</label>
+            <input type="password" id="currentPassword" autocomplete="current-password" />
+          </div>
+          <div class="field full">
+            <label for="newPassword" id="newPasswordLabel">New password</label>
+            <input type="password" id="newPassword" autocomplete="new-password"
+                   placeholder="At least 12 characters" />
+          </div>
+          <div class="field full">
+            <label for="confirmPassword">Confirm password</label>
+            <input type="password" id="confirmPassword" autocomplete="new-password" />
+          </div>
+          <div class="field full">
+            <button class="btn primary" type="submit" id="savePassword">Save password</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="card" id="sessionsCard">
+        <div class="section-head" style="margin: 0 0 14px">
+          <h2 style="margin: 0">💻 Where you're signed in</h2>
+          <button class="btn ghost small" id="revokeOthers" type="button">Sign out everywhere else</button>
+        </div>
+        <div class="ses-list" id="sessionRows">
+          <div class="bc-loading" role="status" aria-label="Loading"><span class="bc-load-mark">B<i>·</i>I<i>·</i>A<i>·</i>A<i>·</i>C</span></div>
+        </div>
+      </div>
+
+      <div class="card" id="accessCard">
+        <div class="section-head" style="margin: 0 0 14px">
+          <h2 style="margin: 0">🗝️ Access</h2>
+        </div>
+        <p class="muted" id="accessNote" style="margin: 0 0 14px">
+          Who can sign in is set in the site's configuration, not here. To add
+          or remove someone, edit <code>STAFF_EMAILS</code> or
+          <code>DEVELOPER_EMAILS</code> in <code>wrangler.toml</code> and deploy.
+        </p>
+        <!-- Developers additionally get the live account list with delete. -->
+        <div class="table-wrap" id="staffWrap" hidden>
+          <table>
+            <thead>
+              <tr>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Password</th>
+                <th>Last sign-in</th>
+                <th class="col-actions"></th>
+              </tr>
+            </thead>
+            <tbody id="staffRows">
+              <tr><td colspan="5"><div class="bc-loading" role="status" aria-label="Loading"><span class="bc-load-mark">B<i>·</i>I<i>·</i>A<i>·</i>A<i>·</i>C</span></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      </div>
+    </main>
+
+    <script src="js/common.js"></script>
+    <script>
+      // ?setup=1 — arrived straight from an email-link sign-in with no
+      // password yet. The nav guard in common.js keeps such users on this
+      // page until one is saved; ?next= is where to go once it is.
+      const params = new URLSearchParams(location.search);
+      const setupMode = params.get("setup") === "1";
+      let nextDest = params.get("next") || "";
+      if (!/^\/(?!\/)/.test(nextDest)) nextDest = "/index.html";
+
+      // Setup is a single forced step, so the page shows ONLY that step: no
+      // nav links (the guard would bounce every one of them straight back
+      // here), no chat mascot, no session/access cards.
+      mountNav("account", setupMode ? { links: false, chat: false } : undefined);
+
+      // Setup mode strips the page to the single step: a heading, the email,
+      // the field. No banner paragraphs, no card intro, no other cards.
+      if (setupMode) {
+        document.getElementById("pageTitle").textContent = "Create a password";
+        document.getElementById("newPasswordLabel").textContent = "Password";
+        document.getElementById("pwHead").hidden = true;
+        document.getElementById("pwIntro").hidden = true;
+        document.getElementById("sessionsCard").hidden = true;
+        document.getElementById("accessCard").hidden = true;
+        document.getElementById("acctId").hidden = true;
+        document.getElementById("whoami").hidden = false;
+      }
+
+      function when(ts) {
+        if (!ts) return "—";
+        const d = new Date(Number(ts));
+        if (isNaN(d)) return "—";
+        return d.toLocaleString("en-IN", {
+          day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
+        });
+      }
+
+      // Session methods are stored as short internal names; show real words.
+      function methodLabel(m) {
+        return {
+          magic: "Email link",
+          code: "Email code",
+          password: "Password",
+          google: "Google",
+        }[m] || (m || "—");
+      }
+
+      function shortDevice(ua) {
+        const s = String(ua || "");
+        if (/iPhone|iPad/i.test(s)) return "iPhone / iPad";
+        if (/Android/i.test(s)) return "Android";
+        if (/Macintosh/i.test(s)) return "Mac";
+        if (/Windows/i.test(s)) return "Windows";
+        if (/Linux/i.test(s)) return "Linux";
+        return "Unknown";
+      }
+
+      // The sessions call fills this in; the ID card meta line shows it.
+      let deviceCount = null;
+
+      function paintMeta() {
+        const me = currentUser();
+        if (!me || setupMode) return;
+        document.getElementById("acctMeta").innerHTML =
+          (me.hasPassword
+            ? '<b class="ok">password set ✓</b>'
+            : '<b class="warn">no password yet</b>') +
+          (deviceCount == null
+            ? ""
+            : " · signed in on " + deviceCount + (deviceCount === 1 ? " device" : " devices"));
+      }
+
+      function paintMe() {
+        const me = currentUser();
+        const who = document.getElementById("whoami");
+        if (!me) { who.hidden = false; who.textContent = "Not signed in."; return; }
+        // Setup mode: just the address — the heading already says the rest.
+        if (setupMode) { who.textContent = me.email; return; }
+        document.getElementById("acctAva").textContent = (me.email || "?").charAt(0).toUpperCase();
+        document.getElementById("acctEmail").textContent = me.email;
+        const role = document.getElementById("acctRole");
+        role.hidden = false;
+        role.textContent = me.role === "developer" ? "Developer" : "Admin";
+        paintMeta();
+        document.getElementById("currentField").hidden = !me.hasPassword;
+      }
+
+      function deviceIcon(ua) {
+        const s = String(ua || "");
+        if (/iPhone|iPad|Android/i.test(s)) return "📱";
+        if (/Macintosh/i.test(s)) return "💻";
+        return "🖥️";
+      }
+
+      async function loadSessions() {
+        const rows = document.getElementById("sessionRows");
+        try {
+          const data = await api("/api/auth/sessions");
+          const list = data.sessions || [];
+          deviceCount = list.length;
+          paintMeta();
+          if (!list.length) {
+            rows.innerHTML = '<div class="empty">No active sessions.</div>';
+            return;
+          }
+          rows.innerHTML = list.map(function (s) {
+            return '<div class="ses-row">' +
+              '<span class="ses-dev" aria-hidden="true">' + deviceIcon(s.ua) + "</span>" +
+              '<span class="ses-main">' +
+                escapeHtml(shortDevice(s.ua)) + " · " + escapeHtml(methodLabel(s.method)) +
+                '<span class="ses-mini">started ' + escapeHtml(when(s.createdAt)) +
+                  " · last seen " + escapeHtml(when(s.lastSeenAt)) + "</span>" +
+              "</span>" +
+              (s.current ? '<span class="ses-now">THIS ONE</span>' : "") +
+            "</div>";
+          }).join("");
+        } catch (err) {
+          rows.innerHTML = '<div class="empty">' + escapeHtml(err.message) + "</div>";
+        }
+      }
+
+      document.getElementById("pwForm").addEventListener("submit", async function (e) {
+        e.preventDefault();
+        const btn = document.getElementById("savePassword");
+        const password = document.getElementById("newPassword").value;
+        const confirm = document.getElementById("confirmPassword").value;
+        const currentPassword = document.getElementById("currentPassword").value;
+        if (!password) return toast("bro the password box is empty — type something in there first", "error");
+        if (password !== confirm) {
+          document.getElementById("confirmPassword").focus();
+          return toast("those two passwords are not twins — make them match and try again", "error");
+        }
+        btn.disabled = true;
+        try {
+          await api("/api/auth/password/set", {
+            method: "POST",
+            body: JSON.stringify({ password: password, currentPassword: currentPassword }),
+          });
+          document.getElementById("newPassword").value = "";
+          document.getElementById("confirmPassword").value = "";
+          document.getElementById("currentPassword").value = "";
+          if (setupMode) {
+            // Setup finished — carry on to wherever they were headed.
+            toast("password locked in!! dragging you inside rn — welcome home", "party");
+            setTimeout(() => location.replace(nextDest), 1200);
+            return;
+          }
+          toast("new password saved — all your other sessions got signed out, it's just us now", "party");
+          await refreshUser();
+          paintMe();
+          loadSessions();
+        } catch (err) {
+          toast(err.message, "error");
+        } finally {
+          btn.disabled = false;
+        }
+      });
+
+      // Admin-only: the live account list. Deleting ends the person's
+      // sessions and wipes their password, but ACCESS itself still comes from
+      // wrangler.toml — the server's response says so when that's the case.
+      async function loadStaff() {
+        if (!hasRole("staff")) return;
+        document.getElementById("staffWrap").hidden = false;
+        document.getElementById("accessNote").textContent =
+          "Adding someone still happens in wrangler.toml (STAFF_EMAILS / DEVELOPER_EMAILS). " +
+          "Deleting an account below signs them out everywhere and clears their password; " +
+          "to fully revoke access, also remove their email from wrangler.toml and deploy.";
+        const rows = document.getElementById("staffRows");
+        try {
+          const data = await api("/api/auth/staff");
+          const list = data.staff || [];
+          if (!list.length) {
+            rows.innerHTML = '<tr><td colspan="5" class="empty">No accounts yet.</td></tr>';
+            return;
+          }
+          rows.innerHTML = list.map(function (p) {
+            return "<tr>" +
+              "<td>" + escapeHtml(p.email) +
+                (p.current ? ' <span class="muted">(you)</span>' : "") + "</td>" +
+              "<td>" + escapeHtml(p.role || "not on list") + "</td>" +
+              "<td>" + (p.hasPassword ? "set" : "—") + "</td>" +
+              "<td>" + escapeHtml(when(p.lastLoginAt)) + "</td>" +
+              '<td class="col-actions">' +
+                (p.current ? "" :
+                  '<button class="btn ghost small" data-del="' + escapeHtml(p.id) + '" data-email="' + escapeHtml(p.email) + '">Delete</button>') +
+              "</td>" +
+            "</tr>";
+          }).join("");
+          rows.querySelectorAll("[data-del]").forEach(function (btn) {
+            btn.addEventListener("click", async function () {
+              const email = btn.getAttribute("data-email");
+              if (!(await mascotConfirm({
+                mood: "sad",
+                danger: true,
+                title: "Delete " + email + "?",
+                message: "They get signed out everywhere and their password is wiped clean. The mascot is already planning the goodbye party it never wanted to throw.",
+                confirmText: "Delete account",
+                cancelText: "Let them stay",
+              }))) return;
+              btn.disabled = true;
+              try {
+                const res = await api("/api/auth/staff/" + encodeURIComponent(btn.getAttribute("data-del")), { method: "DELETE" });
+                toast("account deleted — a small funeral was held inside the button." + (res.note ? " " + res.note : ""));
+                loadStaff();
+              } catch (err) {
+                toast(err.message, "error");
+                btn.disabled = false;
+              }
+            });
+          });
+        } catch (err) {
+          rows.innerHTML = '<tr><td colspan="5" class="empty">' + escapeHtml(err.message) + "</td></tr>";
+        }
+      }
+
+      document.getElementById("revokeOthers").addEventListener("click", async function () {
+        if (!(await mascotConfirm({
+          mood: "worried",
+          title: "Sign out everywhere else?",
+          message: "Every device except this one gets signed out immediately. The mascot is sweating a little, but it's ready to slam the doors on your word.",
+          confirmText: "Sign them out",
+          cancelText: "Leave them be",
+        }))) return;
+        try {
+          await api("/api/auth/sessions", { method: "DELETE" });
+          toast("all other sessions signed out — this device is the last one standing");
+          loadSessions();
+        } catch (err) {
+          toast(err.message, "error");
+        }
+      });
+
+      (async function () {
+        // ONE BIAAC cover until the whole page is real — no partial cards.
+        pageLoading(true);
+        try {
+          const me = await requireUser();
+          // Stale bookmark or manual ?setup=1 with a password already set:
+          // there is nothing to set up — show the normal account page.
+          if (setupMode && me && me.hasPassword) {
+            location.replace("account.html");
+            return;
+          }
+          // The reverse: arrived at the plain account page while a password is
+          // still owed (e.g. via the profile menu) — that IS the setup step.
+          if (!setupMode && needsPasswordSetup(me)) {
+            location.replace("account.html?setup=1");
+            return;
+          }
+          paintMe();
+          if (setupMode) {
+            document.getElementById("newPassword").focus();
+            return; // the other cards are hidden — don't fetch for them
+          }
+          await Promise.allSettled([loadSessions(), loadStaff()]);
+        } finally {
+          pageLoading(false);
+        }
+      })();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f5f7fc" />
+    <title>Daily Reflections · Bangalore Convention</title>
+    <link rel="stylesheet" href="css/style.css" />
+    <!-- L2 veil: EVERY page load starts covered from the first paint, so an
+         empty layout is never visible - not on cold entry, not on reload,
+         not when clicking between pages. It lifts when the page is ready
+         (data pages hand it to html.data-wait until their fetches land),
+         with a 350ms minimum so it never blinks and a 900ms cap so the veil
+         itself never becomes the lag. The lift cues the entrance
+         animations (see mountReveals). -->
+    <script>
+      (function () {
+        var d = document.documentElement;
+        d.classList.add("veiling");
+        var lifted = false;
+        var t0 = Date.now();
+        window.__liftVeil = function () {
+          if (lifted) return;
+          lifted = true;
+          var go = function () {
+            // A page still fetching keeps the same cover (html.data-wait);
+            // its pageLoading(false) will do the fade instead.
+            if (d.classList.contains("data-wait") || window.__bcDataWait) {
+              d.classList.remove("veiling");
+              d.classList.add("data-wait");
+              return;
+            }
+            d.classList.add("veil-up");
+            document.dispatchEvent(new CustomEvent("bc:veil-up"));
+            setTimeout(function () { d.classList.remove("veiling", "veil-up"); }, 460);
+          };
+          var hold = 350 - (Date.now() - t0);
+          if (hold > 0) setTimeout(go, hold);
+          else go();
+        };
+        setTimeout(window.__liftVeil, 900);
+      })();
+    </script>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <style>
+      /* Follow card: the one thing this page exists to get people to tap. */
+      .follow-card { text-align: center; }
+      .follow-card .btn { font-size: 1.05rem; padding: 14px 30px; }
+      .follow-note { font-size: 0.86rem; opacity: 0.72; margin-top: 14px; }
+      .refl-date { font-size: 0.82rem; opacity: 0.65; letter-spacing: 0.4px; }
+      .refl-title { margin: 6px 0 10px; }
+      /* pre-wrap keeps the author's line breaks; break-word stops a long word
+         or pasted URL from running past the card edge on a phone. */
+      .refl-body {
+        white-space: pre-wrap;
+        overflow-wrap: break-word;
+        line-height: 1.65;
+      }
+      .refl-actions { margin-top: 14px; display: flex; gap: 8px; flex-wrap: wrap; }
+      /* The card is 1125px wide and rendered off-screen, never shown. A
+         zero-sized clipping wrapper guarantees it can never affect layout or
+         widen the page on mobile. Kept out of #cardStyle so this positioning
+         does not end up inside the exported PNG. */
+      #cardStage {
+        position: fixed;
+        left: 0;
+        top: 0;
+        width: 0;
+        height: 0;
+        overflow: hidden;
+        visibility: hidden;
+        pointer-events: none;
+      }
+    </style>
+
+    <!-- Card design, cloned verbatim into the exported PNG. System fonts only,
+         no color-mix(), no external images, solid text colours. -->
+    <style id="cardStyle">
+      /* EVERY class here is rc- prefixed. These rules are injected into the
+         exported SVG, but they also live on this page — unprefixed names like
+         .card or .fm-head collide with style.css and would restyle the real
+         page cards and the chat mascot. */
+      .rc-card {
+        position: relative; width: 1125px; height: 600px; overflow: hidden;
+        box-sizing: border-box;
+        background:
+          radial-gradient(600px 380px at 12% 112%, rgba(251,191,36,0.26), transparent 62%),
+          radial-gradient(720px 460px at 90% -14%, rgba(124,111,255,0.24), transparent 60%),
+          #0b0f1a;
+        font-family: "Segoe UI", system-ui, sans-serif;
+      }
+      .rc-grid {
+        position: absolute; inset: 0;
+        background-image: radial-gradient(circle at 1px 1px, rgba(238,242,251,0.07) 1px, transparent 0);
+        background-size: 34px 34px;
+      }
+      .rc-masthead { position: absolute; top: 44px; left: 76px; display: flex; align-items: center; gap: 60px; }
+      .rc-slot { position: relative; width: 46px; height: 56px; flex: none; }
+      .rc-bot { position: absolute; top: 0; left: 0; width: 44px; height: 53px; transform: scale(1.05); transform-origin: top left; }
+      .rc-head {
+        position: absolute; top: 8px; left: 4px; width: 36px; height: 26px; border-radius: 10px;
+        background: linear-gradient(160deg, #eef2ff, #c7d2fe); border: 1px solid #b9c0f7;
+        box-shadow: inset 0 -3px 6px rgba(99,102,241,0.25);
+        display: flex; align-items: center; justify-content: center; gap: 6px;
+      }
+      .rc-eye { width: 7px; height: 2.4px; border-radius: 2px; background: #6366f1; }
+      .rc-antenna { position: absolute; top: 0; left: 50%; width: 2px; height: 9px; margin-left: -1px; background: #b0b8f7; }
+      .rc-antenna::after {
+        content: ""; position: absolute; top: -5px; left: 50%; margin-left: -3.5px;
+        width: 7px; height: 7px; border-radius: 50%; background: #fbbf24;
+        box-shadow: 0 0 8px 1px rgba(251,191,36,0.75);
+      }
+      .rc-torso {
+        position: absolute; top: 31px; left: 7px; width: 30px; height: 15px;
+        border-radius: 8px 8px 6px 6px; background: linear-gradient(160deg, #818cf8, #a78bfa);
+      }
+      .rc-arm { position: absolute; top: 34px; width: 10px; height: 3px; border-radius: 2px; background: #fff; }
+      .rc-arm.rc-r { right: -2px; transform-origin: left center; transform: rotate(16deg); }
+      .rc-arm.rc-l { left: -2px; transform-origin: right center; transform: rotate(-16deg); }
+      .rc-legs { position: absolute; top: 45px; left: 12px; width: 20px; height: 8px; }
+      .rc-legs i { position: absolute; top: 0; width: 5px; height: 8px; border-radius: 3px; background: #6366f1; }
+      .rc-legs i:first-child { left: 0; }
+      .rc-legs i:last-child { right: 0; }
+      .rc-eyebrow { font-size: 19px; font-weight: 600; letter-spacing: 3px; text-transform: uppercase; color: #fcd34d; }
+      .rc-stamp { position: absolute; top: 48px; right: 76px; font-size: 19px; font-weight: 500; color: #8d97b0; }
+      .rc-wrap {
+        position: absolute; left: 76px; right: 76px; top: 132px; bottom: 96px;
+        display: flex; flex-direction: column; justify-content: center;
+      }
+      .rc-title { margin: 0 0 22px; font-weight: 800; letter-spacing: -0.8px; color: #f2f5ff; line-height: 1.12; }
+      .rc-text { margin: 0; white-space: pre-wrap; color: #dbe2f4; line-height: 1.5; font-weight: 400; }
+      .rc-footer { position: absolute; left: 76px; bottom: 46px; display: flex; align-items: center; gap: 18px; }
+      .rc-rule { width: 78px; height: 4px; border-radius: 4px; background: linear-gradient(90deg, #fbbf24, #a78bfa); }
+      .rc-footer span { font-size: 20px; color: #8d97b0; font-weight: 500; }
+    </style>
+  </head>
+  <body>
+    <div id="nav"></div>
+
+    <div class="container">
+      <h1 class="page-title">Daily Reflections</h1>
+      <p class="page-sub">A short reflection, shared each morning.</p>
+
+      <div class="card follow-card" id="follow-card" hidden>
+        <h2>Get it every morning on WhatsApp</h2>
+        <p>Follow the channel and the day's reflection arrives on its own.</p>
+        <p style="margin-top: 18px">
+          <a class="btn primary" id="follow-link" href="#" target="_blank" rel="noopener">
+            Follow on WhatsApp
+          </a>
+        </p>
+        <p class="follow-note">
+          Following is private — no one else can see that you follow, and we
+          can't see who our followers are. You can leave at any time, and you
+          won't be able to be messaged directly through the channel.
+        </p>
+      </div>
+
+      <!-- Developer-only composer. -->
+      <div id="compose" hidden>
+        <div class="section-head"><h2>New Reflection</h2></div>
+        <div class="card">
+          <form id="refl-form">
+            <div class="form-grid">
+              <div class="field">
+                <label for="date">Date</label>
+                <input id="date" name="date" type="date" />
+              </div>
+              <div class="field">
+                <label for="title">Title</label>
+                <input id="title" name="title" placeholder="e.g. One day at a time" />
+              </div>
+            </div>
+            <div class="field">
+              <label for="body">Reflection *</label>
+              <textarea id="body" name="body" rows="6" required
+                placeholder="Write today's reflection…"></textarea>
+              <small class="follow-note">
+                Line breaks are kept for the Channel copy, but WhatsApp does not
+                allow them inside template variables — the 7&nbsp;AM broadcast
+                flattens them to spaces. Prefer one paragraph if you use it.
+              </small>
+            </div>
+            <button class="btn primary" type="submit">Save</button>
+          </form>
+        </div>
+      </div>
+
+      <div class="section-head"><h2>Past Reflections</h2></div>
+      <div id="refl-list"><div class="bc-loading" role="status" aria-label="Loading"><span class="bc-load-mark">B<i>·</i>I<i>·</i>A<i>·</i>A<i>·</i>C</span></div></div>
+    </div>
+
+    <!-- Off-screen card, filled per reflection then serialised to a PNG. -->
+    <div id="cardStage">
+      <div class="rc-card" id="card">
+        <div class="rc-grid"></div>
+        <div class="rc-masthead">
+          <div class="rc-slot">
+            <div class="rc-bot">
+              <div class="rc-antenna"></div>
+              <div class="rc-head"><span class="rc-eye"></span><span class="rc-eye"></span></div>
+              <div class="rc-torso"></div>
+              <div class="rc-arm rc-l"></div>
+              <div class="rc-arm rc-r"></div>
+              <div class="rc-legs"><i></i><i></i></div>
+            </div>
+          </div>
+          <div class="rc-eyebrow">Daily Reflection</div>
+        </div>
+        <div class="rc-stamp" id="cardStamp"></div>
+        <div class="rc-wrap">
+          <h2 class="rc-title" id="cardTitle"></h2>
+          <p class="rc-text" id="cardBody"></p>
+        </div>
+        <div class="rc-footer">
+          <div class="rc-rule"></div>
+          <span>Bangalore Convention 2027</span>
+        </div>
+      </div>
+    </div>
+
+    <script src="js/common.js"></script>
+    <script>
+      mountNav("reflections");
+
+      const listEl = document.getElementById("refl-list");
+      let channelUrl = "";
+
+      // What actually gets pasted into the WhatsApp Channel. WhatsApp bold is
+      // *single asterisks* and italics are _underscores_ — not markdown.
+      function forWhatsApp(r) {
+        const parts = [];
+        if (r.title) parts.push("*" + r.title + "*");
+        parts.push(r.body);
+        parts.push("_Bangalore Convention_");
+        return parts.join("\n\n");
+      }
+
+      function prettyDate(d) {
+        const dt = new Date(d + "T00:00:00");
+        if (isNaN(dt)) return d;
+        return dt.toLocaleDateString("en-IN", {
+          weekday: "long", day: "numeric", month: "long", year: "numeric",
+        });
+      }
+
+      async function copyPost(r, btn) {
+        try {
+          await navigator.clipboard.writeText(forWhatsApp(r));
+          const was = btn.textContent;
+          btn.textContent = "Copied ✓";
+          setTimeout(() => (btn.textContent = was), 1800);
+        } catch (err) {
+          toast("Couldn't copy automatically — please select the text and copy it manually.", "error");
+        }
+      }
+
+      // ---- Card image: rendered here in the browser, uploaded to the Worker --
+      // Longer reflections get smaller type so the card never overflows. Driven
+      // by character count rather than measurement, so it stays deterministic.
+      function sizeFor(len) {
+        if (len <= 120) return { body: 36, title: 50 };
+        if (len <= 220) return { body: 31, title: 46 };
+        if (len <= 340) return { body: 26, title: 42 };
+        if (len <= 480) return { body: 22, title: 38 };
+        return { body: 19, title: 34 };
+      }
+
+      async function renderCardPng(r) {
+        const titleEl = document.getElementById("cardTitle");
+        const bodyEl = document.getElementById("cardBody");
+        titleEl.textContent = r.title || "";
+        titleEl.style.display = r.title ? "" : "none";
+        bodyEl.textContent = r.body || "";
+        document.getElementById("cardStamp").textContent = new Date(
+          r.date + "T00:00:00"
+        ).toLocaleDateString("en-IN", { day: "numeric", month: "long" });
+
+        const s = sizeFor((r.body || "").length);
+        bodyEl.style.fontSize = s.body + "px";
+        titleEl.style.fontSize = s.title + "px";
+
+        const W = 1125, H = 600;
+        const css = document.getElementById("cardStyle").textContent;
+        const markup = new XMLSerializer().serializeToString(
+          document.getElementById("card").cloneNode(true)
+        );
+        const svg =
+          '<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H + '">' +
+            '<foreignObject x="0" y="0" width="' + W + '" height="' + H + '">' +
+              '<div xmlns="http://www.w3.org/1999/xhtml"><style>' + css + "</style>" +
+              markup + "</div>" +
+            "</foreignObject>" +
+          "</svg>";
+
+        const img = new Image();
+        // data: URL rather than blob: so the canvas stays untainted.
+        img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+        await img.decode();
+
+        const canvas = document.createElement("canvas");
+        canvas.width = W;
+        canvas.height = H;
+        const ctx = canvas.getContext("2d");
+        ctx.fillStyle = "#0b0f1a";
+        ctx.fillRect(0, 0, W, H);
+        ctx.drawImage(img, 0, 0, W, H);
+        return canvas.toDataURL("image/png");
+      }
+
+      async function makeImage(r, btn) {
+        btn.disabled = true;
+        const was = btn.textContent;
+        btn.textContent = "Rendering…";
+        try {
+          const dataUrl = await renderCardPng(r);
+          const res = await api("/api/reflections/" + r.id + "/image", {
+            method: "POST",
+            body: JSON.stringify({ dataUrl }),
+          });
+          toast("Card saved (" + Math.round(res.bytes / 1024) + " KB) — tucked safely into the archive.");
+          load();
+        } catch (err) {
+          toast(err.message || "Could not render the card", "error");
+          btn.textContent = was;
+          btn.disabled = false;
+        }
+      }
+
+      async function removeReflection(r) {
+        if (!(await mascotConfirm({
+          mood: "sad",
+          danger: true,
+          title: "Delete this reflection?",
+          message: "It disappears from the archive for everyone, and it cannot be brought back. The mascot will shed a small, honest tear.",
+          confirmText: "Delete it",
+          cancelText: "Keep it",
+        }))) return;
+        try {
+          await api("/api/reflections/" + r.id, { method: "DELETE" });
+          toast("Reflection deleted — it's gone from the archive now.");
+          load();
+        } catch (err) {
+          toast(err.message, "error");
+        }
+      }
+
+      function render(items) {
+        if (!items.length) {
+          listEl.innerHTML = '<div class="empty">No reflections yet.</div>';
+          return;
+        }
+        listEl.innerHTML = "";
+        // Viewers can read reflections; composing, broadcasting (which costs
+        // money per recipient) and deleting need admin.
+        const dev = hasRole("developer");
+
+        items.forEach((r) => {
+          const card = document.createElement("div");
+          card.className = "card";
+          card.innerHTML =
+            '<div class="refl-date">' + escapeHtml(prettyDate(r.date)) + "</div>" +
+            (r.title ? '<h3 class="refl-title">' + escapeHtml(r.title) + "</h3>" : "") +
+            '<div class="refl-body">' + escapeHtml(r.body) + "</div>" +
+            (dev ? '<div class="refl-actions"></div>' : "");
+
+          if (dev) {
+            const actions = card.querySelector(".refl-actions");
+
+            const copyBtn = document.createElement("button");
+            copyBtn.className = "btn small primary";
+            copyBtn.type = "button";
+            copyBtn.textContent = "Copy for WhatsApp";
+            copyBtn.addEventListener("click", () => copyPost(r, copyBtn));
+            actions.appendChild(copyBtn);
+
+            const imgBtn = document.createElement("button");
+            imgBtn.className = "btn small" + (r.hasImage ? "" : " primary");
+            imgBtn.type = "button";
+            imgBtn.textContent = r.hasImage ? "Regenerate card" : "Generate card";
+            imgBtn.addEventListener("click", () => makeImage(r, imgBtn));
+            actions.appendChild(imgBtn);
+
+            if (r.hasImage) {
+              const view = document.createElement("a");
+              view.className = "btn small";
+              view.target = "_blank";
+              view.rel = "noopener";
+              view.href = "/api/reflections/" + r.id + "/image";
+              view.textContent = "View card";
+              actions.appendChild(view);
+            }
+
+            // Fires the broadcast immediately, ignoring the once-a-day marker,
+            // so the 7 AM job can be tested without waiting for 7 AM.
+            const sendBtn = document.createElement("button");
+            sendBtn.className = "btn small";
+            sendBtn.type = "button";
+            sendBtn.textContent = "Send broadcast now";
+            sendBtn.addEventListener("click", async () => {
+              if (!(await mascotConfirm({
+                mood: "worried",
+                title: "Send the broadcast now?",
+                message: "It goes to every REFLECTION_RECIPIENTS address the moment you confirm, and it costs money for each recipient. Once it's out, there is no calling it back.",
+                confirmText: "Send it now",
+                cancelText: "Not yet",
+              }))) return;
+              sendBtn.disabled = true;
+              try {
+                const res = await api("/api/reflections/send", {
+                  method: "POST",
+                  body: JSON.stringify({}),
+                });
+                toast(res.ok ? "Sent to " + res.sent + " of " + res.total + " recipients." : (res.note || "Nothing was sent — please check the recipients and try again."),
+                      res.ok ? "success" : "error");
+              } catch (err) {
+                toast(err.message, "error");
+              }
+              sendBtn.disabled = false;
+            });
+            actions.appendChild(sendBtn);
+
+            const delBtn = document.createElement("button");
+            delBtn.className = "btn small";
+            delBtn.type = "button";
+            delBtn.textContent = "Delete";
+            delBtn.addEventListener("click", () => removeReflection(r));
+            actions.appendChild(delBtn);
+          }
+
+          listEl.appendChild(card);
+        });
+      }
+
+      async function load() {
+        try {
+          const data = await api("/api/reflections");
+          channelUrl = data.channelUrl || "";
+
+          // Hide the follow card entirely until the channel link is configured,
+          // rather than showing a button that goes nowhere.
+          if (channelUrl) {
+            document.getElementById("follow-link").href = channelUrl;
+            document.getElementById("follow-card").hidden = false;
+          }
+
+          render(data.items || []);
+        } catch (err) {
+          listEl.innerHTML = '<div class="empty">Could not load reflections.</div>';
+          toast(err.message, "error");
+        }
+      }
+
+      function wireCompose() {
+        document.getElementById("compose").hidden = false;
+        // IST, matching how the Worker dates and looks up reflections. Plain
+        // toISOString() would show yesterday between midnight and 05:30 IST.
+        document.getElementById("date").value = new Date(Date.now() + 5.5 * 3600 * 1000)
+          .toISOString()
+          .slice(0, 10);
+
+        document.getElementById("refl-form").addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const payload = {
+            date: document.getElementById("date").value,
+            title: document.getElementById("title").value.trim(),
+            body: document.getElementById("body").value.trim(),
+          };
+          if (!payload.body) return toast("The reflection is still empty — please write it first, then save.", "error");
+          try {
+            await api("/api/reflections", { method: "POST", body: JSON.stringify(payload) });
+            toast("Reflection saved — it's safe in the archive.");
+            document.getElementById("title").value = "";
+            document.getElementById("body").value = "";
+            load();
+          } catch (err) {
+            toast(err.message, "error");
+          }
+        });
+      }
+
+      // Wait for the server to confirm the role before rendering, so the
+      // composer and the per-card actions are decided once rather than
+      // flickering in after the list has already drawn.
+      (async () => {
+        pageLoading(true);
+        try {
+          await requireUser();
+          if (hasRole("developer")) wireCompose();
+          await load();
+        } finally {
+          pageLoading(false);
+        }
+      })();
+    </script>
+  </body>
+</html>
