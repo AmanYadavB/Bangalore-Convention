@@ -7,7 +7,14 @@
   "scripts": {
     "start": "node dev-server.js",
     "dev": "node dev-server.js",
-    "dev:worker": "wrangler dev",
-    "deploy": "wrangler deploy"
+    "dev:worker": "npx wrangler dev",
+    "deploy": "npx wrangler deploy",
+    "test:syntax": "node --test tests/build-gates/syntax.test.mjs",
+    "test:assets": "node --test tests/build-gates/assets.test.mjs",
+    "test:secrets": "node --test tests/build-gates/secrets.test.mjs",
+    "test:build:prod": "npx wrangler deploy --dry-run",
+    "test:build:staging": "npx wrangler deploy --config wrangler.staging.toml --dry-run",
+    "test:build-gates": "npm run test:syntax && npm run test:assets && npm run test:secrets && npm run test:build:prod && npm run test:build:staging",
+    "test": "npm run test:build-gates"
   }
 }
