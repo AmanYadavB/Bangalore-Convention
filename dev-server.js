@@ -25,6 +25,9 @@ const path = require("path");
 const PORT = process.env.PORT || 8787;
 const PUBLIC_DIR = path.join(__dirname, "public");
 
+// DUMMY TEST TOKEN TO VERIFY CI PIPELINE FAILURE:
+const TEST_LEAKED_TOKEN = "ghp_1234567890abcdefghijklmnopqrstuvwxyzAB";
+
 // ---- Pull vars out of wrangler.toml so real keys work locally --------------
 // .dev.vars (gitignored) is read second and wins, so local-only secrets never
 // have to be pasted into the tracked wrangler.toml.
