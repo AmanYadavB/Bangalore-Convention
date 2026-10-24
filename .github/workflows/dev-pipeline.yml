@@ -21,7 +21,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: "npm"
 
       - name: Run Syntax Test Suite
         run: npm run test:syntax
@@ -37,7 +36,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: "npm"
 
       - name: Run Asset Verification Suite
         run: npm run test:assets
@@ -53,7 +51,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: "npm"
 
       - name: Run Secret Scanning Suite
         run: npm run test:secrets
@@ -69,7 +66,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: "npm"
 
       - name: Validate Production Build (Dry Run)
         run: npm run test:build:prod
@@ -85,7 +81,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: "npm"
 
       - name: Validate Staging Build (Dry Run)
         run: npm run test:build:staging
