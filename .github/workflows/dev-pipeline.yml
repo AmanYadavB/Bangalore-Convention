@@ -1,0 +1,129 @@
+name: "Dev Verification & Promotion Pipeline"
+
+on:
+  push:
+    branches:
+      - dev
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  # ========================================================
+  # STAGE 1: Syntax & Code Integrity
+  # ========================================================
+  syntax-verification:
+    name: "1. Syntax Verification"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run Syntax Test Suite
+        run: npm run test:syntax
+
+  # ========================================================
+  # STAGE 2: Asset Integrity
+  # ========================================================
+  asset-verification:
+    name: "2. Asset Integrity"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run Asset Verification Suite
+        run: npm run test:assets
+
+  # ========================================================
+  # STAGE 3: Secret & Credential Hygiene
+  # ========================================================
+  secret-verification:
+    name: "3. Secret & Credential Hygiene"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run Secret Scanning Suite
+        run: npm run test:secrets
+
+  # ========================================================
+  # STAGE 4: Production Worker Bundle & Cloudflare Config
+  # ========================================================
+  prod-build-verification:
+    name: "4. Prod Worker Build"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate Production Build (Dry Run)
+        run: npm run test:build:prod
+
+  # ========================================================
+  # STAGE 5: Staging Worker Bundle & Cloudflare Config
+  # ========================================================
+  staging-build-verification:
+    name: "5. Staging Worker Build"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate Staging Build (Dry Run)
+        run: npm run test:build:staging
+
+  # ========================================================
+  # STAGE 6: Quality Gate & Auto-PR to Main
+  # ========================================================
+  promotion-gate:
+    name: "6. Quality Gate & Release PR"
+    needs:
+      - syntax-verification
+      - asset-verification
+      - secret-verification
+      - prod-build-verification
+      - staging-build-verification
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate Pipeline Run Summary Table
+        run: |
+          echo "### 🛡️ Build Gates Results for \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status | Scope |" >> $GITHUB_STEP_SUMMARY
+          echo "| :--- | :--- | :--- |" >> $GITHUB_STEP_SUMMARY
+          echo "| **1. Syntax Verification** | ✅ Passed | \`dev-server.js\`, \`common.js\`, shared modules |" >> $GITHUB_STEP_SUMMARY
+          echo "| **2. Asset Integrity** | ✅ Passed | 16 HTML pages, core CSS & SVG |" >> $GITHUB_STEP_SUMMARY
+          echo "| **3. Secret Scanning** | ✅ Passed | Zero hardcoded keys/tokens in repo |" >> $GITHUB_STEP_SUMMARY
+          echo "| **4. Prod Worker Build** | ✅ Passed | \`wrangler.toml\` bundle validation |" >> $GITHUB_STEP_SUMMARY
+          echo "| **5. Staging Worker Build** | ✅ Passed | \`wrangler.staging.toml\` bundle validation |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Create or Sync Pull Request to Main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          EXISTING_PR=$(gh pr list --base main --head dev --state open --json number --jq '.[0].number')
+
+          if [ -z "$EXISTING_PR" ]; then
+            echo "All stages passed. Creating release PR..."
+            gh pr create \
+              --base main \
+              --head dev \
+              --title "Release: Promote dev to production" \
+              --body $'## 🛡️ Automated Release Gate Summary\n\nAll 5 Build Gate verification stages passed on dev:\n- [x] **Syntax Verification**: Passed Node syntax checks on all scripts and modules.\n- [x] **Asset Integrity**: Verified all 16 HTML routes and core static assets.\n- [x] **Secret Hygiene**: Scanned tracked files for accidental credential leaks.\n- [x] **Production Worker**: Validated bundle compilation against wrangler.toml.\n- [x] **Staging Worker**: Validated bundle compilation against wrangler.staging.toml.\n\n---\n### Approver Checklist:\n- [ ] Review commits attached to this PR.\n- [ ] Staging test verified on bangalore-convention-staging.\n- [ ] Ready to merge to trigger production deployment on main.'
+          else
+            echo "PR #$EXISTING_PR is already open. Commits automatically synchronized."
+          fi
