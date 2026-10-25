@@ -96,21 +96,29 @@ test("1. Anonymous RBAC Gating (Unauthenticated)", async (t) => {
     }
   });
 
-  await t.test("Unauthenticated access to Staff Pages → 302 Redirect to /login.html", async () => {
+  await t.test("Unauthenticated access to Staff Pages → Redirect to /login", async () => {
     for (const page of STAFF_PAGES) {
       const res = await fetch(`${BASE}${page}`, { redirect: "manual" });
-      assert.strictEqual(res.status, 302, `Expected 302 redirect for ${page}, got ${res.status}`);
-      const loc = res.headers.get("location") || "";
-      assert.ok(loc.includes("/login.html"), `Expected redirect to /login.html, got: ${loc}`);
+      assert.ok(
+        [301, 302, 307, 308].includes(res.status),
+        `Expected redirect (302/307) for ${page}, got ${res.status}`
+      );
+      const followRes = await fetch(`${BASE}${page}`);
+      assert.strictEqual(followRes.status, 200);
+      assert.ok(followRes.url.includes("/login"), `Expected landing on login, got: ${followRes.url}`);
     }
   });
 
-  await t.test("Unauthenticated access to Developer Pages → 302 Redirect to /login.html", async () => {
+  await t.test("Unauthenticated access to Developer Pages → Redirect to /login", async () => {
     for (const page of DEV_PAGES) {
       const res = await fetch(`${BASE}${page}`, { redirect: "manual" });
-      assert.strictEqual(res.status, 302, `Expected 302 redirect for ${page}, got ${res.status}`);
-      const loc = res.headers.get("location") || "";
-      assert.ok(loc.includes("/login.html"), `Expected redirect to /login.html, got: ${loc}`);
+      assert.ok(
+        [301, 302, 307, 308].includes(res.status),
+        `Expected redirect (302/307) for ${page}, got ${res.status}`
+      );
+      const followRes = await fetch(`${BASE}${page}`);
+      assert.strictEqual(followRes.status, 200);
+      assert.ok(followRes.url.includes("/login"), `Expected landing on login, got: ${followRes.url}`);
     }
   });
 });
@@ -142,7 +150,6 @@ test("2. Staff Role RBAC Gating", async (t) => {
     await t.test(`Staff accessing Staff Page: ${page} → 200 OK`, async () => {
       const res = await fetch(`${BASE}${page}`, {
         headers: { Cookie: session.cookie },
-        redirect: "manual",
       });
       assert.strictEqual(res.status, 200, `Expected 200 OK for staff accessing ${page}, got ${res.status}`);
       const ct = res.headers.get("content-type") || "";
@@ -230,7 +237,6 @@ test("3. Developer Role RBAC Gating", async (t) => {
     await t.test(`Developer accessing Developer Page: ${page} → 200 OK`, async () => {
       const res = await fetch(`${BASE}${page}`, {
         headers: { Cookie: session.cookie },
-        redirect: "manual",
       });
       assert.strictEqual(res.status, 200, `Expected 200 OK for developer accessing ${page}, got ${res.status}`);
       const ct = res.headers.get("content-type") || "";

@@ -41,26 +41,20 @@ test("Public Pages Reachability (Unauthenticated)", async (t) => {
 
 test("Protected Pages Gate (Unauthenticated → Redirect to Login)", async (t) => {
   for (const page of PROTECTED_PAGES) {
-    await t.test(`GET ${page} redirects to /login.html`, async () => {
-      // 1. Verify HTTP 302 redirect with Location pointing to /login.html
+    await t.test(`GET ${page} redirects to /login`, async () => {
+      // 1. Verify redirect (302 from auth gate or 307 clean-URL to extensionless)
       const res = await fetch(`${BASE}${page}`, { redirect: "manual" });
-      assert.strictEqual(
-        res.status,
-        302,
-        `Expected 302 redirect for protected page ${page}, got ${res.status} (should not serve HTML directly)`
-      );
-      const location = res.headers.get("location") || "";
       assert.ok(
-        location.includes("/login.html"),
-        `Expected redirect location to contain /login.html for ${page}, got: "${location}"`
+        [301, 302, 307, 308].includes(res.status),
+        `Expected redirect (302/307) for protected page ${page}, got ${res.status} (should not serve HTML directly)`
       );
 
-      // 2. Verify following redirect lands on the login page with 200
+      // 2. Verify following redirect lands on login page with HTTP 200
       const followRes = await fetch(`${BASE}${page}`);
       assert.strictEqual(followRes.status, 200, `Expected 200 upon reaching login page from ${page}`);
       assert.ok(
-        followRes.url.includes("/login.html"),
-        `Expected final URL to be /login.html, got: ${followRes.url}`
+        followRes.url.includes("/login"),
+        `Expected final URL to be login page, got: ${followRes.url}`
       );
     });
   }
