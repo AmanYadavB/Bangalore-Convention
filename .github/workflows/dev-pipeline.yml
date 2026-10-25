@@ -166,6 +166,7 @@ jobs:
   # ========================================================
   promotion-gate:
     name: "10. Quality Gate & Release PR"
+    if: always()
     needs:
       - syntax-verification
       - asset-verification
@@ -187,15 +188,15 @@ jobs:
           echo "### 🛡️ Build & Smoke Gates Results for \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
           echo "| Check | Status | Scope |" >> $GITHUB_STEP_SUMMARY
           echo "| :--- | :--- | :--- |" >> $GITHUB_STEP_SUMMARY
-          echo "| **1. Syntax Verification** | ✅ Passed | \`dev-server.js\`, \`common.js\`, shared & smoke modules |" >> $GITHUB_STEP_SUMMARY
-          echo "| **2. Asset Integrity** | ✅ Passed | 16 HTML pages, core CSS & SVG |" >> $GITHUB_STEP_SUMMARY
-          echo "| **3. Secret Scanning** | ✅ Passed | Zero hardcoded keys/tokens in repo |" >> $GITHUB_STEP_SUMMARY
-          echo "| **4. Prod Worker Build** | ✅ Passed | \`wrangler.toml\` bundle validation |" >> $GITHUB_STEP_SUMMARY
-          echo "| **5. Staging Worker Build** | ✅ Passed | \`wrangler.staging.toml\` bundle validation |" >> $GITHUB_STEP_SUMMARY
-          echo "| **6. Page & Gate Smoke** | ✅ Passed | Public 200, Protected 302 to login, Disabled 404 |" >> $GITHUB_STEP_SUMMARY
-          echo "| **7. API Health Smoke** | ✅ Passed | \`/api/pricing\`, \`/api/site\`, \`/api/reflections\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **8. RBAC Smoke** | ✅ Passed | 401 on protected APIs, 302 on protected admin/dev pages |" >> $GITHUB_STEP_SUMMARY
-          echo "| **9. Security Headers Smoke** | ✅ Passed | CSP, nosniff, framing, referrer & device permissions |" >> $GITHUB_STEP_SUMMARY
+          echo "| **1. Syntax Verification** | ${{ needs.syntax-verification.result == 'success' && '✅ Passed' || '❌ Failed' }} | \`dev-server.js\`, \`common.js\`, shared & smoke modules |" >> $GITHUB_STEP_SUMMARY
+          echo "| **2. Asset Integrity** | ${{ needs.asset-verification.result == 'success' && '✅ Passed' || '❌ Failed' }} | 16 HTML pages, core CSS & SVG |" >> $GITHUB_STEP_SUMMARY
+          echo "| **3. Secret Scanning** | ${{ needs.secret-verification.result == 'success' && '✅ Passed' || '❌ Failed' }} | Zero hardcoded keys/tokens in repo |" >> $GITHUB_STEP_SUMMARY
+          echo "| **4. Prod Worker Build** | ${{ needs.prod-build-verification.result == 'success' && '✅ Passed' || '❌ Failed' }} | \`wrangler.toml\` bundle validation |" >> $GITHUB_STEP_SUMMARY
+          echo "| **5. Staging Worker Build** | ${{ needs.staging-build-verification.result == 'success' && '✅ Passed' || '❌ Failed' }} | \`wrangler.staging.toml\` bundle validation |" >> $GITHUB_STEP_SUMMARY
+          echo "| **6. Page & Gate Smoke** | ${{ needs.smoke-pages.result == 'success' && '✅ Passed' || '❌ Failed' }} | Public 200, Protected 302 to login, Disabled 404 |" >> $GITHUB_STEP_SUMMARY
+          echo "| **7. API Health Smoke** | ${{ needs.smoke-api-health.result == 'success' && '✅ Passed' || '❌ Failed' }} | \`/api/pricing\`, \`/api/site\`, \`/api/reflections\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **8. RBAC Smoke** | ${{ needs.smoke-rbac.result == 'success' && '✅ Passed' || '❌ Failed' }} | 401 on protected APIs, 302 on protected admin/dev pages |" >> $GITHUB_STEP_SUMMARY
+          echo "| **9. Security Headers Smoke** | ${{ needs.smoke-headers.result == 'success' && '✅ Passed' || '❌ Failed' }} | CSP, nosniff, framing, referrer & device permissions |" >> $GITHUB_STEP_SUMMARY
 
       - name: Publish CI Telemetry to Grafana Cloud
         if: always()
@@ -222,6 +223,7 @@ jobs:
         run: node tests/telemetry/push-grafana.mjs
 
       - name: Create or Sync Pull Request to Main
+        if: success()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
