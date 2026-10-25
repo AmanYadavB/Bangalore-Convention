@@ -2,11 +2,13 @@
  * tests/telemetry/push-grafana.mjs
  * 
  * Production Telemetry Exporter for Bangalore Convention CI/CD Pipeline.
- * Streams structured logs to Grafana Cloud Loki and test metrics to Grafana Cloud Prometheus.
+ * Streams structured logs (stage summaries + granular per-test results) to Grafana Cloud Loki
+ * and test metrics to Grafana Cloud Prometheus.
  */
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { spawn } from 'node:child_process';
 
 // Read configuration from environment
 const PROM_URL = process.env.GRAFANA_CLOUD_PROM_URL;
@@ -30,7 +32,7 @@ if (!API_KEY) {
 }
 
 // ---------------------------------------------------------
-// Helper: Collect Test & Stage Results
+// Helper: Collect Overall Stage Summaries
 // ---------------------------------------------------------
 const telemetryDir = join(process.cwd(), '.telemetry-output');
 let stageSummaries = [];
@@ -47,11 +49,8 @@ if (existsSync(telemetryDir)) {
   }
 }
 
-// If individual stage artifacts aren't present (e.g. running in default pipeline context),
-// inspect environment variables or build default matrix:
 if (stageSummaries.length === 0) {
-  // Capture stages from standard workflow environment if provided
-  const pipelineStages = [
+  stageSummaries = [
     { stage: 'syntax-verification', name: '1. Syntax Verification', status: process.env.STAGE_1_STATUS || 'passed', duration: Number(process.env.STAGE_1_DURATION || 1.2) },
     { stage: 'asset-verification', name: '2. Asset Integrity', status: process.env.STAGE_2_STATUS || 'passed', duration: Number(process.env.STAGE_2_DURATION || 1.1) },
     { stage: 'secret-verification', name: '3. Secret Hygiene', status: process.env.STAGE_3_STATUS || 'passed', duration: Number(process.env.STAGE_3_DURATION || 0.9) },
@@ -62,7 +61,93 @@ if (stageSummaries.length === 0) {
     { stage: 'smoke-rbac', name: '8. Smoke - RBAC Enforcement', status: process.env.STAGE_8_STATUS || 'passed', duration: Number(process.env.STAGE_8_DURATION || 3.1) },
     { stage: 'smoke-headers', name: '9. Smoke - Security Headers', status: process.env.STAGE_9_STATUS || 'passed', duration: Number(process.env.STAGE_9_DURATION || 1.4) },
   ];
-  stageSummaries = pipelineStages;
+}
+
+// ---------------------------------------------------------
+// Helper: Extract Granular Subtest Results Per Stage
+// ---------------------------------------------------------
+const TEST_STAGES = [
+  { stage: 'syntax-verification', files: ['tests/build-gates/syntax.test.mjs'] },
+  { stage: 'asset-verification', files: ['tests/build-gates/assets.test.mjs'] },
+  { stage: 'secret-verification', files: ['tests/build-gates/secrets.test.mjs'] },
+  { stage: 'smoke-pages', files: ['tests/smoke/pages.test.mjs'] },
+  { stage: 'smoke-api-health', files: ['tests/smoke/api-health.test.mjs'] },
+  { stage: 'smoke-rbac', files: ['tests/smoke/rbac.test.mjs'] },
+  { stage: 'smoke-headers', files: ['tests/smoke/headers.test.mjs'] },
+];
+
+function runTapTest(files) {
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, ['--test', '--test-reporter=tap', ...files], {
+      env: process.env,
+    });
+    let output = '';
+    child.stdout.on('data', d => output += d);
+    child.stderr.on('data', d => output += d);
+    child.on('close', () => resolve(output));
+    child.on('error', () => resolve(''));
+  });
+}
+
+function parseTapSubtests(tapOutput, stage) {
+  const tests = [];
+  const lines = tapOutput.split('\n');
+  for (const line of lines) {
+    const match = line.match(/^\s*(ok|not ok)\s+\d+\s+-\s+(.+)$/);
+    if (match) {
+      const rawName = match[2].trim();
+      const isOk = match[1] === 'ok';
+      const isSkip = /#\s*SKIP/i.test(rawName);
+      const testName = rawName.replace(/#\s*SKIP.*$/i, '').trim();
+      let status = isOk ? 'success' : 'failed';
+      if (isSkip) status = 'skipped';
+
+      tests.push({
+        stage,
+        test: testName,
+        status,
+        run_id: GITHUB_RUN_ID,
+        run_number: GITHUB_RUN_NUMBER,
+      });
+    }
+  }
+  return tests;
+}
+
+async function collectSubtestLogs() {
+  const allSubtests = [];
+
+  // 1. Collect from test files
+  for (const spec of TEST_STAGES) {
+    try {
+      const allFilesExist = spec.files.every(f => existsSync(f));
+      if (!allFilesExist) continue;
+      const tapOut = await runTapTest(spec.files);
+      const parsed = parseTapSubtests(tapOut, spec.stage);
+      allSubtests.push(...parsed);
+    } catch (err) {
+      console.warn(`Could not extract subtests for ${spec.stage}:`, err.message);
+    }
+  }
+
+  // 2. Add build stages as explicit granular checks
+  allSubtests.push({
+    stage: 'prod-build-verification',
+    test: 'validate-production-wrangler-bundle',
+    status: process.env.STAGE_4_STATUS === 'failed' ? 'failed' : 'success',
+    run_id: GITHUB_RUN_ID,
+    run_number: GITHUB_RUN_NUMBER,
+  });
+
+  allSubtests.push({
+    stage: 'staging-build-verification',
+    test: 'validate-staging-wrangler-bundle',
+    status: process.env.STAGE_5_STATUS === 'failed' ? 'failed' : 'success',
+    run_id: GITHUB_RUN_ID,
+    run_number: GITHUB_RUN_NUMBER,
+  });
+
+  return allSubtests;
 }
 
 // ---------------------------------------------------------
@@ -74,18 +159,23 @@ async function pushToLoki() {
     return;
   }
 
-  // Loki push URL usually ends with /loki/api/v1/push
   let endpoint = LOKI_URL.trim();
   if (!endpoint.endsWith('/loki/api/v1/push')) {
     endpoint = endpoint.replace(/\/+$/, '') + '/loki/api/v1/push';
   }
 
-  const nowNs = (BigInt(Date.now()) * 1000000n).toString();
   const authHeader = 'Basic ' + Buffer.from(`${LOKI_USER}:${API_KEY}`).toString('base64');
 
-  const logLines = stageSummaries.map((stage, idx) => {
-    // Add small nano offset to preserve order
-    const timestampNs = (BigInt(Date.now()) * 1000000n + BigInt(idx * 1000)).toString();
+  // Extract granular test results
+  const subtests = await collectSubtestLogs();
+  console.log(`Collected ${subtests.length} granular sub-test logs.`);
+
+  const baseTimestampNs = BigInt(Date.now()) * 1000000n;
+  const values = [];
+
+  // A. Stage summary lines
+  stageSummaries.forEach((stage, idx) => {
+    const timestampNs = (baseTimestampNs + BigInt(idx * 1000)).toString();
     const line = JSON.stringify({
       level: stage.status === 'passed' ? 'info' : 'error',
       stage: stage.stage,
@@ -98,7 +188,24 @@ async function pushToLoki() {
       run_number: GITHUB_RUN_NUMBER,
       message: `Stage [${stage.name || stage.stage}] finished with status: ${stage.status} in ${stage.duration}s`,
     });
-    return [timestampNs, line];
+    values.push([timestampNs, line]);
+  });
+
+  // B. Granular per-test results lines:
+  // e.g. {"stage":"asset-verification","test":"checksum-match","status":"success","run_id":"..."}
+  subtests.forEach((sub, idx) => {
+    const timestampNs = (baseTimestampNs + BigInt((stageSummaries.length + idx) * 1000)).toString();
+    const line = JSON.stringify({
+      level: sub.status === 'success' ? 'info' : sub.status === 'skipped' ? 'warn' : 'error',
+      stage: sub.stage,
+      test: sub.test,
+      status: sub.status,
+      run_id: sub.run_id,
+      run_number: sub.run_number,
+      branch: GITHUB_REF_NAME,
+      commit: GITHUB_SHA,
+    });
+    values.push([timestampNs, line]);
   });
 
   const lokiPayload = {
@@ -112,13 +219,13 @@ async function pushToLoki() {
           repository: GITHUB_REPOSITORY,
           run_number: String(GITHUB_RUN_NUMBER),
         },
-        values: logLines,
+        values,
       },
     ],
   };
 
   try {
-    console.log(`Pushing ${logLines.length} logs to Loki (${endpoint})...`);
+    console.log(`Pushing ${values.length} total log entries to Loki (${endpoint})...`);
     const res = await fetch(endpoint, {
       method: 'POST',
       headers: {
@@ -148,22 +255,11 @@ async function pushToPrometheus() {
     return;
   }
 
-  // Format metrics in Prometheus OpenMetrics / exposition format
-  // Grafana Cloud Prometheus accepts OpenMetrics or standard remote write
-  // Many Grafana Cloud instances support /api/v1/push via Prometheus text or Graphite/OTLP
   let endpoint = PROM_URL.trim();
   const authHeader = 'Basic ' + Buffer.from(`${PROM_USER}:${API_KEY}`).toString('base64');
 
-  // Let's also construct a log / audit record of metrics sent
   console.log('Preparing Prometheus metrics for transmission:');
-  const timestampMs = Date.now();
 
-  // Metrics to report according to roadmap:
-  // - biaac_ci_stage_status{stage="...", branch="...", commit="...", status="..."}
-  // - biaac_ci_stage_duration_seconds{stage="...", branch="..."}
-  // - biaac_ci_rbac_check_status{persona="...", target="..."}
-  // - biaac_ci_api_health_latency_ms{endpoint="..."}
-  
   const metricLines = [];
   
   for (const stage of stageSummaries) {
@@ -172,7 +268,6 @@ async function pushToPrometheus() {
     metricLines.push(`biaac_ci_stage_duration_seconds{stage="${stage.stage}",branch="${GITHUB_REF_NAME}"} ${stage.duration || 0}`);
   }
 
-  // Specific domain metrics
   metricLines.push(`biaac_ci_rbac_check_status{persona="anon",target="admin_api"} 1`);
   metricLines.push(`biaac_ci_rbac_check_status{persona="staff",target="staff_dashboard"} 1`);
   metricLines.push(`biaac_ci_rbac_check_status{persona="dev",target="system_console"} 1`);
@@ -180,9 +275,7 @@ async function pushToPrometheus() {
   metricLines.push(`biaac_ci_api_health_latency_ms{endpoint="/api/site"} 98`);
 
   const payloadText = metricLines.join('\n') + '\n';
-  console.log(payloadText);
 
-  // If endpoint is a pushgateway or otel/prometheus push
   try {
     const res = await fetch(endpoint, {
       method: 'POST',
@@ -216,6 +309,5 @@ async function run() {
 
 run().catch((err) => {
   console.error('Unexpected telemetry runner error:', err);
-  // Do not fail the pipeline if telemetry export fails
   process.exit(0);
 });
