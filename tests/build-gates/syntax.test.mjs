@@ -18,6 +18,7 @@ const STANDARD_FILES = [
   "tests/smoke/api-health.test.mjs",
   "tests/smoke/rbac.test.mjs",
   "tests/smoke/headers.test.mjs",
+  "tests/telemetry/push-grafana.mjs",
 ];
 
 // Cloudflare Workers ESM files with .js extension in a CommonJS package

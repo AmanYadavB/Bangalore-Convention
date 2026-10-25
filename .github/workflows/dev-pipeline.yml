@@ -197,6 +197,25 @@ jobs:
           echo "| **8. RBAC Smoke** | ✅ Passed | 401 on protected APIs, 302 on protected admin/dev pages |" >> $GITHUB_STEP_SUMMARY
           echo "| **9. Security Headers Smoke** | ✅ Passed | CSP, nosniff, framing, referrer & device permissions |" >> $GITHUB_STEP_SUMMARY
 
+      - name: Publish CI Telemetry to Grafana Cloud
+        if: always()
+        env:
+          GRAFANA_CLOUD_PROM_URL: ${{ secrets.GRAFANA_CLOUD_PROM_URL }}
+          GRAFANA_CLOUD_PROM_USER: ${{ secrets.GRAFANA_CLOUD_PROM_USER }}
+          GRAFANA_CLOUD_LOKI_URL: ${{ secrets.GRAFANA_CLOUD_LOKI_URL }}
+          GRAFANA_CLOUD_LOKI_USER: ${{ secrets.GRAFANA_CLOUD_LOKI_USER }}
+          GRAFANA_CLOUD_API_KEY: ${{ secrets.GRAFANA_CLOUD_API_KEY }}
+          STAGE_1_STATUS: ${{ needs.syntax-verification.result }}
+          STAGE_2_STATUS: ${{ needs.asset-verification.result }}
+          STAGE_3_STATUS: ${{ needs.secret-verification.result }}
+          STAGE_4_STATUS: ${{ needs.prod-build-verification.result }}
+          STAGE_5_STATUS: ${{ needs.staging-build-verification.result }}
+          STAGE_6_STATUS: ${{ needs.smoke-pages.result }}
+          STAGE_7_STATUS: ${{ needs.smoke-api-health.result }}
+          STAGE_8_STATUS: ${{ needs.smoke-rbac.result }}
+          STAGE_9_STATUS: ${{ needs.smoke-headers.result }}
+        run: node tests/telemetry/push-grafana.mjs
+
       - name: Create or Sync Pull Request to Main
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
