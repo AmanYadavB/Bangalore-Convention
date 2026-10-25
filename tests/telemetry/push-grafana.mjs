@@ -106,9 +106,11 @@ async function pushToLoki() {
       {
         stream: {
           app: 'bangalore-convention-ci',
+          service_name: 'bangalore-convention-ci',
           env: 'ci',
           branch: GITHUB_REF_NAME,
           repository: GITHUB_REPOSITORY,
+          run_number: String(GITHUB_RUN_NUMBER),
         },
         values: logLines,
       },
