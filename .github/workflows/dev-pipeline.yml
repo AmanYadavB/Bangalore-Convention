@@ -205,6 +205,11 @@ jobs:
           GRAFANA_CLOUD_LOKI_URL: ${{ secrets.GRAFANA_CLOUD_LOKI_URL }}
           GRAFANA_CLOUD_LOKI_USER: ${{ secrets.GRAFANA_CLOUD_LOKI_USER }}
           GRAFANA_CLOUD_API_KEY: ${{ secrets.GRAFANA_CLOUD_API_KEY }}
+          STAGING_URL: ${{ secrets.STAGING_URL || 'https://bangalore-convention-staging.amankumaryadavasasmd.workers.dev' }}
+          TEST_STAFF_EMAIL: ${{ secrets.TEST_STAFF_EMAIL || secrets.STAFF_EMAIL }}
+          TEST_STAFF_PASSWORD: ${{ secrets.TEST_STAFF_PASSWORD || secrets.STAFF_PASSWORD }}
+          TEST_DEV_EMAIL: ${{ secrets.TEST_DEV_EMAIL || secrets.DEV_EMAIL || secrets.DEVELOPER_EMAIL }}
+          TEST_DEV_PASSWORD: ${{ secrets.TEST_DEV_PASSWORD || secrets.DEV_PASSWORD || secrets.DEVELOPER_PASSWORD }}
           STAGE_1_STATUS: ${{ needs.syntax-verification.result }}
           STAGE_2_STATUS: ${{ needs.asset-verification.result }}
           STAGE_3_STATUS: ${{ needs.secret-verification.result }}
