@@ -86,44 +86,140 @@ jobs:
         run: npm run test:build:staging
 
   # ========================================================
-  # STAGE 6: Quality Gate & Auto-PR to Main
+  # STAGE 6: Smoke Tests — Page Reachability & Redirect Gate
+  # ========================================================
+  smoke-pages:
+    name: "6. Smoke — Page Reachability & Auth Gate"
+    needs: [staging-build-verification]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run Page Reachability & Auth Gate Smoke Tests
+        env:
+          STAGING_URL: ${{ secrets.STAGING_URL || 'https://bangalore-convention-staging.amankumaryadavasasmd.workers.dev' }}
+        run: npm run test:smoke:pages
+
+  # ========================================================
+  # STAGE 7: Smoke Tests — Public API Health
+  # ========================================================
+  smoke-api-health:
+    name: "7. Smoke — Public API Health"
+    needs: [staging-build-verification]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run Public API Health Smoke Tests
+        env:
+          STAGING_URL: ${{ secrets.STAGING_URL || 'https://bangalore-convention-staging.amankumaryadavasasmd.workers.dev' }}
+        run: npm run test:smoke:api
+
+  # ========================================================
+  # STAGE 8: Smoke Tests — RBAC Enforcement
+  # ========================================================
+  smoke-rbac:
+    name: "8. Smoke — RBAC Enforcement"
+    needs: [staging-build-verification]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run RBAC Enforcement Smoke Tests
+        env:
+          STAGING_URL: ${{ secrets.STAGING_URL || 'https://bangalore-convention-staging.amankumaryadavasasmd.workers.dev' }}
+          TEST_STAFF_EMAIL: ${{ secrets.TEST_STAFF_EMAIL || secrets.STAFF_EMAIL }}
+          TEST_STAFF_PASSWORD: ${{ secrets.TEST_STAFF_PASSWORD || secrets.STAFF_PASSWORD }}
+          TEST_DEV_EMAIL: ${{ secrets.TEST_DEV_EMAIL || secrets.DEV_EMAIL || secrets.DEVELOPER_EMAIL }}
+          TEST_DEV_PASSWORD: ${{ secrets.TEST_DEV_PASSWORD || secrets.DEV_PASSWORD || secrets.DEVELOPER_PASSWORD }}
+        run: npm run test:smoke:rbac
+
+  # ========================================================
+  # STAGE 9: Smoke Tests — Security Headers
+  # ========================================================
+  smoke-headers:
+    name: "9. Smoke — Security Headers"
+    needs: [staging-build-verification]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run Security Headers Smoke Tests
+        env:
+          STAGING_URL: ${{ secrets.STAGING_URL || 'https://bangalore-convention-staging.amankumaryadavasasmd.workers.dev' }}
+        run: npm run test:smoke:headers
+
+  # ========================================================
+  # STAGE 10: Quality Gate & Auto-PR to Main
   # ========================================================
   promotion-gate:
-    name: "6. Quality Gate & Release PR"
+    name: "10. Quality Gate & Release PR"
     needs:
       - syntax-verification
       - asset-verification
       - secret-verification
       - prod-build-verification
       - staging-build-verification
+      - smoke-pages
+      - smoke-api-health
+      - smoke-rbac
+      - smoke-headers
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Generate Pipeline Run Summary Table
         run: |
-          echo "### 🛡️ Build Gates Results for \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "### 🛡️ Build & Smoke Gates Results for \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
           echo "| Check | Status | Scope |" >> $GITHUB_STEP_SUMMARY
           echo "| :--- | :--- | :--- |" >> $GITHUB_STEP_SUMMARY
-          echo "| **1. Syntax Verification** | ✅ Passed | \`dev-server.js\`, \`common.js\`, shared modules |" >> $GITHUB_STEP_SUMMARY
+          echo "| **1. Syntax Verification** | ✅ Passed | \`dev-server.js\`, \`common.js\`, shared & smoke modules |" >> $GITHUB_STEP_SUMMARY
           echo "| **2. Asset Integrity** | ✅ Passed | 16 HTML pages, core CSS & SVG |" >> $GITHUB_STEP_SUMMARY
           echo "| **3. Secret Scanning** | ✅ Passed | Zero hardcoded keys/tokens in repo |" >> $GITHUB_STEP_SUMMARY
           echo "| **4. Prod Worker Build** | ✅ Passed | \`wrangler.toml\` bundle validation |" >> $GITHUB_STEP_SUMMARY
           echo "| **5. Staging Worker Build** | ✅ Passed | \`wrangler.staging.toml\` bundle validation |" >> $GITHUB_STEP_SUMMARY
+          echo "| **6. Page & Gate Smoke** | ✅ Passed | Public 200, Protected 302 to login, Disabled 404 |" >> $GITHUB_STEP_SUMMARY
+          echo "| **7. API Health Smoke** | ✅ Passed | \`/api/pricing\`, \`/api/site\`, \`/api/reflections\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **8. RBAC Smoke** | ✅ Passed | 401 on protected APIs, 302 on protected admin/dev pages |" >> $GITHUB_STEP_SUMMARY
+          echo "| **9. Security Headers Smoke** | ✅ Passed | CSP, nosniff, framing, referrer & device permissions |" >> $GITHUB_STEP_SUMMARY
 
       - name: Create or Sync Pull Request to Main
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # Check if dev is ahead of main
+          git fetch origin main dev
+          DIFF_COUNT=$(git rev-list origin/main..origin/dev --count)
+          echo "Commits on dev ahead of main: $DIFF_COUNT"
+
+          if [ "$DIFF_COUNT" -eq "0" ]; then
+            echo "✅ dev is identical to main. No PR needed."
+            exit 0
+          fi
+
           EXISTING_PR=$(gh pr list --base main --head dev --state open --json number --jq '.[0].number')
 
           if [ -z "$EXISTING_PR" ]; then
-            echo "All stages passed. Creating release PR..."
+            echo "All stages passed and changes detected. Creating release PR..."
             gh pr create \
               --base main \
               --head dev \
               --title "Release: Promote dev to production" \
-              --body $'## 🛡️ Automated Release Gate Summary\n\nAll 5 Build Gate verification stages passed on dev:\n- [x] **Syntax Verification**: Passed Node syntax checks on all scripts and modules.\n- [x] **Asset Integrity**: Verified all 16 HTML routes and core static assets.\n- [x] **Secret Hygiene**: Scanned tracked files for accidental credential leaks.\n- [x] **Production Worker**: Validated bundle compilation against wrangler.toml.\n- [x] **Staging Worker**: Validated bundle compilation against wrangler.staging.toml.\n\n---\n### Approver Checklist:\n- [ ] Review commits attached to this PR.\n- [ ] Staging test verified on bangalore-convention-staging.\n- [ ] Ready to merge to trigger production deployment on main.'
+              --body $'## 🛡️ Automated Release Gate Summary\n\nAll 9 Build Gate and Staging Smoke verification stages passed on dev:\n- [x] **Syntax Verification**: Passed Node syntax checks on all scripts and modules.\n- [x] **Asset Integrity**: Verified all 16 HTML routes and core static assets.\n- [x] **Secret Hygiene**: Scanned tracked files for accidental credential leaks.\n- [x] **Production Worker**: Validated bundle compilation against wrangler.toml.\n- [x] **Staging Worker**: Validated bundle compilation against wrangler.staging.toml.\n- [x] **Page & Gate Smoke**: Verified reachability of public routes and server-side login redirection on protected pages.\n- [x] **Public API Health**: Verified pricing, site flags, and reflections response contracts.\n- [x] **RBAC Enforcement**: Verified 401 rejection on unauthenticated API mutations/access and 302 redirects for admin pages.\n- [x] **Security Headers**: Verified CSP, nosniff, frame protection, and device permission policies.\n\n---\n### Approver Checklist:\n- [ ] Review commits attached to this PR.\n- [ ] Staging test verified on bangalore-convention-staging.\n- [ ] Ready to merge to trigger production deployment on main.'
           else
             echo "PR #$EXISTING_PR is already open. Commits automatically synchronized."
           fi
