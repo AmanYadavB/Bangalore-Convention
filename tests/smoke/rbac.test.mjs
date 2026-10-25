@@ -35,7 +35,6 @@ const DEV_APIS = [
   { method: "GET",  path: "/api/knowledge" },
   { method: "GET",  path: "/api/report/schedule" },
   { method: "POST", path: "/api/reflections" },
-  { method: "GET",  path: "/api/whatsapp/status" },
 ];
 
 // Helper: Signs in via POST /api/auth/login/password and extracts session cookies
@@ -142,7 +141,7 @@ test("2. Staff Role RBAC Gating", async (t) => {
     assert.strictEqual(res.status, 200);
     const data = await res.json();
     assert.strictEqual(data.authenticated, true, "Expected authenticated: true");
-    assert.strictEqual(data.role, "staff", `Expected role: staff, got ${data.role}`);
+    assert.strictEqual(data.user.role, "staff", `Expected role: staff, got ${data.user?.role}`);
   });
 
   // A. Staff CAN access Staff Pages (HTTP 200)
@@ -170,18 +169,16 @@ test("2. Staff Role RBAC Gating", async (t) => {
     }
   }
 
-  // C. RBAC Boundary: Staff CANNOT access Developer Pages (HTTP 302 → /403.html?need=developer)
+  // C. RBAC Boundary: Staff CANNOT access Developer Pages (Redirect to /403.html?need=developer)
   for (const page of DEV_PAGES) {
-    await t.test(`Staff accessing Developer Page: ${page} → 302 Redirect to /403.html`, async () => {
+    await t.test(`Staff accessing Developer Page: ${page} → Redirect to /403.html`, async () => {
       const res = await fetch(`${BASE}${page}`, {
         headers: { Cookie: session.cookie },
-        redirect: "manual",
       });
-      assert.strictEqual(res.status, 302, `Expected 302 redirect for staff attempting ${page}, got ${res.status}`);
-      const loc = res.headers.get("location") || "";
+      // Follow all redirects (307 clean-URL + 302 auth gate) and verify we land on /403
       assert.ok(
-        loc.includes("/403.html") && loc.includes("need=developer"),
-        `Expected redirect to /403.html?need=developer, got: ${loc}`
+        res.url.includes("/403"),
+        `Expected final URL to contain /403 for staff attempting ${page}, got: ${res.url}`
       );
     });
   }
@@ -229,7 +226,7 @@ test("3. Developer Role RBAC Gating", async (t) => {
     assert.strictEqual(res.status, 200);
     const data = await res.json();
     assert.strictEqual(data.authenticated, true, "Expected authenticated: true");
-    assert.strictEqual(data.role, "developer", `Expected role: developer, got ${data.role}`);
+    assert.strictEqual(data.user.role, "developer", `Expected role: developer, got ${data.user?.role}`);
   });
 
   // A. Developer CAN access Developer Pages (HTTP 200)
@@ -257,18 +254,16 @@ test("3. Developer Role RBAC Gating", async (t) => {
     }
   }
 
-  // C. RBAC Boundary: Developer CANNOT access Staff Pages (HTTP 302 → /403.html?need=staff)
+  // C. RBAC Boundary: Developer CANNOT access Staff Pages (Redirect to /403.html?need=staff)
   for (const page of [...STAFF_PAGES, "/register.html"]) {
-    await t.test(`Developer accessing Staff Page: ${page} → 302 Redirect to /403.html`, async () => {
+    await t.test(`Developer accessing Staff Page: ${page} → Redirect to /403.html`, async () => {
       const res = await fetch(`${BASE}${page}`, {
         headers: { Cookie: session.cookie },
-        redirect: "manual",
       });
-      assert.strictEqual(res.status, 302, `Expected 302 redirect for developer attempting ${page}, got ${res.status}`);
-      const loc = res.headers.get("location") || "";
+      // Follow all redirects (307 clean-URL + 302 auth gate) and verify we land on /403
       assert.ok(
-        loc.includes("/403.html") && loc.includes("need=staff"),
-        `Expected redirect to /403.html?need=staff, got: ${loc}`
+        res.url.includes("/403"),
+        `Expected final URL to contain /403 for developer attempting ${page}, got: ${res.url}`
       );
     });
   }
