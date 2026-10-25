@@ -92,13 +92,36 @@ function runTapTest(files) {
 function parseTapSubtests(tapOutput, stage) {
   const tests = [];
   const lines = tapOutput.split('\n');
+
+  // Identify parent suites that have nested/indented subtests
+  const suitesWithChildren = new Set();
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/^\s{2,}(ok|not ok)\s+\d+/.test(line)) {
+      for (let j = i - 1; j >= 0; j--) {
+        const subM = lines[j].match(/^# Subtest:\s+(.+)$/);
+        if (subM) {
+          suitesWithChildren.add(subM[1].trim());
+          break;
+        }
+      }
+    }
+  }
+
   for (const line of lines) {
-    const match = line.match(/^\s*(ok|not ok)\s+\d+\s+-\s+(.+)$/);
+    const match = line.match(/^(\s*)(ok|not ok)\s+\d+\s+-\s+(.+)$/);
     if (match) {
-      const rawName = match[2].trim();
-      const isOk = match[1] === 'ok';
+      const indent = match[1];
+      const rawName = match[3].trim();
+      const isOk = match[2] === 'ok';
       const isSkip = /#\s*SKIP/i.test(rawName);
       const testName = rawName.replace(/#\s*SKIP.*$/i, '').trim();
+
+      // Skip the container/parent suite line if it has granular subtests underneath it
+      if (indent.length === 0 && suitesWithChildren.has(testName)) {
+        continue;
+      }
+
       let status = isOk ? 'success' : 'failed';
       if (isSkip) status = 'skipped';
 
