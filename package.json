@@ -14,6 +14,12 @@
     "test:secrets": "node --test tests/build-gates/secrets.test.mjs",
     "test:build:prod": "npx wrangler deploy --dry-run",
     "test:build:staging": "npx wrangler deploy --config wrangler.staging.toml --dry-run",
+    "test:smoke:pages": "node --test tests/smoke/pages.test.mjs",
+    "test:smoke:api": "node --test tests/smoke/api-health.test.mjs",
+    "test:smoke:rbac": "node --test tests/smoke/rbac.test.mjs",
+    "test:smoke:headers": "node --test tests/smoke/headers.test.mjs",
+    "test:smoke": "node --test tests/smoke/pages.test.mjs tests/smoke/api-health.test.mjs tests/smoke/rbac.test.mjs tests/smoke/headers.test.mjs",
+    "test:telemetry": "node tests/telemetry/push-grafana.mjs",
     "test:build-gates": "npm run test:syntax && npm run test:assets && npm run test:secrets && npm run test:build:prod && npm run test:build:staging",
     "test": "npm run test:build-gates"
   }
