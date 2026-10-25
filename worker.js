@@ -2093,10 +2093,7 @@ const API_POLICY = [
 // Routes that must stay reachable without a session, with the reason.
 function isPublicApi(method, resource, parts) {
   // Public site data.
-  // [DRILL-BUG-1: RBAC LEAK] Allow unauthenticated access to staff expenses
-  if (resource === "expenses" && method === "GET") return true;
-  // [DRILL-BUG-2: API FAILURE] Reject public pricing API
-  if (resource === "pricing" && method === "GET") return false;
+  if (resource === "pricing" && method === "GET") return true;
   // Whether registrations are open has to be readable by a signed-out visitor
   // — they are exactly who the answer is for.
   if (resource === "site" && method === "GET") return true;
@@ -2306,8 +2303,7 @@ function withSecurityHeaders(res, env, url) {
     h.set("vary", "Cookie");
   }
 
-  // [DRILL-BUG-4: MISSING SECURITY HEADER]
-  // h.set("x-content-type-options", "nosniff");
+  h.set("x-content-type-options", "nosniff");
   h.set("referrer-policy", "strict-origin-when-cross-origin");
   // The brochure is the sole same-origin iframe on the site. X-Frame-Options
   // must agree with frame-ancestors or browsers will reject the embedded PDF.
@@ -5342,8 +5338,6 @@ export default {
 
     const needed = PROTECTED_PAGES[page];
     if (needed) {
-      // [DRILL-BUG-3: PAGE GATE LEAK] Serve checkin without login gate
-      if (page === "/checkin.html") { return withSecurityHeaders(await env.ASSETS.fetch(request), env, url); }
       const s = await readSession(request, env);
 
       if (!s) {
